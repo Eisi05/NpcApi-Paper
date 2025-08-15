@@ -1,0 +1,6 @@
+name: NpcApi
+version: '1.0'
+main: de.eisi05.npc.api.TestMain
+api-version: '1.21'
+commands:
+  test:
