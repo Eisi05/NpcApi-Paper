@@ -1,6 +1,6 @@
 [![](https://jitpack.io/v/Eisi05/NpcApi-Paper.svg)](https://jitpack.io/#Eisi05/NpcApi-Paper)
 
-[NpcApi for spigotMc](https://github.com/Eisi05/NpcApi)
+[NpcApi for SpigotMC](https://github.com/Eisi05/NpcApi)
 
 # NpcAPI
 
