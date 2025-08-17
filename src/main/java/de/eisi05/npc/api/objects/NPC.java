@@ -415,7 +415,7 @@ public class NPC extends NpcHolder
         }, Set.of())));
 
         packets.add(SetEntityDataPacket.create(armorStand.getId(),
-                CustomNameTag.applyData(armorStand, CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name))), true));
+                CustomNameTag.applyData(armorStand, CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)))));
 
         packets.add(new ClientboundSetPassengersPacket(serverPlayer));
 

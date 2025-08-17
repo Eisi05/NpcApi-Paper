@@ -145,7 +145,7 @@ public class NpcOption<T, S extends Serializable>
             {
                 SynchedEntityData data = npc.getNameTag().getEntityData();
                 data.set(EntityDataSerializers.BOOLEAN.createAccessor(3), !hide);
-                return SetEntityDataPacket.create(npc.getNameTag().getId(), data, false);
+                return SetEntityDataPacket.create(npc.getNameTag().getId(), data);
             });
 
     /**
@@ -171,7 +171,7 @@ public class NpcOption<T, S extends Serializable>
                 else
                     data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
 
-                return SetEntityDataPacket.create(npc.getServerPlayer().getId(), data, false);
+                return SetEntityDataPacket.create(npc.getServerPlayer().getId(), data);
             });
 
     /**
@@ -215,7 +215,7 @@ public class NpcOption<T, S extends Serializable>
             {
                 SynchedEntityData data = npc.getServerPlayer().getEntityData();
                 data.set(EntityDataSerializers.BYTE.createAccessor(17), (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
-                return SetEntityDataPacket.create(npc.getServerPlayer().getId(), data, true);
+                return SetEntityDataPacket.create(npc.getServerPlayer().getId(), data);
             });
 
     /**
@@ -239,7 +239,7 @@ public class NpcOption<T, S extends Serializable>
                 {
                     SynchedEntityData entityData = npc.getServerPlayer().getEntityData();
                     entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0);
-                    return SetEntityDataPacket.create(npc.getServerPlayer().getId(), entityData, false);
+                    return SetEntityDataPacket.create(npc.getServerPlayer().getId(), entityData);
                 }
 
                 String teamName = npc.getServerPlayer().getGameProfile().getName();
@@ -253,7 +253,7 @@ public class NpcOption<T, S extends Serializable>
                 SynchedEntityData entityData = npc.getServerPlayer().getEntityData();
                 entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x40);
 
-                return new ClientboundBundlePacket(List.of(teamPacket, SetEntityDataPacket.create(npc.getServerPlayer().getId(), entityData, true)));
+                return new ClientboundBundlePacket(List.of(teamPacket, SetEntityDataPacket.create(npc.getServerPlayer().getId(), entityData)));
             });
 
     /**
@@ -305,7 +305,7 @@ public class NpcOption<T, S extends Serializable>
 
                 npc.toDeleteEntities.add(armorStand.getId());
 
-                return new ClientboundBundlePacket(List.of(addPacket, SetEntityDataPacket.create(armorStand.getId(), data, true)));
+                return new ClientboundBundlePacket(List.of(addPacket, SetEntityDataPacket.create(armorStand.getId(), data)));
             });
 
     private final String path;
