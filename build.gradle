@@ -6,8 +6,8 @@ plugins {
     id 'com.gradleup.shadow' version '8.3.3'
 }
 
-group = findProperty("group") ?: "de.eisi05"
-version = findProperty("version") ?: "1.21.8"
+group = "de.eisi05"
+version = "1.21.8"
 
 base {
     archivesName = "NpcApi-Paper"
@@ -19,6 +19,7 @@ repositories {
         url = "https://repo.papermc.io/repository/maven-public/"
     }
     mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
@@ -46,17 +47,21 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
 }
 
-tasks.assemble { dependsOn tasks.reobfJar }
-
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            groupId = project.group.toString()
-            artifactId = "NpcApi-Paper"
-            version = project.version.toString()
-            artifact(tasks.named("reobfJar"))
-            // optionally also publish sources:
-            artifact(tasks.named("sourcesJar"))
+            artifact(tasks.jar) // plain jar, no reobf
+            groupId = project.group
+            artifactId = "npcapi-paper" // lowercase!
+            version = project.version
+        }
+    }
+    repositories {
+        maven {
+            url = uri("file://${buildDir}/repo") // or your actual repo
         }
     }
 }
+
+tasks.assemble { dependsOn tasks.jar } // optional, no reobf
+
