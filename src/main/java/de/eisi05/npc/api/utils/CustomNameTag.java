@@ -9,7 +9,7 @@ import java.util.Optional;
 
 public class CustomNameTag
 {
-    public static SynchedEntityData applyData(ArmorStand armorStand, Component component)
+    public static Object applyData(ArmorStand armorStand, Component component)
     {
         SynchedEntityData data = armorStand.getEntityData();
         data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x20);

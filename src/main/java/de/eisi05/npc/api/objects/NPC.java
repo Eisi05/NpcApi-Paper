@@ -20,6 +20,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerEntity;
@@ -190,7 +191,7 @@ public class NPC extends NpcHolder
      *
      * @return the {@link ServerPlayer} instance for this NPC. Will not be null.
      */
-    public @NotNull ServerPlayer getServerPlayer()
+    public @NotNull Object getServerPlayer()
     {
         return serverPlayer;
     }
@@ -277,7 +278,7 @@ public class NPC extends NpcHolder
      */
     public void playAnimation(@NotNull Player player, @NotNull AnimatePacket.Animation animation)
     {
-        ((CraftPlayer) player).getHandle().connection.send(AnimatePacket.create(serverPlayer, animation));
+        ((CraftPlayer) player).getHandle().connection.send((Packet<?>) AnimatePacket.create(serverPlayer, animation));
     }
 
     /**
@@ -396,11 +397,11 @@ public class NPC extends NpcHolder
         }, Set.of())));
 
         boolean modified = TeamManager.exists(player, serverPlayer.getGameProfile().getName());
-        PlayerTeam wrappedPlayerTeam = TeamManager.create(player, serverPlayer.getGameProfile().getName());
+        PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, serverPlayer.getGameProfile().getName());
         wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.NEVER);
 
-        packets.add(SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified));
-        packets.add(SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, serverPlayer.getGameProfile().getName(),
+        packets.add((Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified));
+        packets.add((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, serverPlayer.getGameProfile().getName(),
                 ClientboundSetPlayerTeamPacket.Action.ADD));
 
         packets.add(new ClientboundRotateHeadPacket(serverPlayer, (byte) ((location.getYaw() % 360) * 256 / 360)));
@@ -408,9 +409,9 @@ public class NPC extends NpcHolder
                 serverPlayer.onGround));
 
         Arrays.stream(NpcOption.values()).filter(npcOption -> !npcOption.equals(NpcOption.ENABLED))
-                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).ifPresent(packets::add));
+                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add));
 
-        NpcOption.ENABLED.getPacket(isEnabled(), this, player).ifPresent(packets::add);
+        NpcOption.ENABLED.getPacket(isEnabled(), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
 
         packets.add(armorStand.getAddEntityPacket(new ServerEntity(serverPlayer.level(), armorStand, 0, false, packet ->
         {
@@ -418,7 +419,7 @@ public class NPC extends NpcHolder
         {
         }, Set.of())));
 
-        packets.add(SetEntityDataPacket.create(armorStand.getId(),
+        packets.add((Packet<?>) SetEntityDataPacket.create(armorStand.getId(), (SynchedEntityData)
                 CustomNameTag.applyData(armorStand, CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)))));
 
         packets.add(new ClientboundSetPassengersPacket(serverPlayer));
@@ -448,8 +449,8 @@ public class NPC extends NpcHolder
 
         if(TeamManager.exists(player, serverPlayer.getGameProfile().getName()))
         {
-            PlayerTeam team = TeamManager.create(player, serverPlayer.getGameProfile().getName());
-            connection.send(SetPlayerTeamPacket.createRemovePacket(team));
+            PlayerTeam team = (PlayerTeam) TeamManager.create(player, serverPlayer.getGameProfile().getName());
+            connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
         }
 
         toDeleteEntities.forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
@@ -504,7 +505,7 @@ public class NPC extends NpcHolder
         connection.send(new ClientboundMoveEntityPacket.Rot(serverPlayer.getId(), yawByte, pitchByte, serverPlayer.onGround()));
     }
 
-    public ArmorStand getNameTag()
+    public Object getNameTag()
     {
         return armorStand;
     }

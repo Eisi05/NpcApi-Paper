@@ -1,6 +1,5 @@
 package de.eisi05.npc.api.wrapper.packets;
 
-import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,7 +9,7 @@ import java.io.Serializable;
 
 public class AnimatePacket
 {
-    public static Packet<?> create(@NotNull ServerPlayer player, @NotNull Animation animation)
+    public static Object create(@NotNull ServerPlayer player, @NotNull Animation animation)
     {
         if(animation != Animation.HURT)
             return new ClientboundAnimatePacket(player, animation.ordinal());

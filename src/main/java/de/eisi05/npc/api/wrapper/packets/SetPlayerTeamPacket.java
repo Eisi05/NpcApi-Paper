@@ -6,17 +6,17 @@ import org.jetbrains.annotations.NotNull;
 
 public class SetPlayerTeamPacket
 {
-    public static ClientboundSetPlayerTeamPacket createAddOrModifyPacket(@NotNull PlayerTeam team, boolean create)
+    public static Object createAddOrModifyPacket(@NotNull PlayerTeam team, boolean create)
     {
         return ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, create);
     }
 
-    public static ClientboundSetPlayerTeamPacket createRemovePacket(@NotNull PlayerTeam team)
+    public static Object createRemovePacket(@NotNull PlayerTeam team)
     {
         return ClientboundSetPlayerTeamPacket.createRemovePacket(team);
     }
 
-    public static ClientboundSetPlayerTeamPacket createPlayerPacket(@NotNull PlayerTeam team, @NotNull String playerName,
+    public static Object createPlayerPacket(@NotNull PlayerTeam team, @NotNull String playerName,
             @NotNull ClientboundSetPlayerTeamPacket.Action action)
     {
         return ClientboundSetPlayerTeamPacket.createPlayerPacket(team, playerName, action);

@@ -2,6 +2,7 @@ package de.eisi05.npc.api.objects;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
+import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -42,7 +43,7 @@ public class Tasks
                     if(range <= 0)
                         return;
 
-                    npc.getServerPlayer().getBukkitEntity().getNearbyEntities(range, range, range)
+                    ((ServerPlayer) npc.getServerPlayer()).getBukkitEntity().getNearbyEntities(range, range, range)
                             .stream().filter(entity -> entity instanceof Player)
                             .forEach(entity -> npc.lookAtPlayer((Player) entity));
                 });

@@ -10,6 +10,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -95,7 +96,7 @@ public class PacketReader
 
         int id = interactPacket.getEntityId();
 
-        NPC npc = NpcManager.getList().stream().filter(npc1 -> npc1.getServerPlayer().getId() == id).findFirst().orElse(null);
+        NPC npc = NpcManager.getList().stream().filter(npc1 -> ((ServerPlayer) npc1.getServerPlayer()).getId() == id).findFirst().orElse(null);
 
         if(npc == null)
             return;

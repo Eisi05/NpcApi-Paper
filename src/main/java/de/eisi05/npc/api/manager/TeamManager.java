@@ -14,7 +14,7 @@ public class TeamManager
 {
     private static final Map<UUID, Map<String, PlayerTeam>> teams = new HashMap<>();
 
-    public static @NotNull PlayerTeam create(@NotNull Player player, @NotNull String name)
+    public static @NotNull Object create(@NotNull Player player, @NotNull String name)
     {
         if(exists(player, name))
             return teams.get(player.getUniqueId()).get(name);

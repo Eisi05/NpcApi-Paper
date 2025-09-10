@@ -66,15 +66,16 @@ public class NpcOption<T, S extends Serializable>
                     return null;
 
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
                 var textureProperties = serverPlayer.getGameProfile().getProperties().get("textures").iterator();
-                npc.getServerPlayer().getGameProfile().getProperties().removeAll("textures");
+                npcServerPlayer.getGameProfile().getProperties().removeAll("textures");
 
                 if(!textureProperties.hasNext())
                     return null;
 
                 var textureProperty = textureProperties.next();
-                npc.getServerPlayer().getGameProfile().getProperties().put("textures", textureProperty);
+                npcServerPlayer.getGameProfile().getProperties().put("textures", textureProperty);
                 return null;
             });
 
@@ -89,12 +90,14 @@ public class NpcOption<T, S extends Serializable>
                 if(npc.getOption(USE_PLAYER_SKIN))
                     return null;
 
-                npc.getServerPlayer().getGameProfile().getProperties().removeAll("textures");
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
+                npcServerPlayer.getGameProfile().getProperties().removeAll("textures");
 
                 if(skin == null)
                     return null;
 
-                npc.getServerPlayer().getGameProfile().getProperties()
+                npcServerPlayer.getGameProfile().getProperties()
                         .put("textures", new Property("textures", skin.value(), skin.signature()));
                 return null;
             });
@@ -128,12 +131,14 @@ public class NpcOption<T, S extends Serializable>
             aInteger -> aInteger, aInteger -> aInteger,
             (latency, npc, player) ->
             {
-                npc.getServerPlayer().connection = new ServerGamePacketListenerImpl(npc.getServerPlayer().getServer(),
-                        new Connection(PacketFlow.SERVERBOUND), npc.getServerPlayer(),
-                        new CommonListenerCookie(npc.getServerPlayer().getGameProfile(), latency, ClientInformation.createDefault(), true, null,
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
+                npcServerPlayer.connection = new ServerGamePacketListenerImpl(npcServerPlayer.getServer(),
+                        new Connection(PacketFlow.SERVERBOUND), npcServerPlayer,
+                        new CommonListenerCookie(npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
                                 new HashSet<>(), new KeepAlive()));
 
-                return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, npc.getServerPlayer());
+                return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, npcServerPlayer);
             });
 
     /**
@@ -143,9 +148,10 @@ public class NpcOption<T, S extends Serializable>
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (hide, npc, player) ->
             {
-                SynchedEntityData data = npc.getNameTag().getEntityData();
+                ArmorStand armorStand = (ArmorStand) npc.getNameTag();
+                SynchedEntityData data = armorStand.getEntityData();
                 data.set(EntityDataSerializers.BOOLEAN.createAccessor(3), !hide);
-                return SetEntityDataPacket.create(npc.getNameTag().getId(), data);
+                return (Packet<?>) SetEntityDataPacket.create(armorStand.getId(), data);
             });
 
     /**
@@ -161,9 +167,11 @@ public class NpcOption<T, S extends Serializable>
                 if(nmsPose == null)
                     throw new RuntimeException("Pose (" + pose.name() + ") not found");
 
-                npc.getServerPlayer().setPose(nmsPose);
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
-                SynchedEntityData data = npc.getServerPlayer().getEntityData();
+                npcServerPlayer.setPose(nmsPose);
+
+                SynchedEntityData data = npcServerPlayer.getEntityData();
                 data.set(EntityDataSerializers.POSE.createAccessor(6), nmsPose);
 
                 if(pose == Pose.SPIN_ATTACK)
@@ -171,7 +179,7 @@ public class NpcOption<T, S extends Serializable>
                 else
                     data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
 
-                return SetEntityDataPacket.create(npc.getServerPlayer().getId(), data);
+                return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
             });
 
     /**
@@ -202,7 +210,7 @@ public class NpcOption<T, S extends Serializable>
                 map.forEach((slot, item) -> list.add(
                         new Pair<>(net.minecraft.world.entity.EquipmentSlot.values()[slot.ordinal()], CraftItemStack.asNMSCopy(item))));
 
-                return new ClientboundSetEquipmentPacket(npc.getServerPlayer().getId(), list);
+                return new ClientboundSetEquipmentPacket(((ServerPlayer) npc.getServerPlayer()).getId(), list);
             });
 
     /**
@@ -213,9 +221,10 @@ public class NpcOption<T, S extends Serializable>
             skinParts -> skinParts, skinParts -> skinParts,
             (skinParts, npc, player) ->
             {
-                SynchedEntityData data = npc.getServerPlayer().getEntityData();
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+                SynchedEntityData data = npcServerPlayer.getEntityData();
                 data.set(EntityDataSerializers.BYTE.createAccessor(17), (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
-                return SetEntityDataPacket.create(npc.getServerPlayer().getId(), data);
+                return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
             });
 
     /**
@@ -231,29 +240,34 @@ public class NpcOption<T, S extends Serializable>
      * NPC option to make the NPC glow with a specific color.
      * If null, the glowing effect is removed.
      */
+    @SuppressWarnings("unchecked")
     public static final NpcOption<ChatFormat, ChatFormat> GLOWING = new NpcOption<>("glowing", null,
             color -> color, color -> color,
             (color, npc, player) ->
             {
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
                 if(color == null)
                 {
-                    SynchedEntityData entityData = npc.getServerPlayer().getEntityData();
+                    SynchedEntityData entityData = npcServerPlayer.getEntityData();
                     entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0);
-                    return SetEntityDataPacket.create(npc.getServerPlayer().getId(), entityData);
+                    return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), entityData);
                 }
 
-                String teamName = npc.getServerPlayer().getGameProfile().getName();
+                String teamName = npcServerPlayer.getGameProfile().getName();
                 boolean modified = TeamManager.exists(player, teamName);
-                PlayerTeam team = TeamManager.create(player, teamName);
+                PlayerTeam team = (PlayerTeam) TeamManager.create(player, teamName);
 
                 team.setColor(ChatFormatting.getByCode(color.getColorCode()));
 
                 var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !modified);
 
-                SynchedEntityData entityData = npc.getServerPlayer().getEntityData();
+                SynchedEntityData entityData = npcServerPlayer.getEntityData();
                 entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x40);
 
-                return new ClientboundBundlePacket(List.of(teamPacket, SetEntityDataPacket.create(npc.getServerPlayer().getId(), entityData)));
+                return new ClientboundBundlePacket(List.of((Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) teamPacket,
+                        (Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) SetEntityDataPacket.create(
+                                npcServerPlayer.getId(), entityData)));
             });
 
     /**
@@ -264,10 +278,12 @@ public class NpcOption<T, S extends Serializable>
             scale -> scale, scale -> scale,
             (scale, npc, player) ->
             {
-                AttributeInstance instance = npc.getServerPlayer().getAttribute(Attributes.SCALE);
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
+                AttributeInstance instance = npcServerPlayer.getAttribute(Attributes.SCALE);
                 instance.setBaseValue(scale);
 
-                return new ClientboundUpdateAttributesPacket(npc.getServerPlayer().getId(), List.of(instance));
+                return new ClientboundUpdateAttributesPacket(npcServerPlayer.getId(), List.of(instance));
             });
 
     /**
@@ -275,6 +291,7 @@ public class NpcOption<T, S extends Serializable>
      * If false, a "DISABLED" marker may be shown.
      * This is an internal option, typically not directly set by users but controlled by {@link NPC#setEnabled(boolean)}.
      */
+    @SuppressWarnings("unchecked")
     static final NpcOption<Boolean, Boolean> ENABLED = new NpcOption<>("enabled", false,
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (enabled, npc, player) ->
@@ -282,13 +299,15 @@ public class NpcOption<T, S extends Serializable>
                 if(enabled)
                     return null;
 
-                ArmorStand armorStand = new ArmorStand(EntityType.ARMOR_STAND, npc.getServerPlayer().level());
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
+                ArmorStand armorStand = new ArmorStand(EntityType.ARMOR_STAND, npcServerPlayer.level());
                 armorStand.snapTo(npc.getLocation().getX(),
-                        npc.getLocation().getY() + (npc.getServerPlayer().getBoundingBox().getYsize() * npc.getOption(SCALE)) + 0.3,
+                        npc.getLocation().getY() + (npcServerPlayer.getBoundingBox().getYsize() * npc.getOption(SCALE)) + 0.3,
                         npc.getLocation().getZ());
 
                 Packet<ClientGamePacketListener> addPacket = armorStand.getAddEntityPacket(
-                        new ServerEntity(npc.getServerPlayer().level(), armorStand, 0, false, packet ->
+                        new ServerEntity(npcServerPlayer.level(), armorStand, 0, false, packet ->
                         {
                         }, (packet, uuids) ->
                         {
@@ -305,7 +324,8 @@ public class NpcOption<T, S extends Serializable>
 
                 npc.toDeleteEntities.add(armorStand.getId());
 
-                return new ClientboundBundlePacket(List.of(addPacket, SetEntityDataPacket.create(armorStand.getId(), data)));
+                return new ClientboundBundlePacket(List.of(addPacket,
+                        (Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) SetEntityDataPacket.create(armorStand.getId(), data)));
             });
 
     private final String path;
@@ -430,7 +450,7 @@ public class NpcOption<T, S extends Serializable>
      * otherwise an empty Optional.
      */
     @SuppressWarnings("unchecked")
-    public @NotNull Optional<Packet<?>> getPacket(@Nullable Object object, @NotNull NPC npc, @NotNull Player player)
+    public @NotNull Optional<Object> getPacket(@Nullable Object object, @NotNull NPC npc, @NotNull Player player)
     {
         if(packet == null)
             return Optional.empty();

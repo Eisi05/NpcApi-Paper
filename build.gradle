@@ -23,8 +23,8 @@ repositories {
 }
 
 dependencies {
+    paperweightDevelopmentBundle("io.papermc.paper:dev-bundle:1.21.8-R0.1-SNAPSHOT")
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
-    paperweight.paperDevBundle("1.21.8-R0.1-SNAPSHOT")
 }
 
 tasks {

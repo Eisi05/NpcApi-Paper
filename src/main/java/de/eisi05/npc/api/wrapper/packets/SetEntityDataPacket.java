@@ -6,7 +6,7 @@ import org.jetbrains.annotations.NotNull;
 
 public class SetEntityDataPacket
 {
-    public static ClientboundSetEntityDataPacket create(int id, @NotNull SynchedEntityData data)
+    public static Object create(int id, @NotNull SynchedEntityData data)
     {
         return new ClientboundSetEntityDataPacket(id, data.packAll());
     }
