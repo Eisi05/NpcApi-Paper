@@ -18,6 +18,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerEntity;
@@ -349,7 +350,7 @@ public class NPC extends NpcHolder
 
         viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(
                 uuid -> ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
-                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), nameTag.applyData(name)))));
+                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), (SynchedEntityData) nameTag.applyData(name)))));
     }
 
     /**
@@ -422,7 +423,7 @@ public class NPC extends NpcHolder
                     {
                     }, Set.of())));
 
-            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), nameTag.applyData(name)));
+            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), (SynchedEntityData) nameTag.applyData(name)));
 
             packets.add(new ClientboundSetPassengersPacket(serverPlayer));
         }
