@@ -1,12 +1,12 @@
 package de.eisi05.npc.api.utils;
 
-import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.objects.NpcOption;
+import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Display;
+import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.util.Vector;
 import org.joml.Vector3f;
 
@@ -222,16 +222,18 @@ public class CustomNameTag
      * @param component The text component to display.
      * @return The SynchedEntityData after applying values.
      */
-    public SynchedEntityData applyData(Component component, NPC npc)
+    public SynchedEntityData applyData(net.kyori.adventure.text.Component component)
     {
         SynchedEntityData data = display.getEntityData();
 
+        Component nmsComponent = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(component));
+
         // Default values
-        data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(component));
+        data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(nmsComponent));
         data.set(EntityDataSerializers.BOOLEAN.createAccessor(4), true);
         data.set(EntityDataSerializers.VECTOR3.createAccessor(11), new Vector3f(0, 0.25f, 0));
         data.set(EntityDataSerializers.BYTE.createAccessor(15), (byte) 3);
-        data.set(EntityDataSerializers.COMPONENT.createAccessor(23), component);
+        data.set(EntityDataSerializers.COMPONENT.createAccessor(23), nmsComponent);
 
         // Apply custom data
         dataMap.forEach((accessor, value) -> data.set(accessor, Var.unsafeCast(value)));

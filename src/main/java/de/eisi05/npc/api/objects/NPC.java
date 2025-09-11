@@ -347,10 +347,9 @@ public class NPC extends NpcHolder
         this.name = name;
         serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
 
-        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid ->
-                ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
-                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                                nameTag.applyData(CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)), this)))));
+        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(
+                uuid -> ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
+                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), nameTag.applyData(name)))));
     }
 
     /**
@@ -423,8 +422,7 @@ public class NPC extends NpcHolder
                     {
                     }, Set.of())));
 
-            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                    nameTag.applyData(CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)), this)));
+            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), nameTag.applyData(name)));
 
             packets.add(new ClientboundSetPassengersPacket(serverPlayer));
         }
