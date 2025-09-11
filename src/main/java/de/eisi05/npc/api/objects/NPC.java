@@ -8,7 +8,6 @@ import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.utils.CustomNameTag;
 import de.eisi05.npc.api.utils.ObjectSaver;
-import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Var;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
@@ -114,7 +113,7 @@ public class NPC extends NpcHolder
 
         MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
         ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
-        GameProfile profile = new GameProfile(uuid, PlainTextComponentSerializer.plainText().serialize(name));
+        GameProfile profile = new GameProfile(uuid, "NPC" + uuid.toString().substring(0, 13));
 
         this.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
         serverPlayer.absSnapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
@@ -344,7 +343,6 @@ public class NPC extends NpcHolder
     public void setName(@NotNull Component name)
     {
         this.name = name;
-        Reflections.setField(serverPlayer.getGameProfile(), "name", PlainTextComponentSerializer.plainText().serialize(name));
         serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
     }
 
