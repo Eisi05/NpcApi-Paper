@@ -20,6 +20,8 @@ public class NpcConfig
      */
     private boolean avoidCommandCheck = false;
 
+    private boolean debug = false;
+
     /**
      * Sets the duration an NPC will look at a player after an interaction.
      *
@@ -45,6 +47,12 @@ public class NpcConfig
         return this;
     }
 
+    public @NotNull NpcConfig debug(boolean debug)
+    {
+        this.debug = debug;
+        return this;
+    }
+
     /**
      * Gets the configured duration an NPC will look at a player.
      *
@@ -63,5 +71,10 @@ public class NpcConfig
     public boolean avoidCommandCheck()
     {
         return avoidCommandCheck;
+    }
+
+    public boolean debug()
+    {
+        return debug;
     }
 }

@@ -289,6 +289,7 @@ public class NPC extends NpcHolder
     {
         final List<UUID> viewers = new ArrayList<>(this.viewers);
         hideNpcFromAllPlayers();
+        TeamManager.clear(serverPlayer.getGameProfile().getName());
         viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
     }
 
@@ -343,7 +344,7 @@ public class NPC extends NpcHolder
     public void setName(@NotNull Component name)
     {
         this.name = name;
-        Reflections.setField(serverPlayer.getGameProfile(), "name", name);
+        Reflections.setField(serverPlayer.getGameProfile(), "name", PlainTextComponentSerializer.plainText().serialize(name));
         serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
     }
 
@@ -450,6 +451,8 @@ public class NPC extends NpcHolder
         if(TeamManager.exists(player, serverPlayer.getGameProfile().getName()))
         {
             PlayerTeam team = (PlayerTeam) TeamManager.create(player, serverPlayer.getGameProfile().getName());
+            connection.send((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(team, serverPlayer.getGameProfile().getName(),
+                    ClientboundSetPlayerTeamPacket.Action.REMOVE));
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
         }
 

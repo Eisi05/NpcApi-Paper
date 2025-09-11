@@ -34,4 +34,15 @@ public class TeamManager
     {
         return teams.getOrDefault(player.getUniqueId(), new HashMap<>()).containsKey(name);
     }
+
+    public static void clear()
+    {
+        teams.clear();
+    }
+
+    public static void clear(String name)
+    {
+        for(var entry : teams.entrySet())
+            entry.getValue().keySet().removeIf(s -> s.equals(name));
+    }
 }

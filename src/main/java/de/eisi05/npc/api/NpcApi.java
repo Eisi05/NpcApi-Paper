@@ -4,6 +4,7 @@ import de.eisi05.npc.api.listeners.ChangeWorldListener;
 import de.eisi05.npc.api.listeners.ConnectionListener;
 import de.eisi05.npc.api.listeners.NpcInteractListener;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcConfig;
 import de.eisi05.npc.api.objects.Tasks;
@@ -95,6 +96,8 @@ public final class NpcApi
         NpcManager.getList().forEach(NPC::hideNpcFromAllPlayers);
         NpcManager.clear();
         PacketReader.uninjectAll();
+        Tasks.stop();
+        TeamManager.clear();
 
         npcApi = null;
         plugin = null;
