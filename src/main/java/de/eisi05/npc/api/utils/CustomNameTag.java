@@ -222,7 +222,7 @@ public class CustomNameTag
      * @param component The text component to display.
      * @return The SynchedEntityData after applying values.
      */
-    public Object applyData(net.kyori.adventure.text.Component component)
+    public SynchedEntityData applyData(net.kyori.adventure.text.Component component)
     {
         SynchedEntityData data = display.getEntityData();
 
