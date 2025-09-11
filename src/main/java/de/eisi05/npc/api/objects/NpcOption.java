@@ -24,6 +24,7 @@ import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -148,10 +149,10 @@ public class NpcOption<T, S extends Serializable>
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (hide, npc, player) ->
             {
-                ArmorStand armorStand = (ArmorStand) npc.getNameTag();
-                SynchedEntityData data = armorStand.getEntityData();
-                data.set(EntityDataSerializers.BOOLEAN.createAccessor(3), !hide);
-                return (Packet<?>) SetEntityDataPacket.create(armorStand.getId(), data);
+                if(!hide)
+                    return null;
+
+                return new ClientboundRemoveEntitiesPacket(((Entity) npc.getNameTag().getDisplay()).getId());
             });
 
     /**

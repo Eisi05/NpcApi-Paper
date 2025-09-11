@@ -14,12 +14,10 @@ import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.*;
-import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerEntity;
@@ -27,7 +25,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
-import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.bukkit.Bukkit;
@@ -57,7 +56,7 @@ public class NPC extends NpcHolder
     private final ServerPlayer serverPlayer;
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
-    private final ArmorStand armorStand;
+    private final CustomNameTag nameTag;
     private Component name;
     private Location location;
     private NpcClickAction clickEvent;
@@ -127,8 +126,11 @@ public class NPC extends NpcHolder
         for(NpcOption<?, ?> value : NpcOption.values())
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
 
-        armorStand = new ArmorStand(((CraftWorld) location.getWorld()).getHandle(), location.getX(), location.getY() + 0.2, location.getZ());
-        serverPlayer.passengers = ImmutableList.of(armorStand);
+        Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, ((CraftWorld) location.getWorld()).getHandle());
+        display.absSnapTo(location.getX(), location.getY() + 2, location.getZ());
+
+        nameTag = new CustomNameTag(display);
+        serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) nameTag.getDisplay());
 
         NpcManager.addNPC(this);
     }
@@ -344,6 +346,11 @@ public class NPC extends NpcHolder
     {
         this.name = name;
         serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
+
+        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid ->
+                ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
+                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
+                                nameTag.applyData(CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)), this)))));
     }
 
     /**
@@ -407,21 +414,25 @@ public class NPC extends NpcHolder
         packets.add(new ClientboundMoveEntityPacket.Rot(serverPlayer.getId(), (byte) location.getYaw(), (byte) location.getPitch(),
                 serverPlayer.onGround));
 
+        if(!getOption(NpcOption.HIDE_NAMETAG))
+        {
+            packets.add(((Display.TextDisplay) nameTag.getDisplay()).getAddEntityPacket(
+                    new ServerEntity(serverPlayer.level(), (Display.TextDisplay) nameTag.getDisplay(), 0, false, packet ->
+                    {
+                    }, (packet, uuids) ->
+                    {
+                    }, Set.of())));
+
+            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
+                    nameTag.applyData(CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)), this)));
+
+            packets.add(new ClientboundSetPassengersPacket(serverPlayer));
+        }
+
         Arrays.stream(NpcOption.values()).filter(npcOption -> !npcOption.equals(NpcOption.ENABLED))
                 .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add));
 
         NpcOption.ENABLED.getPacket(isEnabled(), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
-
-        packets.add(armorStand.getAddEntityPacket(new ServerEntity(serverPlayer.level(), armorStand, 0, false, packet ->
-        {
-        }, (packet, uuids) ->
-        {
-        }, Set.of())));
-
-        packets.add((Packet<?>) SetEntityDataPacket.create(armorStand.getId(), (SynchedEntityData)
-                CustomNameTag.applyData(armorStand, CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name)))));
-
-        packets.add(new ClientboundSetPassengersPacket(serverPlayer));
 
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
         packets.forEach(connection::send);
@@ -444,7 +455,7 @@ public class NPC extends NpcHolder
     public void hideNpcFromPlayer(@NotNull Player player)
     {
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
-        connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), armorStand.getId()));
+        connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
 
         if(TeamManager.exists(player, serverPlayer.getGameProfile().getName()))
         {
@@ -506,9 +517,9 @@ public class NPC extends NpcHolder
         connection.send(new ClientboundMoveEntityPacket.Rot(serverPlayer.getId(), yawByte, pitchByte, serverPlayer.onGround()));
     }
 
-    public Object getNameTag()
+    public CustomNameTag getNameTag()
     {
-        return armorStand;
+        return nameTag;
     }
 
     /**
