@@ -173,5 +173,5 @@ NPC npc = NpcManager.fromUUID(npcUuid);
 ## Requirements
 
 - Java 21+
-- Paper 1.21.7+
+- Paper 1.21+
 - Minecraft server with NPC support
