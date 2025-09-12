@@ -6,29 +6,26 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.SkinParts;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.utils.ItemSerializer;
+import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.TriFunction;
+import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.wrapper.enums.ChatFormat;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
-import io.papermc.paper.util.KeepAlive;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.Connection;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ClientInformation;
-import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.scores.PlayerTeam;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
@@ -134,10 +131,17 @@ public class NpcOption<T, S extends Serializable>
             {
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
+                CommonListenerCookie commonListenerCookie;
+                if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
+                    commonListenerCookie = Reflections.getInstanceFirstConstructor(CommonListenerCookie.class,
+                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
+                else
+                    commonListenerCookie = Reflections.getInstanceFirstConstructor(CommonListenerCookie.class,
+                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
+                            new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
+
                 npcServerPlayer.connection = new ServerGamePacketListenerImpl(npcServerPlayer.getServer(),
-                        new Connection(PacketFlow.SERVERBOUND), npcServerPlayer,
-                        new CommonListenerCookie(npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
-                                new HashSet<>(), new KeepAlive()));
+                        new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
 
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, npcServerPlayer);
             });
@@ -292,42 +296,9 @@ public class NpcOption<T, S extends Serializable>
      * If false, a "DISABLED" marker may be shown.
      * This is an internal option, typically not directly set by users but controlled by {@link NPC#setEnabled(boolean)}.
      */
-    @SuppressWarnings("unchecked")
     static final NpcOption<Boolean, Boolean> ENABLED = new NpcOption<>("enabled", false,
             aBoolean -> aBoolean, aBoolean -> aBoolean,
-            (enabled, npc, player) ->
-            {
-                if(enabled)
-                    return null;
-
-                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
-
-                ArmorStand armorStand = new ArmorStand(EntityType.ARMOR_STAND, npcServerPlayer.level());
-                armorStand.snapTo(npc.getLocation().getX(),
-                        npc.getLocation().getY() + (npcServerPlayer.getBoundingBox().getYsize() * npc.getOption(SCALE)) + 0.3,
-                        npc.getLocation().getZ());
-
-                Packet<ClientGamePacketListener> addPacket = armorStand.getAddEntityPacket(
-                        new ServerEntity(npcServerPlayer.level(), armorStand, 0, false, packet ->
-                        {
-                        }, (packet, uuids) ->
-                        {
-                        }, Set.of()));
-
-                SynchedEntityData data = armorStand.getEntityData();
-
-                data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x20);
-                data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2),
-                        Optional.of(Component.literal("DISABLED").withStyle(style -> style.withColor(ChatFormatting.RED))));
-                data.set(EntityDataSerializers.BOOLEAN.createAccessor(3), true);
-                data.set(EntityDataSerializers.BOOLEAN.createAccessor(4), true);
-                data.set(EntityDataSerializers.BYTE.createAccessor(15), (byte) 0x10);
-
-                npc.toDeleteEntities.add(armorStand.getId());
-
-                return new ClientboundBundlePacket(List.of(addPacket,
-                        (Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) SetEntityDataPacket.create(armorStand.getId(), data)));
-            });
+            (enabled, npc, player) -> null);
 
     private final String path;
     private final T defaultValue;

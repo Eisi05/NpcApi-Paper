@@ -1,6 +1,7 @@
-package de.eisi05.npc.api.utils;
+package de.eisi05.npc.api.objects;
 
-import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
+import de.eisi05.npc.api.utils.Var;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -10,6 +11,7 @@ import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.util.Vector;
 import org.joml.Vector3f;
 
+import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -222,11 +224,18 @@ public class CustomNameTag
      * @param component The text component to display.
      * @return The SynchedEntityData after applying values.
      */
-    public Object applyData(net.kyori.adventure.text.Component component)
+    Object applyData(@Nullable net.kyori.adventure.text.Component component)
     {
         SynchedEntityData data = display.getEntityData();
 
-        Component nmsComponent = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(component));
+        if(component == null)
+            component = net.kyori.adventure.text.Component.empty();
+
+        String legacy = LegacyComponentSerializer.legacySection().serialize(component).replace("\\n", "\n");
+        Component nmsComponent = CraftChatMessage.fromStringOrNull(legacy, true);
+
+        if(nmsComponent == null)
+            nmsComponent = Component.empty();
 
         // Default values
         data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(nmsComponent));

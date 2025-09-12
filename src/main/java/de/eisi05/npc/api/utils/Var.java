@@ -1,6 +1,17 @@
 package de.eisi05.npc.api.utils;
 
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.server.level.ServerEntity;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class Var
 {
@@ -18,5 +29,72 @@ public class Var
     public static <T> @Nullable T unsafeCast(@Nullable Object o)
     {
         return (T) o;
+    }
+
+    public static void moveEntity(Entity entity, double x, double y, double z, float yaw, float pitch)
+    {
+        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
+            Reflections.invokeMethod(entity, "absMoveTo", x, y, z, yaw, pitch);
+        else
+            Reflections.invokeMethod(entity, "snapTo", x, y, z, yaw, pitch);
+    }
+
+    public static ServerLevel getServerLevel(ServerPlayer player)
+    {
+        return (ServerLevel) Reflections.invokeMethod(player, "level").get();
+    }
+
+    public static ServerEntity getServerEntity(Entity entity, ServerLevel level)
+    {
+        ServerEntity serverEntity;
+        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
+            serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
+                    new Consumer<Packet<?>>()
+                    {
+                        @Override
+                        public void accept(Packet<?> packet)
+                        {
+
+                        }
+
+                        @Override
+                        public @NotNull Consumer<Packet<?>> andThen(@NotNull Consumer<? super Packet<?>> after)
+                        {
+                            return Consumer.super.andThen(after);
+                        }
+                    },
+                    Set.of()).orElseThrow();
+        else
+            serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
+                    new Consumer<Packet<?>>()
+                    {
+                        @Override
+                        public void accept(Packet<?> packet)
+                        {
+
+                        }
+
+                        @Override
+                        public @NotNull Consumer<Packet<?>> andThen(@NotNull Consumer<? super Packet<?>> after)
+                        {
+                            return Consumer.super.andThen(after);
+                        }
+                    },
+                    new BiConsumer<Packet<?>, UUID>()
+                    {
+                        @Override
+                        public void accept(Packet<?> packet, UUID uuid)
+                        {
+
+                        }
+
+                        @Override
+                        public @NotNull BiConsumer<Packet<?>, UUID> andThen(@NotNull BiConsumer<? super Packet<?>, ? super UUID> after)
+                        {
+                            return BiConsumer.super.andThen(after);
+                        }
+                    }, Set.of()).orElseThrow();
+
+        return serverEntity;
     }
 }

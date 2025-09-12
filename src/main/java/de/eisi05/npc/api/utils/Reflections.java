@@ -31,6 +31,7 @@ public class Reflections
             return Optional.of((Class<T>) Class.forName(path));
         } catch(ClassNotFoundException e)
         {
+            e.printStackTrace();
             return Optional.empty();
         }
     }
@@ -48,6 +49,20 @@ public class Reflections
         return getClass(path).flatMap(objectClass -> getInstance((Class<T>) objectClass, args));
     }
 
+    public static <T> @NotNull Optional<T> getInstanceFirstConstructor(@NotNull Class<T> clazz, @Nullable Object... args)
+    {
+        try
+        {
+            Constructor<?> ctor = clazz.getDeclaredConstructors()[0];
+            ctor.setAccessible(true);
+            return Optional.of((T) ctor.newInstance(args));
+        } catch(Exception e)
+        {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
     public static <T> @NotNull Optional<T> getInstance(@NotNull Class<T> clazz, @Nullable Object... args)
     {
         try
@@ -60,6 +75,7 @@ public class Reflections
             return Optional.of((T) ctor.newInstance(args));
         } catch(Exception e)
         {
+            e.printStackTrace();
             return Optional.empty();
         }
     }

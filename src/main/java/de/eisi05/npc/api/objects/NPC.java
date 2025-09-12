@@ -6,13 +6,13 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.interfaces.NpcClickAction;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
-import de.eisi05.npc.api.utils.CustomNameTag;
 import de.eisi05.npc.api.utils.ObjectSaver;
 import de.eisi05.npc.api.utils.Var;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
@@ -21,7 +21,6 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
-import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
@@ -53,7 +52,6 @@ import java.util.*;
  */
 public class NPC extends NpcHolder
 {
-    final List<Integer> toDeleteEntities = new ArrayList<>();
     private final ServerPlayer serverPlayer;
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
@@ -116,7 +114,7 @@ public class NPC extends NpcHolder
         GameProfile profile = new GameProfile(uuid, "NPC" + uuid.toString().substring(0, 13));
 
         this.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
-        serverPlayer.absSnapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
 
         npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(uuid + ".npc");
 
@@ -128,9 +126,10 @@ public class NPC extends NpcHolder
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
 
         Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, ((CraftWorld) location.getWorld()).getHandle());
-        display.absSnapTo(location.getX(), location.getY() + 2, location.getZ());
+        Var.moveEntity(display, location.getX(), location.getY() + 2, location.getZ(), 0f, 0f);
 
         nameTag = new CustomNameTag(display);
+        serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
         serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) nameTag.getDisplay());
 
         NpcManager.addNPC(this);
@@ -314,7 +313,7 @@ public class NPC extends NpcHolder
     public void setLocation(@NotNull Location location)
     {
         this.location = location;
-        this.serverPlayer.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
     }
 
     /**
@@ -350,7 +349,9 @@ public class NPC extends NpcHolder
 
         viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(
                 uuid -> ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
-                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), (SynchedEntityData) nameTag.applyData(name)))));
+                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
+                                (SynchedEntityData) nameTag.applyData(isEnabled() ? name : Component.text("DISABLED").color(NamedTextColor.RED)
+                                        .appendNewline().append(name))))));
     }
 
     /**
@@ -396,11 +397,7 @@ public class NPC extends NpcHolder
         List<Packet<?>> packets = new ArrayList<>();
 
         packets.add(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(serverPlayer, true));
-        packets.add(serverPlayer.getAddEntityPacket(new ServerEntity(serverPlayer.level(), serverPlayer, 0, false, packet ->
-        {
-        }, (packet, uuids) ->
-        {
-        }, Set.of())));
+        packets.add(serverPlayer.getAddEntityPacket(Var.getServerEntity(serverPlayer, Var.getServerLevel(serverPlayer))));
 
         boolean modified = TeamManager.exists(player, serverPlayer.getGameProfile().getName());
         PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, serverPlayer.getGameProfile().getName());
@@ -417,19 +414,18 @@ public class NPC extends NpcHolder
         if(!getOption(NpcOption.HIDE_NAMETAG))
         {
             packets.add(((Display.TextDisplay) nameTag.getDisplay()).getAddEntityPacket(
-                    new ServerEntity(serverPlayer.level(), (Display.TextDisplay) nameTag.getDisplay(), 0, false, packet ->
-                    {
-                    }, (packet, uuids) ->
-                    {
-                    }, Set.of())));
+                    Var.getServerEntity((Display.TextDisplay) nameTag.getDisplay(), Var.getServerLevel(serverPlayer))));
 
-            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(), (SynchedEntityData) nameTag.applyData(name)));
+            packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
+                    (SynchedEntityData) nameTag.applyData(isEnabled() ? name : Component.text("DISABLED").color(NamedTextColor.RED)
+                            .appendNewline().append(name))));
 
             packets.add(new ClientboundSetPassengersPacket(serverPlayer));
         }
 
         Arrays.stream(NpcOption.values()).filter(npcOption -> !npcOption.equals(NpcOption.ENABLED))
-                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add));
+                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).map(o -> (Packet<?>) o)
+                        .ifPresent(packets::add));
 
         NpcOption.ENABLED.getPacket(isEnabled(), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
 
@@ -463,8 +459,6 @@ public class NPC extends NpcHolder
                     ClientboundSetPlayerTeamPacket.Action.REMOVE));
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
         }
-
-        toDeleteEntities.forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
 
         connection.send(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
 
