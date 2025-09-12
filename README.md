@@ -38,7 +38,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>1.21.8-6</version>
+	    <version>1.21.x-1</version>
 	</dependency>
 </dependencies>
 ```
@@ -55,7 +55,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.8-6'
+    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.x-1'
 }
 ```
 
