@@ -1,5 +1,7 @@
 [![](https://jitpack.io/v/Eisi05/NpcApi-Paper.svg)](https://jitpack.io/#Eisi05/NpcApi-Paper)
 
+[NPC Plugin on PaperMC](https://modrinth.com/plugin/npc-plugin?loader=paper#download)
+
 [NpcApi for SpigotMC](https://github.com/Eisi05/NpcApi-Spigot)
 
 # NpcAPI
@@ -22,7 +24,7 @@ Choose your preferred installation method based on your project needs:
 
 ### Method 1: Plugin Dependency (Recommended)
 
-This method requires [NpcPlugin-Paper]([https://modrinth.com/plugin/npc-plugin?loader=paper#download])) to be installed as a separate plugin on the server.
+This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?loader=paper#download) to be installed as a separate plugin on the server.
 
 #### Maven
 ```xml
@@ -57,7 +59,7 @@ dependencies {
 ```
 
 #### Plugin Configuration
-Add NpcPlugin as a dependency in your `plugin.yml`:
+Add NpcPlugin-Paper as a dependency in your `plugin.yml`:
 ```yaml
 # Required dependency (hard dependency)
 dependencies:
