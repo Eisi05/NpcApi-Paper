@@ -20,7 +20,60 @@ advanced features.
 ## Installation
 Choose your preferred installation method based on your project needs:
 
-### Shaded Dependency
+### Method 1: Plugin Dependency (Recommended)
+
+This method requires [NpcPlugin-Paper]([https://modrinth.com/plugin/npc-plugin?loader=paper#download])) to be installed as a separate plugin on the server.
+
+#### Maven
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>com.github.Eisi05</groupId>
+    <artifactId>NpcApi-Paper</artifactId>
+    <version>1.21.x-1</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+#### Gradle
+```gradle
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
+
+dependencies {
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:1.21.x-1'
+}
+```
+
+#### Plugin Configuration
+Add NpcPlugin as a dependency in your `plugin.yml`:
+```yaml
+# Required dependency (hard dependency)
+dependencies:
+  server:
+    - name: NpcPlugin-Paper
+      required: true
+
+# Or optional dependency (soft dependency)
+dependencies:
+  server:
+    - name: NpcPlugin-Paper
+      required: false
+```
+---
+
+### Method 2: Shaded Dependency
 
 This method bundles NpcApi directly into your plugin JAR file.
 
