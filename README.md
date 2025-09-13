@@ -1,6 +1,6 @@
 [![](https://jitpack.io/v/Eisi05/NpcApi-Paper.svg)](https://jitpack.io/#Eisi05/NpcApi-Paper)
 
-[NPC Plugin on PaperMC](https://modrinth.com/plugin/npc-plugin?loader=paper#download)
+[NPC Plugin for PaperMC](https://modrinth.com/plugin/npc-plugin)
 
 [NpcApi for SpigotMC](https://github.com/Eisi05/NpcApi-Spigot)
 
