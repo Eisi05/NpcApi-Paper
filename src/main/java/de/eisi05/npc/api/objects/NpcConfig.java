@@ -20,7 +20,22 @@ public class NpcConfig
      */
     private boolean avoidCommandCheck = false;
 
+    /**
+     * If true, debug mode is enabled.
+     * Can be used for logging or diagnostic purposes.
+     */
     private boolean debug = false;
+
+    /**
+     * Time allowed for input, measured in seconds.
+     * Default is 60 seconds.
+     */
+    private int inputTime = 60;
+
+    /**
+     * If true, NPCs are automatically updated when changed.
+     */
+    private boolean autoUpdate = false;
 
     /**
      * Sets the duration an NPC will look at a player after an interaction.
@@ -47,9 +62,39 @@ public class NpcConfig
         return this;
     }
 
+    /**
+     * Enables or disables debug mode.
+     *
+     * @param debug True to enable debug mode, false to disable it.
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
     public @NotNull NpcConfig debug(boolean debug)
     {
         this.debug = debug;
+        return this;
+    }
+
+    /**
+     * Sets the input time limit.
+     *
+     * @param inputTime The time in seconds.
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig inputTime(int inputTime)
+    {
+        this.inputTime = inputTime;
+        return this;
+    }
+
+    /**
+     * Sets whether automatic updates should be enabled.
+     *
+     * @param autoUpdate True to enable auto updates, false otherwise.
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig autoUpdate(boolean autoUpdate)
+    {
+        this.autoUpdate = autoUpdate;
         return this;
     }
 
@@ -58,7 +103,7 @@ public class NpcConfig
      *
      * @return The time in ticks.
      */
-    public long getLookAtTimer()
+    public long lookAtTimer()
     {
         return lookAtTimer;
     }
@@ -73,8 +118,33 @@ public class NpcConfig
         return avoidCommandCheck;
     }
 
+    /**
+     * Checks whether debug mode is enabled.
+     *
+     * @return True if debug is enabled; false otherwise.
+     */
     public boolean debug()
     {
         return debug;
+    }
+
+    /**
+     * Gets the configured input time limit.
+     *
+     * @return The time in seconds.
+     */
+    public int inputTime()
+    {
+        return inputTime;
+    }
+
+    /**
+     * Checks whether automatic updates are enabled.
+     *
+     * @return True if auto updates are enabled; false otherwise.
+     */
+    public boolean autoUpdate()
+    {
+        return autoUpdate;
     }
 }

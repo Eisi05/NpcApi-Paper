@@ -9,10 +9,15 @@ import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcConfig;
 import de.eisi05.npc.api.objects.Tasks;
 import de.eisi05.npc.api.utils.PacketReader;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.function.Function;
 
 /**
  * The main entry point and singleton class for the NPC API.
@@ -26,6 +31,9 @@ public final class NpcApi
      * This is set during the API's initialization.
      */
     public static Plugin plugin;
+
+    public static Function<Player, Component> DISABLED_MESSAGE_PROVIDER = player ->
+            Component.text("DISABLED").color(NamedTextColor.RED);
 
     /**
      * The configuration object for the NPC API, containing various settings
@@ -84,6 +92,18 @@ public final class NpcApi
             npcApi = new NpcApi(plugin, config);
 
         return npcApi;
+    }
+
+    /**
+     * Sets a function that provides the message shown when an NPC is disabled.
+     *
+     * @param function a {@link Function} that takes a {@link Player} and returns the disabled message
+     * @return this {@link NpcApi} instance for method chaining
+     */
+    public @NotNull NpcApi setDisabledMessageProvider(Function<Player, Component> function)
+    {
+        DISABLED_MESSAGE_PROVIDER = function;
+        return this;
     }
 
     /**

@@ -292,6 +292,26 @@ public class NpcOption<T, S extends Serializable>
             });
 
     /**
+     * NPC option to control the position of the NPC in the TAB list.
+     * <p>
+     * Only works on versions older than 1.21.2.
+     * On 1.21.2 and newer, this option has no effect.
+     * </p>
+     */
+    public static final NpcOption<Integer, Integer> LIST_ORDER = new NpcOption<>("list-order", 0,
+            aInt -> aInt, aInt -> aInt,
+            (order, npc, player) ->
+            {
+                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_2))
+                    return null;
+
+                ((ServerPlayer) npc.getServerPlayer()).listOrder = order;
+
+                return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER,
+                        (ServerPlayer) npc.getServerPlayer());
+            }).since(Versions.V1_21_2);
+
+    /**
      * NPC option to control if the NPC is enabled (visible and interactable).
      * If false, a "DISABLED" marker may be shown.
      * This is an internal option, typically not directly set by users but controlled by {@link NPC#setEnabled(boolean)}.
@@ -305,6 +325,7 @@ public class NpcOption<T, S extends Serializable>
     private final Function<T, S> serializer;
     private final Function<S, T> deserializer;
     private final TriFunction<T, NPC, Player, Packet<?>> packet;
+    private Versions since = Versions.V1_17;
 
     /**
      * Private constructor to create a new NpcOption.
@@ -358,6 +379,41 @@ public class NpcOption<T, S extends Serializable>
     public static @NotNull Optional<NpcOption<?, ?>> getOption(@NotNull String path)
     {
         return Arrays.stream(values()).filter(npcOption -> npcOption.getPath().equals(path)).findFirst();
+    }
+
+    /**
+     * Sets the minimum Minecraft version required for this option.
+     * Used for options that are only available in newer versions of the game.
+     *
+     * @param since The minimum {@link Versions} required. Must not be null.
+     * @return This {@link NpcOption} instance for method chaining.
+     */
+    public @NotNull NpcOption<T, S> since(@NotNull Versions since)
+    {
+        this.since = since;
+        return this;
+    }
+
+    /**
+     * Checks if this NPC option is compatible with the current server version.
+     * An option is compatible if the current server version is greater than or equal to
+     * the version specified by {@link #since()}.
+     *
+     * @return {@code true} if the option is compatible, {@code false} otherwise.
+     */
+    public boolean isCompatible()
+    {
+        return !Versions.isCurrentVersionSmallerThan(since);
+    }
+
+    /**
+     * Gets the minimum Minecraft version required for this option.
+     *
+     * @return The {@link Versions} instance.
+     */
+    public Versions since()
+    {
+        return since;
     }
 
     /**
@@ -422,7 +478,7 @@ public class NpcOption<T, S extends Serializable>
      * otherwise an empty Optional.
      */
     @SuppressWarnings("unchecked")
-    public @NotNull Optional<Object> getPacket(@Nullable Object object, @NotNull NPC npc, @NotNull Player player)
+    public @NotNull Optional<Object> getPacket(@Nullable Object object, @NotNull NPC npc, Player player)
     {
         if(packet == null)
             return Optional.empty();

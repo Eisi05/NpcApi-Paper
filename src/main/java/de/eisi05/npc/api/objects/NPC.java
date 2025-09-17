@@ -255,6 +255,19 @@ public class NPC extends NpcHolder
             options.remove(option);
         else
             options.put(option, value);
+
+        if(NpcApi.config.autoUpdate())
+        {
+            option.getPacket(value, this, null).ifPresent(packetWrapper ->
+                    viewers.forEach(uuid ->
+                    {
+                        Player player = Bukkit.getPlayer(uuid);
+                        if(player == null)
+                            return;
+
+                        ((CraftPlayer) player).getHandle().connection.send((Packet<?>) packetWrapper);
+                    }));
+        }
     }
 
     /**
@@ -350,7 +363,8 @@ public class NPC extends NpcHolder
         viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(
                 uuid -> ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
                         ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                                (SynchedEntityData) nameTag.applyData(isEnabled() ? name : Component.text("DISABLED").color(NamedTextColor.RED)
+                                (SynchedEntityData) nameTag.applyData(
+                                        isEnabled() ? name : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(Bukkit.getPlayer(uuid))
                                         .appendNewline().append(name))))));
     }
 
@@ -417,7 +431,7 @@ public class NPC extends NpcHolder
                     Var.getServerEntity((Display.TextDisplay) nameTag.getDisplay(), Var.getServerLevel(serverPlayer))));
 
             packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                    (SynchedEntityData) nameTag.applyData(isEnabled() ? name : Component.text("DISABLED").color(NamedTextColor.RED)
+                    (SynchedEntityData) nameTag.applyData(isEnabled() ? name : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
                             .appendNewline().append(name))));
 
             packets.add(new ClientboundSetPassengersPacket(serverPlayer));
