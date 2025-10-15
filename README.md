@@ -1,3 +1,5 @@
+### Will no longer be updated
+
 [![](https://jitpack.io/v/Eisi05/NpcApi-Paper.svg)](https://jitpack.io/#Eisi05/NpcApi-Paper)
 
 [NPC Plugin for PaperMC](https://modrinth.com/plugin/npc-plugin)
@@ -8,8 +10,6 @@
 
 A powerful and easy-to-use NPC (Non-Player Character) API for Minecraft Spigot plugins that allows you to create, manage, and customize NPCs with
 advanced features.
-
-#### Will no longer be updated
 
 ## Features
 
