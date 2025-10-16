@@ -4,22 +4,26 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
+import de.eisi05.npc.api.utils.Reflections;
+import de.eisi05.npc.api.utils.Versions;
 import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.InputStream;
-import java.io.Serial;
-import java.io.Serializable;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
-import java.util.UUID;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -52,8 +56,22 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      */
     public static @Nullable Skin fromPlayer(@NotNull Player player)
     {
+        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
+        {
+            ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
+            PropertyMap properties = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
+            Iterator<Property> it = properties.get("textures").iterator();
+
+            if(!it.hasNext())
+                return null;
+
+            var property = it.next();
+
+            return new Skin(player.getName(), property.value(), property.signature());
+        }
+
         ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
-        var properties = serverPlayer.getGameProfile().getProperties().get("textures").iterator();
+        var properties = serverPlayer.getGameProfile().properties().get("textures").iterator();
 
         if(!properties.hasNext())
             return null;
@@ -141,6 +159,54 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     }
 
     /**
+     * Uploads a skin file to MineSkin and retrieves the resulting {@link Skin}.
+     *
+     * @param skinFile the PNG file of the skin to upload.
+     * @return an {@link Optional} containing the skin if successful, otherwise empty.
+     * @throws IllegalArgumentException if the file does not exist.
+     */
+    public static Optional<Skin> fetchSkin(@NotNull File skinFile)
+    {
+        if(!skinFile.exists())
+            throw new IllegalArgumentException("File does not exist");
+
+        try(HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build())
+        {
+            String boundary = "----MineSkinBoundary" + System.currentTimeMillis();
+            String CRLF = "\r\n";
+
+            byte[] fileBytes = Files.readAllBytes(skinFile.toPath());
+            String bodyBuilder = "--" + boundary + CRLF +
+                    "Content-Disposition: form-data; name=\"file\"; filename=\"" +
+                    skinFile.getName() + "\"" + CRLF +
+                    "Content-Type: image/png" + CRLF + CRLF;
+
+            String endPart = CRLF + "--" + boundary + "--" + CRLF;
+
+            byte[] requestBody = combine(bodyBuilder.getBytes(), fileBytes, endPart.getBytes());
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.mineskin.org/generate/upload"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonObject obj = JsonParser.parseString(response.body()).getAsJsonObject();
+            JsonObject texture = obj.getAsJsonObject("data").getAsJsonObject("texture");
+
+            String value = texture.get("value").getAsString();
+            String signature = texture.get("signature").getAsString();
+
+            return Optional.of(new Skin(null, value, signature));
+        } catch(IOException | InterruptedException e)
+        {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Asynchronously fetches a player's skin using their UUID.
      * This method wraps the synchronous {@link #fetchSkin(UUID)} call in a {@link CompletableFuture}
      * to prevent blocking the main thread.
@@ -164,5 +230,31 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     public static CompletableFuture<Skin> fetchSkinAsync(@NotNull String name)
     {
         return CompletableFuture.supplyAsync(() -> fetchSkin(name));
+    }
+
+    /**
+     * Asynchronously fetches a skin from a local file.
+     *
+     * @param skinFile the PNG file containing the skin
+     * @return a CompletableFuture containing an Optional of the Skin
+     */
+    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull File skinFile)
+    {
+        return CompletableFuture.supplyAsync(() -> fetchSkin(skinFile));
+    }
+
+    private static byte[] combine(byte[]... arrays) throws IOException
+    {
+        int length = 0;
+        for(byte[] arr : arrays)
+            length += arr.length;
+        byte[] result = new byte[length];
+        int pos = 0;
+        for(byte[] arr : arrays)
+        {
+            System.arraycopy(arr, 0, result, pos, arr.length);
+            pos += arr.length;
+        }
+        return result;
     }
 }

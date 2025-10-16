@@ -1,7 +1,8 @@
-package de.eisi05.npc.api.objects;
+package de.eisi05.npc.api.scheduler;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.objects.NpcOption;
 import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;

@@ -1,14 +1,15 @@
 package de.eisi05.npc.api.objects;
 
+import com.google.common.collect.Multimaps;
+import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
 import com.mojang.datafixers.util.Pair;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.SkinParts;
 import de.eisi05.npc.api.manager.TeamManager;
-import de.eisi05.npc.api.utils.ItemSerializer;
-import de.eisi05.npc.api.utils.Reflections;
-import de.eisi05.npc.api.utils.TriFunction;
-import de.eisi05.npc.api.utils.Versions;
+import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.utils.*;
 import de.eisi05.npc.api.wrapper.enums.ChatFormat;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
@@ -19,7 +20,9 @@ import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -27,6 +30,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.scores.PlayerTeam;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.entity.Player;
@@ -66,22 +73,57 @@ public class NpcOption<T, S extends Serializable>
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
-                var textureProperties = serverPlayer.getGameProfile().getProperties().get("textures").iterator();
-                npcServerPlayer.getGameProfile().getProperties().removeAll("textures");
+                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
+                {
+                    var textureProperties = ((PropertyMap) Reflections.getField(serverPlayer.getGameProfile(), "properties")
+                            .get()).get("textures").iterator();
+
+                    var npcTextureProperties = ((PropertyMap) Reflections.getField(serverPlayer.getGameProfile(), "properties")
+                            .get()).get("textures").iterator();
+
+                    Property property = textureProperties.hasNext() ? textureProperties.next() : null;
+                    Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
+
+                    if((property == null && npcProperty == null) || (property != null && npcProperty != null &&
+                            Reflections.getField(property, "value").get().equals(Reflections.getField(npcProperty, "value").get())))
+                        return null;
+
+                    UUID newUUID = UUID.randomUUID();
+                    npc.changeUUID(newUUID);
+
+                    GameProfile profile = Reflections.getInstance(GameProfile.class, newUUID, "NPC" + newUUID.toString().substring(0, 13),
+                            Reflections.getInstance(PropertyMap.class, Multimaps.forMap(property == null ? Map.of() : Map.of("textures", property)))
+                                    .orElseThrow()).orElseThrow();
+
+                    Location location = npc.getLocation();
+                    MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
+                    ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
+                    npc.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
+                    Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+                    npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
+                            CommonListenerCookie.createInitial(profile, true));
+                    return null;
+                }
+
+                PropertyMap playerProperty = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
+                PropertyMap npcProperty = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
+
+                var textureProperties = playerProperty.get("textures").iterator();
+                npcProperty.removeAll("textures");
 
                 if(!textureProperties.hasNext())
                     return null;
 
                 var textureProperty = textureProperties.next();
-                npcServerPlayer.getGameProfile().getProperties().put("textures", textureProperty);
+                npcProperty.put("textures", textureProperty);
                 return null;
-            });
+            }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9));
 
     /**
      * NPC option to set a specific skin using a value and signature.
      * This is ignored if {@link #USE_PLAYER_SKIN} is true.
      */
-    public static final NpcOption<Skin, Skin> SKIN = new NpcOption<>("skin", null,
+    public static final NpcOption<Skin, Skin> SKIN = new NpcOption<Skin, Skin>("skin", null,
             skin -> skin, skin -> skin,
             (skin, npc, player) ->
             {
@@ -90,15 +132,47 @@ public class NpcOption<T, S extends Serializable>
 
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
-                npcServerPlayer.getGameProfile().getProperties().removeAll("textures");
+                var textures = new Property("textures", skin.value(), skin.signature());
+                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
+                {
+                    var npcTextureProperties = ((PropertyMap) Reflections.getField(npcServerPlayer.getGameProfile(), "properties")
+                            .get()).get("textures").iterator();
+
+                    Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
+
+                    if((skin == null && npcProperty == null) ||
+                            (npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get())))
+                        return null;
+
+                    UUID newUUID = UUID.randomUUID();
+                    npc.changeUUID(newUUID);
+
+                    PropertyMap propertyMap = Reflections.getInstance(PropertyMap.class,
+                            Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures))).orElseThrow();
+
+                    GameProfile profile = Reflections.getInstance(GameProfile.class, newUUID, "NPC" + newUUID.toString().substring(0, 13),
+                            propertyMap).orElseThrow();
+
+                    Location location = npc.getLocation();
+                    MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
+                    ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
+                    npc.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
+                    Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+                    npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
+                            CommonListenerCookie.createInitial(profile, true));
+                    return null;
+                }
+
+                PropertyMap properties = (PropertyMap) Reflections.invokeMethod(npcServerPlayer.getGameProfile(), "getProperties").get();
+
+                properties.removeAll("textures");
 
                 if(skin == null)
                     return null;
 
-                npcServerPlayer.getGameProfile().getProperties()
-                        .put("textures", new Property("textures", skin.value(), skin.signature()));
+                properties.put("textures", textures);
                 return null;
-            });
+            }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9));
 
     /**
      * NPC option to control whether the NPC is shown in the player tab list.
@@ -140,8 +214,13 @@ public class NpcOption<T, S extends Serializable>
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
                             new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
 
-                npcServerPlayer.connection = new ServerGamePacketListenerImpl(npcServerPlayer.getServer(),
+                if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
+                    npcServerPlayer.connection = new ServerGamePacketListenerImpl(
+                            (MinecraftServer) Reflections.invokeMethod(npcServerPlayer, "getServer").get(),
                         new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
+                else
+                    npcServerPlayer.connection = new ServerGamePacketListenerImpl(npcServerPlayer.level().getServer(),
+                            new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
 
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, npcServerPlayer);
             });
@@ -259,7 +338,7 @@ public class NpcOption<T, S extends Serializable>
                     return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), entityData);
                 }
 
-                String teamName = npcServerPlayer.getGameProfile().getName();
+                String teamName = npc.getGameProfileName();
                 boolean modified = TeamManager.exists(player, teamName);
                 PlayerTeam team = (PlayerTeam) TeamManager.create(player, teamName);
 
@@ -320,12 +399,22 @@ public class NpcOption<T, S extends Serializable>
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (enabled, npc, player) -> null);
 
+    /**
+     * NPC option to control if the NPC is enabled (visible and interactable).
+     * If false, a "DISABLED" marker may be shown.
+     * This is an internal option, typically not directly set by users but controlled by {@link NPC#setEnabled(boolean)}.
+     */
+    static final NpcOption<Boolean, Boolean> EDITABLE = new NpcOption<>("editable", false,
+            aBoolean -> aBoolean, aBoolean -> aBoolean,
+            (enabled, npc, player) -> null);
+
     private final String path;
     private final T defaultValue;
     private final Function<T, S> serializer;
     private final Function<S, T> deserializer;
     private final TriFunction<T, NPC, Player, Packet<?>> packet;
     private Versions since = Versions.V1_17;
+    private boolean loadBefore = false;
 
     /**
      * Private constructor to create a new NpcOption.
@@ -392,6 +481,17 @@ public class NpcOption<T, S extends Serializable>
     {
         this.since = since;
         return this;
+    }
+
+    public @NotNull NpcOption<T, S> loadBefore(boolean loadBefore)
+    {
+        this.loadBefore = loadBefore;
+        return this;
+    }
+
+    public boolean loadBefore()
+    {
+        return loadBefore;
     }
 
     /**
@@ -480,7 +580,7 @@ public class NpcOption<T, S extends Serializable>
     @SuppressWarnings("unchecked")
     public @NotNull Optional<Object> getPacket(@Nullable Object object, @NotNull NPC npc, Player player)
     {
-        if(packet == null)
+        if(packet == null || !isCompatible())
             return Optional.empty();
 
         return Optional.ofNullable(packet.apply((T) object, npc, player));

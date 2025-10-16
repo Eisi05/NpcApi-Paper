@@ -3,16 +3,18 @@ package de.eisi05.npc.api.objects;
 import com.google.common.collect.ImmutableList;
 import com.mojang.authlib.GameProfile;
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.enums.Result;
 import de.eisi05.npc.api.interfaces.NpcClickAction;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.utils.ObjectSaver;
+import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Var;
+import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
@@ -26,16 +28,24 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -46,13 +56,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * Represents a Non-Player Character (NPC) with location, appearance, options, and interaction logic.
  */
 public class NPC extends NpcHolder
 {
-    private final ServerPlayer serverPlayer;
+    ServerPlayer serverPlayer;
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
     private final CustomNameTag nameTag;
@@ -60,7 +71,7 @@ public class NPC extends NpcHolder
     private Location location;
     private NpcClickAction clickEvent;
     private Instant createdAt = Instant.now();
-    private final Path npcPath;
+    private Path npcPath;
 
     /**
      * Creates an NPC at the specified location with a random UUID and default name.
@@ -243,6 +254,30 @@ public class NPC extends NpcHolder
     }
 
     /**
+     * Checks if this NPC is marked as editable through the {@code NpcPlugin}.
+     * <p>
+     * The default state is {@code false}.
+     *
+     * @return {@code true} if the NPC is editable, {@code false} otherwise
+     */
+    public boolean isEditable()
+    {
+        return getOption(NpcOption.EDITABLE);
+    }
+
+    /**
+     * Sets whether this NPC can be edited through the {@code NpcPlugin}.
+     * <p>
+     * By default, an NPC is <b>not</b> editable ({@code false}).
+     *
+     * @param editable {@code true} if the NPC should be editable, {@code false} otherwise
+     */
+    public void setEditable(boolean editable)
+    {
+        setOption(NpcOption.EDITABLE, editable);
+    }
+
+    /**
      * Sets a specific option for this NPC.
      *
      * @param option the {@link NpcOption} to set. Must not be null.
@@ -258,15 +293,15 @@ public class NPC extends NpcHolder
 
         if(NpcApi.config.autoUpdate())
         {
-            option.getPacket(value, this, null).ifPresent(packetWrapper ->
-                    viewers.forEach(uuid ->
-                    {
-                        Player player = Bukkit.getPlayer(uuid);
-                        if(player == null)
-                            return;
+            viewers.forEach(uuid ->
+            {
+                Player player = Bukkit.getPlayer(uuid);
+                if(player == null)
+                    return;
 
-                        ((CraftPlayer) player).getHandle().connection.send((Packet<?>) packetWrapper);
-                    }));
+                option.getPacket(value, this, player).ifPresent(packetWrapper ->
+                        ((CraftPlayer) player).getHandle().connection.send((Packet<?>) packetWrapper));
+            });
         }
     }
 
@@ -303,7 +338,7 @@ public class NPC extends NpcHolder
     {
         final List<UUID> viewers = new ArrayList<>(this.viewers);
         hideNpcFromAllPlayers();
-        TeamManager.clear(serverPlayer.getGameProfile().getName());
+        TeamManager.clear(getGameProfileName());
         viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
     }
 
@@ -347,6 +382,13 @@ public class NPC extends NpcHolder
     public @NotNull Component getName()
     {
         return name;
+    }
+
+    public @NotNull String getGameProfileName()
+    {
+        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
+            return (String) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getName").get();
+        return serverPlayer.getGameProfile().name();
     }
 
     /**
@@ -410,15 +452,18 @@ public class NPC extends NpcHolder
 
         List<Packet<?>> packets = new ArrayList<>();
 
+        Arrays.stream(NpcOption.values()).filter(NpcOption::loadBefore)
+                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
+
         packets.add(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(serverPlayer, true));
         packets.add(serverPlayer.getAddEntityPacket(Var.getServerEntity(serverPlayer, Var.getServerLevel(serverPlayer))));
 
-        boolean modified = TeamManager.exists(player, serverPlayer.getGameProfile().getName());
-        PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, serverPlayer.getGameProfile().getName());
+        boolean modified = TeamManager.exists(player, getGameProfileName());
+        PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, getGameProfileName());
         wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.NEVER);
 
         packets.add((Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified));
-        packets.add((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, serverPlayer.getGameProfile().getName(),
+        packets.add((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, getGameProfileName(),
                 ClientboundSetPlayerTeamPacket.Action.ADD));
 
         packets.add(new ClientboundRotateHeadPacket(serverPlayer, (byte) ((location.getYaw() % 360) * 256 / 360)));
@@ -466,10 +511,10 @@ public class NPC extends NpcHolder
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
         connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
 
-        if(TeamManager.exists(player, serverPlayer.getGameProfile().getName()))
+        if(TeamManager.exists(player, getGameProfileName()))
         {
-            PlayerTeam team = (PlayerTeam) TeamManager.create(player, serverPlayer.getGameProfile().getName());
-            connection.send((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(team, serverPlayer.getGameProfile().getName(),
+            PlayerTeam team = (PlayerTeam) TeamManager.create(player, getGameProfileName());
+            connection.send((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(team, getGameProfileName(),
                     ClientboundSetPlayerTeamPacket.Action.REMOVE));
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
         }
@@ -487,6 +532,10 @@ public class NPC extends NpcHolder
     {
         hideNpcFromAllPlayers();
         NpcManager.removeNPC(this);
+
+        serverPlayer.getBukkitEntity().remove();
+        serverPlayer.remove(Entity.RemovalReason.DISCARDED);
+        serverPlayer = null;
 
         npcPath.toFile().getParentFile().mkdirs();
         Files.deleteIfExists(npcPath);
@@ -522,6 +571,257 @@ public class NPC extends NpcHolder
 
         connection.send(new ClientboundRotateHeadPacket(serverPlayer, yawByte));
         connection.send(new ClientboundMoveEntityPacket.Rot(serverPlayer.getId(), yawByte, pitchByte, serverPlayer.onGround()));
+    }
+
+    /**
+     * Moves the NPC along a precomputed {@link de.eisi05.npc.api.pathfinding.Path}, simulating walking, jumping, and gravity.
+     * The NPC's position and rotation are updated each tick and sent to the specified player(s).
+     *
+     * @param path               The {@link de.eisi05.npc.api.pathfinding.Path} containing the ordered waypoints the NPC should follow.
+     * @param player             The player who should see the NPC move. If null, updates all viewers in the `viewers` set.
+     * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
+     * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
+     * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
+     * @return The {@link BukkitTask} representing the movement task.
+     */
+    public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, @Nullable Player player, double walkSpeed,
+            boolean changeRealLocation, @Nullable Consumer<Result> onEnd)
+    {
+        final double speed = Math.max(Math.min(walkSpeed, 1), 0.1);
+
+        final double gravity = -0.08;
+        final double jumpVelocity = 0.5;
+        final double terminal = -0.5;
+        final double stepHeight = 0.6;
+
+        return new BukkitRunnable()
+        {
+            final List<Location> pathPoints = path.asLocations();
+            int index = 0;
+            org.bukkit.util.Vector current = location.toVector();
+            double yVel = 0.0;
+            float previousYaw = location.getYaw();
+            org.bukkit.util.Vector previousMovement = location.getDirection();
+
+            @Override
+            public void run()
+            {
+                if(index >= pathPoints.size())
+                {
+                    Location last = pathPoints.getLast();
+
+                    org.bukkit.util.Vector lastVector = last.toVector();
+                    org.bukkit.util.Vector lastMovement = lastVector.clone().subtract(current);
+
+                    ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(serverPlayer, (byte) (last.getYaw() * 256 / 360));
+                    ClientboundTeleportEntityPacket teleportEntityPacket = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
+                            new PositionMoveRotation(new Vec3(lastVector.toVector3f()), new Vec3(lastMovement.toVector3f()), last.getYaw(), last.getPitch()), Set.of(), true);
+
+                    sendNpcMovePackets(player, teleportEntityPacket, rotateHeadPacket);
+
+                    if(changeRealLocation)
+                    {
+                        setLocation(last);
+                        if(player != null)
+                        {
+                            for(UUID uuid : viewers)
+                            {
+                                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+                                if(!offlinePlayer.isOnline() || uuid.equals(player.getUniqueId()))
+                                    continue;
+
+                                hideNpcFromPlayer(offlinePlayer.getPlayer());
+                                showNPCToPlayer(offlinePlayer.getPlayer());
+                            }
+                        }
+                    }
+
+                    if(onEnd != null)
+                        onEnd.accept(Result.SUCCESS);
+
+                    cancel();
+                    return;
+                }
+
+                org.bukkit.util.Vector target = pathPoints.get(index).toVector();
+                org.bukkit.util.Vector toTarget = target.clone().subtract(current);
+
+                if(toTarget.lengthSquared() < 0.04 && Math.abs(toTarget.getY()) < 0.2)
+                {
+                    index++;
+                    return;
+                }
+
+                org.bukkit.util.Vector horizontal = new org.bukkit.util.Vector(toTarget.getX(), 0, toTarget.getZ());
+                org.bukkit.util.Vector horizontalMove =
+                        (horizontal.lengthSquared() > 1e-6) ? horizontal.clone().normalize().multiply(speed) : new org.bukkit.util.Vector(0, 0, 0);
+
+                double nextDist = target.clone().subtract(current.clone().add(horizontalMove)).lengthSquared();
+                if(nextDist > toTarget.lengthSquared())
+                {
+                    current = target;
+                    index++;
+                    return;
+                }
+
+                World world = location.getWorld();
+                int bx = (int) Math.floor(current.getX());
+                int bz = (int) Math.floor(current.getZ());
+                int searchStart = (int) Math.floor(current.getY());
+                int groundBlockY = Integer.MIN_VALUE;
+
+                for(int y = searchStart; y >= searchStart - 3; y--)
+                {
+                    Block block = world.getBlockAt(bx, y - 1, bz);
+                    if(block.getType().isSolid() && !block.getType().isAir() && !block.isPassable())
+                    {
+                        groundBlockY = y - 1;
+                        break;
+                    }
+                }
+                if(groundBlockY == Integer.MIN_VALUE)
+                    groundBlockY = world.getHighestBlockYAt(bx, bz) - 1;
+                double groundY = groundBlockY + 1.0;
+                boolean onGround = current.getY() <= groundY + 1e-5;
+
+                if(onGround)
+                {
+                    if(toTarget.getY() > 0 && toTarget.getY() <= stepHeight && horizontal.lengthSquared() > 1e-6)
+                    {
+                        current = current.clone().add(new org.bukkit.util.Vector(0, Math.min(toTarget.getY(), stepHeight), 0));
+                        yVel = 0;
+                        onGround = true;
+                    }
+                    else if(toTarget.getY() > 0.5)
+                    {
+                        yVel = jumpVelocity;
+                        onGround = false;
+                    }
+                    else
+                    {
+                        yVel = 0;
+                        current = new org.bukkit.util.Vector(current.getX(), groundY, current.getZ());
+                    }
+                }
+
+                double yDelta = 0;
+                if(!onGround)
+                {
+                    yVel += gravity;
+                    if(yVel < terminal)
+                        yVel = terminal;
+                    yDelta = yVel;
+
+                    if(current.getY() + yDelta <= groundY)
+                    {
+                        yDelta = groundY - current.getY();
+                        yVel = 0;
+                        onGround = true;
+                    }
+                }
+
+                org.bukkit.util.Vector movement = new org.bukkit.util.Vector(horizontalMove.getX(), yDelta, horizontalMove.getZ());
+                current = current.clone().add(movement);
+
+                org.bukkit.util.Vector lookDir;
+                if(index + 1 < pathPoints.size())
+                {
+                    org.bukkit.util.Vector currentTarget = pathPoints.get(index).toVector().clone();
+                    org.bukkit.util.Vector nextTarget = pathPoints.get(index + 1).toVector().clone();
+
+                    lookDir = currentTarget.clone().add(nextTarget).multiply(0.5).subtract(current);
+                }
+                else
+                    lookDir = pathPoints.get(index).toVector().clone().subtract(current);
+
+                org.bukkit.util.Vector horizontalVec = new org.bukkit.util.Vector(lookDir.getX(), 0, lookDir.getZ());
+                if(horizontalVec.lengthSquared() < 1e-6)
+                    horizontalVec = previousMovement.clone();
+
+                float targetYaw = (float) (Math.atan2(horizontalVec.getZ(), horizontalVec.getX()) * 180 / Math.PI - 90);
+
+                while(targetYaw > 180)
+                    targetYaw -= 360;
+                while(targetYaw < -180)
+                    targetYaw += 360;
+
+                float diff = targetYaw - previousYaw;
+                if(diff > 180)
+                    diff -= 360;
+                if(diff < -180)
+                    diff += 360;
+
+                float maxTurn = 15f;
+                diff = Math.max(-maxTurn, Math.min(maxTurn, diff));
+
+                float yaw = previousYaw + diff;
+                previousYaw = yaw;
+
+                previousMovement = horizontalVec.clone();
+
+                org.bukkit.util.Vector targetVec = pathPoints.get(Math.min(index + 1, pathPoints.size() - 1)).toVector().clone().subtract(current);
+                double horizontalLen = Math.sqrt(targetVec.getX() * targetVec.getX() + targetVec.getZ() * targetVec.getZ());
+                float pitch = (float) (-Math.atan2(targetVec.getY(), horizontalLen) * 180 / Math.PI) / 1.5f;
+
+                ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(serverPlayer, (byte) (yaw * 256 / 360));
+                ClientboundTeleportEntityPacket teleportEntityPacket = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
+                        new PositionMoveRotation(new Vec3(current.toVector3f()), new Vec3(movement.toVector3f()), yaw, pitch), Set.of(), onGround);
+
+                sendNpcMovePackets(player, teleportEntityPacket, rotateHeadPacket);
+            }
+
+            @Override
+            public synchronized void cancel() throws IllegalStateException
+            {
+                super.cancel();
+                if(onEnd != null)
+                    onEnd.accept(Result.CANCELLED);
+            }
+        }.runTaskTimer(NpcApi.plugin, 1L, 1L);
+    }
+
+    /**
+     * Sends NPC movement and rotation packets to a specific player or all viewers.
+     *
+     * @param player               The player to send packets to. If null, packets are sent to all viewers.
+     * @param teleportEntityPacket The packet containing the NPC's teleport/move data. Must not be null.
+     * @param rotateHeadPacket     The packet containing the NPC's head rotation data. Must not be null.
+     */
+    private void sendNpcMovePackets(@Nullable Player player, @NotNull ClientboundTeleportEntityPacket teleportEntityPacket,
+            @NotNull ClientboundRotateHeadPacket rotateHeadPacket)
+    {
+        if(player != null)
+        {
+            ServerPlayer serverPlayer1 = ((CraftPlayer) player).getHandle();
+            serverPlayer1.connection.send(teleportEntityPacket);
+            serverPlayer1.connection.send(rotateHeadPacket);
+        }
+        else
+        {
+            for(UUID uuid : viewers)
+            {
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+                if(!offlinePlayer.isOnline())
+                    continue;
+
+                ServerPlayer serverPlayer1 = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
+                serverPlayer1.connection.send(teleportEntityPacket);
+                serverPlayer1.connection.send(rotateHeadPacket);
+            }
+        }
+    }
+
+    void changeUUID(@NotNull UUID newUUID)
+    {
+        try
+        {
+            Files.deleteIfExists(npcPath);
+            npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(newUUID + ".npc");
+            save();
+        } catch(IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     public CustomNameTag getNameTag()
