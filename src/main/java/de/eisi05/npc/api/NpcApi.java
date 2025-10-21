@@ -7,11 +7,13 @@ import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcConfig;
+import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.PacketReader;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -59,6 +61,8 @@ public final class NpcApi
         Bukkit.getPluginManager().registerEvents(new ChangeWorldListener(), plugin);
         Bukkit.getPluginManager().registerEvents(new ConnectionListener(), plugin);
         Bukkit.getPluginManager().registerEvents(new NpcInteractListener(), plugin);
+
+        ConfigurationSerialization.registerClass(Path.class);
 
         NpcManager.loadNPCs();
         PacketReader.injectAll();
@@ -118,6 +122,7 @@ public final class NpcApi
         PacketReader.uninjectAll();
         Tasks.stop();
         TeamManager.clear();
+        ConfigurationSerialization.unregisterClass(Path.class);
 
         npcApi = null;
         plugin = null;

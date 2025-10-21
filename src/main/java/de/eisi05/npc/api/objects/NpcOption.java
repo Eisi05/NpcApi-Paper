@@ -132,7 +132,7 @@ public class NpcOption<T, S extends Serializable>
 
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
-                var textures = new Property("textures", skin.value(), skin.signature());
+
                 if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
                 {
                     var npcTextureProperties = ((PropertyMap) Reflections.getField(npcServerPlayer.getGameProfile(), "properties")
@@ -146,6 +146,8 @@ public class NpcOption<T, S extends Serializable>
 
                     UUID newUUID = UUID.randomUUID();
                     npc.changeUUID(newUUID);
+
+                    var textures = new Property("textures", skin.value(), skin.signature());
 
                     PropertyMap propertyMap = Reflections.getInstance(PropertyMap.class,
                             Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures))).orElseThrow();
@@ -169,6 +171,8 @@ public class NpcOption<T, S extends Serializable>
 
                 if(skin == null)
                     return null;
+
+                var textures = new Property("textures", skin.value(), skin.signature());
 
                 properties.put("textures", textures);
                 return null;
@@ -307,7 +311,8 @@ public class NpcOption<T, S extends Serializable>
             {
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
                 SynchedEntityData data = npcServerPlayer.getEntityData();
-                data.set(EntityDataSerializers.BYTE.createAccessor(17), (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
+                data.set(EntityDataSerializers.BYTE.createAccessor(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9) ? 17 : 16),
+                        (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
                 return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
             });
 

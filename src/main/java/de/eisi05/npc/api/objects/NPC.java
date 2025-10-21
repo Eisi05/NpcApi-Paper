@@ -530,10 +530,12 @@ public class NPC extends NpcHolder
      */
     public void delete() throws IOException
     {
+        if(serverPlayer == null)
+            return;
+
         hideNpcFromAllPlayers();
         NpcManager.removeNPC(this);
 
-        serverPlayer.getBukkitEntity().remove();
         serverPlayer.remove(Entity.RemovalReason.DISCARDED);
         serverPlayer = null;
 
@@ -608,20 +610,25 @@ public class NPC extends NpcHolder
             {
                 if(index >= pathPoints.size())
                 {
-                    Location last = pathPoints.getLast();
+                    if(!path.getWaypoints().isEmpty())
+                    {
+                        Location last = path.getWaypoints().getLast();
 
-                    org.bukkit.util.Vector lastVector = last.toVector();
-                    org.bukkit.util.Vector lastMovement = lastVector.clone().subtract(current);
+                        org.bukkit.util.Vector lastVector = last.toVector();
+                        org.bukkit.util.Vector lastMovement = lastVector.clone().subtract(current);
 
-                    ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(serverPlayer, (byte) (last.getYaw() * 256 / 360));
-                    ClientboundTeleportEntityPacket teleportEntityPacket = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
-                            new PositionMoveRotation(new Vec3(lastVector.toVector3f()), new Vec3(lastMovement.toVector3f()), last.getYaw(), last.getPitch()), Set.of(), true);
+                        ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(serverPlayer,
+                                (byte) (last.getYaw() * 256 / 360));
+                        ClientboundTeleportEntityPacket teleportEntityPacket = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
+                                new PositionMoveRotation(new Vec3(lastVector.toVector3f()), new Vec3(lastMovement.toVector3f()), last.getYaw(),
+                                        last.getPitch()), Set.of(), true);
 
-                    sendNpcMovePackets(player, teleportEntityPacket, rotateHeadPacket);
+                        sendNpcMovePackets(player, teleportEntityPacket, rotateHeadPacket);
+                    }
 
                     if(changeRealLocation)
                     {
-                        setLocation(last);
+                        setLocation(path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast());
                         if(player != null)
                         {
                             for(UUID uuid : viewers)

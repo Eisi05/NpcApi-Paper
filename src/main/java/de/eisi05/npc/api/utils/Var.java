@@ -64,7 +64,7 @@ public class Var
                         }
                     },
                     Set.of()).orElseThrow();
-        else
+        else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
             serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
                     new Consumer<Packet<?>>()
                     {
@@ -94,6 +94,9 @@ public class Var
                             return BiConsumer.super.andThen(after);
                         }
                     }, Set.of()).orElseThrow();
+        else
+            serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
+                    null, Set.of()).orElseThrow();
 
         return serverEntity;
     }
