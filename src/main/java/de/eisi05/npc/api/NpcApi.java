@@ -124,6 +124,7 @@ public final class NpcApi
         TeamManager.clear();
         ConfigurationSerialization.unregisterClass(Path.class);
 
+        NpcManager.loadExceptions.clear();
         npcApi = null;
         plugin = null;
     }

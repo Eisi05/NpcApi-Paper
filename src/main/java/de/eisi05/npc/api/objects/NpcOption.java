@@ -89,8 +89,6 @@ public class NpcOption<T, S extends Serializable>
                         return null;
 
                     UUID newUUID = UUID.randomUUID();
-                    npc.changeUUID(newUUID);
-
                     GameProfile profile = Reflections.getInstance(GameProfile.class, newUUID, "NPC" + newUUID.toString().substring(0, 13),
                             Reflections.getInstance(PropertyMap.class, Multimaps.forMap(property == null ? Map.of() : Map.of("textures", property)))
                                     .orElseThrow()).orElseThrow();
@@ -102,6 +100,7 @@ public class NpcOption<T, S extends Serializable>
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
+                    npc.changeUUID(newUUID);
                     return null;
                 }
 
@@ -145,8 +144,6 @@ public class NpcOption<T, S extends Serializable>
                         return null;
 
                     UUID newUUID = UUID.randomUUID();
-                    npc.changeUUID(newUUID);
-
                     var textures = new Property("textures", skin.value(), skin.signature());
 
                     PropertyMap propertyMap = Reflections.getInstance(PropertyMap.class,
@@ -162,6 +159,7 @@ public class NpcOption<T, S extends Serializable>
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
+                    npc.changeUUID(newUUID);
                     return null;
                 }
 

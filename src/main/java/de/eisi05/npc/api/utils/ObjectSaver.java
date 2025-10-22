@@ -132,9 +132,9 @@ public class ObjectSaver
             Object object = objectOut.readObject();
             objectOut.close();
             return (T) object;
-        } catch(Exception e)
+        } catch(IOException | ClassNotFoundException e)
         {
-            return null;
+            throw new RuntimeException(e);
         }
     }
 

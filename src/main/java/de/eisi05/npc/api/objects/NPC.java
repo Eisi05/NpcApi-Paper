@@ -825,7 +825,7 @@ public class NPC extends NpcHolder
             Files.deleteIfExists(npcPath);
             npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(newUUID + ".npc");
             save();
-        } catch(IOException e)
+        } catch(Exception e)
         {
             throw new RuntimeException(e);
         }
