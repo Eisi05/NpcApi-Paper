@@ -6,6 +6,7 @@ import de.eisi05.npc.api.utils.ObjectSaver;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.time.*;
 import java.util.*;
 
 /**
@@ -93,7 +94,16 @@ public class NpcManager
             try
             {
                 NPC.SerializedNPC serializedNPC = new ObjectSaver(file1).read();
-                serializedNPC.deserializedNPC().showNpcToAllPlayers();
+
+                NPC npc = serializedNPC.deserializedNPC();
+
+                LocalDate date = LocalDate.of(2025, 10, 22);
+                LocalTime time = LocalTime.of(22, 0);
+                Instant instant = LocalDateTime.of(date, time).atZone(ZoneId.of("UTC")).toInstant();
+                if(npc.getCreatedAt().isBefore(instant))
+                    npc.setEditable(true);
+
+                npc.showNpcToAllPlayers();
                 successCounter++;
             } catch(Exception e)
             {

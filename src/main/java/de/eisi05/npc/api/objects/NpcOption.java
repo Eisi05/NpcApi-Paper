@@ -71,7 +71,6 @@ public class NpcOption<T, S extends Serializable>
                     return null;
 
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
-                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
                 if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
                 {

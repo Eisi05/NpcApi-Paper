@@ -50,6 +50,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.io.ObjectStreamException;
 import java.io.Serial;
 import java.io.Serializable;
 import java.nio.file.Files;
@@ -67,7 +68,7 @@ public class NPC extends NpcHolder
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
     private final CustomNameTag nameTag;
-    private Component name;
+    private NpcName name;
     private Location location;
     private NpcClickAction clickEvent;
     private Instant createdAt = Instant.now();
@@ -90,7 +91,7 @@ public class NPC extends NpcHolder
      * @param location the location to spawn the NPC. Must not be null.
      * @param name     the display name of the NPC. Must not be null.
      */
-    public NPC(@NotNull Location location, @NotNull Component name)
+    public NPC(@NotNull Location location, @NotNull NpcName name)
     {
         this(location, UUID.randomUUID(), name);
     }
@@ -104,7 +105,7 @@ public class NPC extends NpcHolder
      */
     public NPC(@NotNull Location location, @NotNull UUID uuid)
     {
-        this(location, uuid, Component.empty());
+        this(location, uuid, NpcName.empty());
     }
 
     /**
@@ -115,7 +116,7 @@ public class NPC extends NpcHolder
      * @param uuid     the UUID of the NPC. Must not be null.
      * @param name     the display name of the NPC. Must not be null.
      */
-    public NPC(@NotNull Location location, @NotNull UUID uuid, @NotNull Component name)
+    public NPC(@NotNull Location location, @NotNull UUID uuid, @NotNull NpcName name)
     {
         this.name = name;
         this.location = location;
@@ -140,7 +141,7 @@ public class NPC extends NpcHolder
         Var.moveEntity(display, location.getX(), location.getY() + 2, location.getZ(), 0f, 0f);
 
         nameTag = new CustomNameTag(display);
-        serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
+        serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name.getName()));
         serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) nameTag.getDisplay());
 
         NpcManager.addNPC(this);
@@ -154,7 +155,7 @@ public class NPC extends NpcHolder
      * @param options    The options map for the NPC. Must not be null.
      * @param clickEvent The click event for the NPC. Can be null.
      */
-    private NPC(@NotNull Location location, @NotNull Component name, @NotNull Map<NpcOption<?, ?>, Object> options,
+    private NPC(@NotNull Location location, @NotNull NpcName name, @NotNull Map<NpcOption<?, ?>, Object> options,
             @Nullable NpcClickAction clickEvent)
     {
         this(location, UUID.randomUUID(), name);
@@ -171,7 +172,7 @@ public class NPC extends NpcHolder
      */
     public @NotNull NPC copy(@NotNull Location newLocation)
     {
-        return new NPC(newLocation, name, new HashMap<>(options), clickEvent == null ? null : clickEvent.copy());
+        return new NPC(newLocation, name.copy(), new HashMap<>(options), clickEvent == null ? null : clickEvent.copy());
     }
 
     /**
@@ -379,7 +380,7 @@ public class NPC extends NpcHolder
      *
      * @return the {@link Component} representing the NPC's name. Will not be null.
      */
-    public @NotNull Component getName()
+    public @NotNull NpcName getName()
     {
         return name;
     }
@@ -397,17 +398,29 @@ public class NPC extends NpcHolder
      *
      * @param name the new {@link Component} name for the NPC. Must not be null.
      */
-    public void setName(@NotNull Component name)
+    public void setName(@NotNull NpcName name)
     {
         this.name = name;
-        serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name));
+        serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name.getName()));
 
-        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(
-                uuid -> ((CraftPlayer) Bukkit.getPlayer(uuid)).getHandle().connection.send(
-                        ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                                (SynchedEntityData) nameTag.applyData(
-                                        isEnabled() ? name : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(Bukkit.getPlayer(uuid))
-                                        .appendNewline().append(name))))));
+        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> updateName(Bukkit.getPlayer(uuid)));
+    }
+
+    /**
+     * Updates the display name of the given player on the server.
+     * <p>
+     * Sends a packet to the player to modify their name tag, taking into account
+     * the server version and whether custom naming is enabled.
+     *
+     * @param player the player whose name will be updated; must not be null
+     */
+    public void updateName(@NotNull Player player)
+    {
+        ((CraftPlayer) player).getHandle().connection.send(
+                ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
+                        (SynchedEntityData) nameTag.applyData(
+                                isEnabled() ? name.getName(player) : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
+                                        .appendNewline().append(name.getName(player))))));
     }
 
     /**
@@ -450,6 +463,9 @@ public class NPC extends NpcHolder
         if(!viewers.contains(player.getUniqueId()))
             viewers.add(player.getUniqueId());
 
+        if(!name.isStatic() && getOption(NpcOption.SHOW_TAB_LIST))
+            setOption(NpcOption.SHOW_TAB_LIST, false);
+
         List<Packet<?>> packets = new ArrayList<>();
 
         Arrays.stream(NpcOption.values()).filter(NpcOption::loadBefore)
@@ -476,8 +492,8 @@ public class NPC extends NpcHolder
                     Var.getServerEntity((Display.TextDisplay) nameTag.getDisplay(), Var.getServerLevel(serverPlayer))));
 
             packets.add((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                    (SynchedEntityData) nameTag.applyData(isEnabled() ? name : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
-                            .appendNewline().append(name))));
+                    (SynchedEntityData) nameTag.applyData(isEnabled() ? name.getName(player) : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
+                            .appendNewline().append(name.getName(player)))));
 
             packets.add(new ClientboundSetPassengersPacket(serverPlayer));
         }
@@ -837,23 +853,27 @@ public class NPC extends NpcHolder
     }
 
     /**
-     * A serializable representation of an NPC, used for saving and loading NPC data.
-     * This record stores all essential properties of an NPC that need to be persisted.
+     * Represents a fully serialized NPC, including its location, orientation,
+     * unique ID, name, additional options, click behavior, and creation time.
+     * <p>
+     * The {@code name} field now uses {@link NpcName}, which supports
+     * both static and dynamic names. For backward compatibility, a secondary constructor
+     * allows creating a {@code SerializedNPC} from a legacy {@link Component}.
      *
-     * @param world      The UUID of the world where the NPC is located.
-     * @param x          The x-coordinate of the NPC's location.
-     * @param y          The y-coordinate of the NPC's location.
-     * @param z          The z-coordinate of the NPC's location.
-     * @param yaw        The yaw (horizontal rotation) of the NPC.
-     * @param pitch      The pitch (vertical rotation) of the NPC.
-     * @param id         The unique identifier (UUID) of the NPC.
-     * @param name       The serialized representation of the NPC's display name.
-     * @param options    A map of NPC options, where keys are option paths (strings) and values are serializable option values.
-     * @param clickEvent The click action associated with the NPC. Can be null.
-     * @param createdAt  The timestamp when the NPC was originally created.
+     * @param world      the UUID of the world the NPC is in
+     * @param x          the X-coordinate of the NPC
+     * @param y          the Y-coordinate of the NPC
+     * @param z          the Z-coordinate of the NPC
+     * @param yaw        the yaw rotation of the NPC
+     * @param pitch      the pitch rotation of the NPC
+     * @param id         the unique UUID of the NPC
+     * @param name       the serializable NPC name (static or dynamic)
+     * @param options    additional serializable options associated with the NPC
+     * @param clickEvent optional click event behavior for the NPC
+     * @param createdAt  the timestamp when the NPC was created
      */
     public record SerializedNPC(@NotNull UUID world, double x, double y, double z, float yaw, float pitch, @NotNull UUID id,
-                                @NotNull String name, @NotNull Map<String, ? extends Serializable> options,
+                                @NotNull Serializable name, @NotNull Map<String, ? extends Serializable> options,
                                 @Nullable NpcClickAction clickEvent, @NotNull Instant createdAt) implements Serializable
     {
         @Serial
@@ -872,7 +892,21 @@ public class NPC extends NpcHolder
 
             return new SerializedNPC(npc.getLocation().getWorld().getUID(), npc.getLocation().getX(), npc.getLocation().getY(),
                     npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch(), npc.getUUID(),
-                    JSONComponentSerializer.json().serialize(npc.getName()), options, npc.clickEvent, npc.createdAt);
+                    npc.getName(), options, npc.clickEvent, npc.createdAt);
+        }
+
+        @Serial
+        private Object readResolve() throws ObjectStreamException
+        {
+            NpcName fixedName;
+            if(name instanceof NpcName sn)
+                fixedName = sn;
+            else if(name instanceof String oldName)
+                fixedName = NpcName.of(JSONComponentSerializer.json().deserialize(oldName));
+            else
+                throw new IllegalStateException("Unexpected type for name field: " + name.getClass());
+
+            return new SerializedNPC(world, x, y, z, yaw, pitch, id, fixedName, options, clickEvent, createdAt);
         }
 
         /**
@@ -885,8 +919,7 @@ public class NPC extends NpcHolder
         @SuppressWarnings("unchecked")
         public <T, S extends Serializable> @NotNull NPC deserializedNPC()
         {
-            NPC npc = new NPC(new Location(Bukkit.getWorld(world), x, y, z, yaw, pitch), id,
-                    JSONComponentSerializer.json().deserialize(name)).setClickEvent(
+            NPC npc = new NPC(new Location(Bukkit.getWorld(world), x, y, z, yaw, pitch), id, (NpcName) name).setClickEvent(
                     clickEvent == null ? clickEvent : clickEvent.initialize());
             options.forEach((string, serializable) -> NpcOption.getOption(string)
                     .ifPresent(npcOption -> npc.setOption((NpcOption<T, S>) npcOption, (T) npcOption.deserialize(Var.unsafeCast(serializable)))));
