@@ -71,6 +71,7 @@ public class NpcOption<T, S extends Serializable>
                     return null;
 
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
+                ServerPlayer npcServerPlayer = npc.serverPlayer;
 
                 if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
                 {
@@ -104,7 +105,7 @@ public class NpcOption<T, S extends Serializable>
                 }
 
                 PropertyMap playerProperty = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
-                PropertyMap npcProperty = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
+                PropertyMap npcProperty = (PropertyMap) Reflections.invokeMethod(npcServerPlayer.getGameProfile(), "getProperties").get();
 
                 var textureProperties = playerProperty.get("textures").iterator();
                 npcProperty.removeAll("textures");

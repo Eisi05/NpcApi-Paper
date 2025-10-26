@@ -919,7 +919,9 @@ public class NPC extends NpcHolder
         @SuppressWarnings("unchecked")
         public <T, S extends Serializable> @NotNull NPC deserializedNPC()
         {
-            NPC npc = new NPC(new Location(Bukkit.getWorld(world), x, y, z, yaw, pitch), id, (NpcName) name).setClickEvent(
+            World world1 = Bukkit.getWorld(world);
+
+            NPC npc = new NPC(new Location(world1 == null ? Bukkit.getWorld("world") : world1, x, y, z, yaw, pitch), id, (NpcName) name).setClickEvent(
                     clickEvent == null ? clickEvent : clickEvent.initialize());
             options.forEach((string, serializable) -> NpcOption.getOption(string)
                     .ifPresent(npcOption -> npc.setOption((NpcOption<T, S>) npcOption, (T) npcOption.deserialize(Var.unsafeCast(serializable)))));
