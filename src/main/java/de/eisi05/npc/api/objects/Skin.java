@@ -36,7 +36,7 @@ import java.util.concurrent.CompletableFuture;
  * @param value     The base64 encoded string representing the skin data (texture URL, model, etc.).
  * @param signature The signature used to verify the authenticity of the skin data.
  */
-public record Skin(@Nullable String name, @NotNull String value, @NotNull String signature) implements Serializable
+public record Skin(@Nullable String name, @NotNull String value, @NotNull String signature) implements SkinData
 {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -45,7 +45,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      * A static cache to store fetched skins, mapping UUIDs to Skin objects.
      * This helps reduce redundant API calls to Mojang's servers.
      */
-    private static final Map<UUID, Skin> skinCache = new HashMap<>();
+    private static final Map<String, Skin> skinCacheName = new HashMap<>();
+    private static final Map<UUID, Skin> skinCacheUUID = new HashMap<>();
+    private static final Map<File, Skin> skinCacheFile = new HashMap<>();
 
     /**
      * Retrieves the skin data directly from a currently online Bukkit player.
@@ -82,18 +84,16 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     }
 
     /**
-     * Fetches a player's skin from Mojang's session server using their UUID.
-     * This method first checks the local cache (`skinCache`) before making an HTTP request.
-     * The fetched skin is added to the cache for future use.
+     * Fetches a {@link Skin} from Mojang by UUID.
      *
-     * @param uuid The UUID of the player whose skin is to be fetched. Must not be {@code null}.
-     * @return A {@link Skin} object if the skin is successfully fetched or found in cache, otherwise {@code null}.
+     * @param uuid the UUID of the player.
+     * @return an {@link Optional} containing the skin if found, otherwise empty.
      */
-    public static @Nullable Skin fetchSkin(@NotNull UUID uuid)
+    public static @Nullable Optional<Skin> fetchSkin(@NotNull UUID uuid)
     {
 
-        if(skinCache.containsKey(uuid))
-            return skinCache.get(uuid);
+        if(skinCacheUUID.containsKey(uuid))
+            return Optional.ofNullable(skinCacheUUID.get(uuid));
 
         try
         {
@@ -115,27 +115,27 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
                     String value = obj.get("value").getAsString();
                     String signature = obj.has("signature") ? obj.get("signature").getAsString() : null;
                     Skin skin = new Skin(name, value, signature);
-                    skinCache.put(uuid, skin);
-                    return skin;
+                    skinCacheUUID.put(uuid, skin);
+                    skinCacheName.put(name, skin);
+                    return Optional.of(skin);
                 }
 
-                return null;
+                return Optional.empty();
             }
         } catch(Exception e)
         {
-            return null;
+            skinCacheUUID.put(uuid, null);
+            return Optional.empty();
         }
     }
 
     /**
-     * Fetches a player's skin by their username.
-     * This method first calls Mojang's API to get the player's UUID from their name
-     * and then uses the UUID to fetch the skin data.
+     * Fetches a {@link Skin} by player name.
      *
-     * @param name The username of the player whose skin is to be fetched. Must not be {@code null}.
-     * @return A {@link Skin} object if the skin is successfully fetched, otherwise {@code null}.
+     * @param name the player username.
+     * @return an {@link Optional} containing the skin if found, otherwise empty.
      */
-    public static Skin fetchSkin(@NotNull String name)
+    public static Optional<Skin> fetchSkin(@NotNull String name)
     {
         try
         {
@@ -154,7 +154,8 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             }
         } catch(Exception e)
         {
-            return null;
+            skinCacheName.put(name, null);
+            return Optional.empty();
         }
     }
 
@@ -169,6 +170,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     {
         if(!skinFile.exists())
             throw new IllegalArgumentException("File does not exist");
+
+        if(skinCacheFile.containsKey(skinFile))
+            return Optional.ofNullable(skinCacheFile.get(skinFile));
 
         try(HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build())
         {
@@ -199,7 +203,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             String value = texture.get("value").getAsString();
             String signature = texture.get("signature").getAsString();
 
-            return Optional.of(new Skin(null, value, signature));
+            Skin skin = new Skin(null, value, signature);
+            skinCacheFile.put(skinFile, skin);
+            return Optional.of(skin);
         } catch(IOException | InterruptedException e)
         {
             return Optional.empty();
@@ -207,27 +213,23 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     }
 
     /**
-     * Asynchronously fetches a player's skin using their UUID.
-     * This method wraps the synchronous {@link #fetchSkin(UUID)} call in a {@link CompletableFuture}
-     * to prevent blocking the main thread.
+     * Asynchronously fetches a skin by the player's UUID.
      *
-     * @param uuid The UUID of the player whose skin is to be fetched. Must not be {@code null}.
-     * @return A {@link CompletableFuture} that will complete with the {@link Skin} object, or {@code null} if fetching fails.
+     * @param uuid the UUID of the player
+     * @return a CompletableFuture containing an Optional of the Skin
      */
-    public static CompletableFuture<Skin> fetchSkinAsync(@NotNull UUID uuid)
+    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull UUID uuid)
     {
         return CompletableFuture.supplyAsync(() -> fetchSkin(uuid));
     }
 
     /**
-     * Asynchronously fetches a player's skin using their username.
-     * This method wraps the synchronous {@link #fetchSkin(String)} call in a {@link CompletableFuture}
-     * to prevent blocking the main thread.
+     * Asynchronously fetches a skin by the player's name.
      *
-     * @param name The username of the player whose skin is to be fetched. Must not be {@code null}.
-     * @return A {@link CompletableFuture} that will complete with the {@link Skin} object, or {@code null} if fetching fails.
+     * @param name the name of the player
+     * @return a CompletableFuture containing an Optional of the Skin
      */
-    public static CompletableFuture<Skin> fetchSkinAsync(@NotNull String name)
+    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull String name)
     {
         return CompletableFuture.supplyAsync(() -> fetchSkin(name));
     }
@@ -256,5 +258,27 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             pos += arr.length;
         }
         return result;
+    }
+
+    /**
+     * Checks whether a skin for the given name has already been loaded and cached.
+     *
+     * @param name the player name.
+     * @return {@code true} if the skin is cached, {@code false} otherwise.
+     */
+    public static boolean isPreLoaded(@NotNull String name)
+    {
+        return skinCacheName.containsKey(name);
+    }
+
+    /**
+     * Checks whether a skin for the given UUID has already been loaded and cached.
+     *
+     * @param uuid the player UUID.
+     * @return {@code true} if the skin is cached, {@code false} otherwise.
+     */
+    public static boolean isPreLoaded(@NotNull UUID uuid)
+    {
+        return skinCacheUUID.containsKey(uuid);
     }
 }

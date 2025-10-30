@@ -38,6 +38,12 @@ public class NpcConfig
     private boolean autoUpdate = false;
 
     /**
+     * The time in ticks a placeholder (Name or Skin) will update.
+     * The default value is 1 minute.
+     */
+    private long placeholderTimer = 20 * 60;
+
+    /**
      * Sets the duration an NPC will look at a player after an interaction.
      *
      * @param time The time in ticks. For example, 20 ticks = 1 second.
@@ -99,6 +105,18 @@ public class NpcConfig
     }
 
     /**
+     * Sets the duration a placeholder will be updated.
+     *
+     * @param time The time in ticks. For example, 20 ticks = 1 second.
+     * @return This {@link NpcConfig} instance for method chaining. Will not be null.
+     */
+    public @NotNull NpcConfig placeholderTimer(long time)
+    {
+        placeholderTimer = time;
+        return this;
+    }
+
+    /**
      * Gets the configured duration an NPC will look at a player.
      *
      * @return The time in ticks.
@@ -146,5 +164,15 @@ public class NpcConfig
     public boolean autoUpdate()
     {
         return autoUpdate;
+    }
+
+    /**
+     * Gets the configured duration a placeholder will update.
+     *
+     * @return The time in ticks.
+     */
+    public long placeholderTimer()
+    {
+        return placeholderTimer;
     }
 }

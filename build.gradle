@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "de.eisi05"
-version = "1.21.x-6"
+version = "1.21.x-7"
 
 base {
     archivesName = "NpcApi-Paper"

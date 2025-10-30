@@ -1,5 +1,6 @@
 package de.eisi05.npc.api.objects;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimaps;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
@@ -13,6 +14,7 @@ import de.eisi05.npc.api.utils.*;
 import de.eisi05.npc.api.wrapper.enums.ChatFormat;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
+import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
@@ -26,6 +28,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -36,6 +39,7 @@ import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
+import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.inventory.EquipmentSlot;
@@ -78,7 +82,7 @@ public class NpcOption<T, S extends Serializable>
                     var textureProperties = ((PropertyMap) Reflections.getField(serverPlayer.getGameProfile(), "properties")
                             .get()).get("textures").iterator();
 
-                    var npcTextureProperties = ((PropertyMap) Reflections.getField(serverPlayer.getGameProfile(), "properties")
+                    var npcTextureProperties = ((PropertyMap) Reflections.getField(npcServerPlayer.getGameProfile(), "properties")
                             .get()).get("textures").iterator();
 
                     Property property = textureProperties.hasNext() ? textureProperties.next() : null;
@@ -89,9 +93,8 @@ public class NpcOption<T, S extends Serializable>
                         return null;
 
                     UUID newUUID = UUID.randomUUID();
-                    GameProfile profile = Reflections.getInstance(GameProfile.class, newUUID, "NPC" + newUUID.toString().substring(0, 13),
-                            Reflections.getInstance(PropertyMap.class, Multimaps.forMap(property == null ? Map.of() : Map.of("textures", property)))
-                                    .orElseThrow()).orElseThrow();
+                    PropertyMap propertyMap =  new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", property)));
+                    GameProfile profile = new GameProfile(newUUID, "NPC" + newUUID.toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
                     MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
@@ -100,6 +103,8 @@ public class NpcOption<T, S extends Serializable>
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
+                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName().getName()));
+                    npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
                     npc.changeUUID(newUUID);
                     return null;
                 }
@@ -122,23 +127,24 @@ public class NpcOption<T, S extends Serializable>
      * NPC option to set a specific skin using a value and signature.
      * This is ignored if {@link #USE_PLAYER_SKIN} is true.
      */
-    public static final NpcOption<Skin, Skin> SKIN = new NpcOption<Skin, Skin>("skin", null,
-            skin -> skin, skin -> skin,
-            (skin, npc, player) ->
+    public static final NpcOption<NpcSkin, SkinData> SKIN = new NpcOption<NpcSkin, SkinData>("skin", null,
+            skin -> skin, skin -> skin instanceof Skin skin1 ? NpcSkin.of(skin1) : (NpcSkin) skin,
+            (skinData, npc, player) ->
             {
-                if(npc.getOption(USE_PLAYER_SKIN))
+                if(npc.getOption(USE_PLAYER_SKIN) || skinData == null)
+                    return null;
+
+                Skin skin = skinData.getSkin(player, npc);
+                if(skin == null)
                     return null;
 
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
-
-
                 if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
                 {
                     var npcTextureProperties = ((PropertyMap) Reflections.getField(npcServerPlayer.getGameProfile(), "properties")
                             .get()).get("textures").iterator();
 
                     Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
-
                     if((skin == null && npcProperty == null) ||
                             (npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get())))
                         return null;
@@ -146,11 +152,8 @@ public class NpcOption<T, S extends Serializable>
                     UUID newUUID = UUID.randomUUID();
                     var textures = new Property("textures", skin.value(), skin.signature());
 
-                    PropertyMap propertyMap = Reflections.getInstance(PropertyMap.class,
-                            Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures))).orElseThrow();
-
-                    GameProfile profile = Reflections.getInstance(GameProfile.class, newUUID, "NPC" + newUUID.toString().substring(0, 13),
-                            propertyMap).orElseThrow();
+                    PropertyMap propertyMap =  new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures)));
+                    GameProfile profile = new GameProfile(newUUID, "NPC" + newUUID.toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
                     MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
@@ -159,6 +162,8 @@ public class NpcOption<T, S extends Serializable>
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
+                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName().getName()));
+                    npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
                     npc.changeUUID(newUUID);
                     return null;
                 }

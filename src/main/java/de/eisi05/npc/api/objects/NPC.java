@@ -16,6 +16,7 @@ import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
@@ -58,12 +59,15 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Represents a Non-Player Character (NPC) with location, appearance, options, and interaction logic.
  */
 public class NPC extends NpcHolder
 {
+    private transient final Map<UUID, String> nameCache = new HashMap<>();
+
     ServerPlayer serverPlayer;
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
@@ -312,10 +316,10 @@ public class NPC extends NpcHolder
      *
      * @param option the {@link NpcOption} to get. Must not be null.
      * @param <T>    the type of the option's value.
-     * @return the value of the option. Will not be null (guaranteed by NpcOption default values).
+     * @return the value of the option.
      */
     @SuppressWarnings("unchecked")
-    public <T> @NotNull T getOption(@NotNull NpcOption<T, ?> option)
+    public <T> @Nullable T getOption(@NotNull NpcOption<T, ?> option)
     {
         return (T) options.getOrDefault(option, option.getDefaultValue());
     }
@@ -424,6 +428,55 @@ public class NPC extends NpcHolder
     }
 
     /**
+     * Updates the display name for all players in the viewer list.
+     * <p>
+     * Sends a packet to the player to modify their name tag, taking into account
+     * the server version and whether custom naming is enabled.
+     */
+    public void updateNameForAll()
+    {
+        for(UUID uuid : viewers)
+        {
+            Player player = Bukkit.getPlayer(uuid);
+            if(player == null)
+                continue;
+
+            String name = PlainTextComponentSerializer.plainText().serialize(getName().getName(Bukkit.getPlayer(uuid)));
+            if(nameCache.getOrDefault(uuid, "").equals(name))
+                continue;
+
+            updateName(player);
+            nameCache.put(uuid, name);
+        }
+    }
+
+    /**
+     * Updates the NPC's skin for a subset of players based on a condition.
+     * <p>
+     * Iterates over all viewers of the NPC and, for each player that satisfies
+     * the given {@link Predicate}, hides and then shows the NPC to refresh its skin.
+     * </p>
+     *
+     * @param predicate a {@link java.util.function.Predicate} that determines which players
+     *                  should have the skin updated.
+     */
+    public void updateSkin(@NotNull Predicate<Player> predicate)
+    {
+        for(UUID uuid : viewers)
+        {
+            Player player = Bukkit.getPlayer(uuid);
+            if(player == null)
+                continue;
+
+            if(!predicate.test(player))
+                continue;
+
+            hideNpcFromPlayer(player);
+            showNPCToPlayer(player);
+        }
+    }
+
+    /**
      * Gets the timestamp when this NPC was created.
      *
      * @return the {@link Instant} of creation. Will not be null.
@@ -451,7 +504,7 @@ public class NPC extends NpcHolder
      */
     public void showNPCToPlayer(@NotNull Player player)
     {
-        if(!getOption(NpcOption.ENABLED) && !player.isOp())
+        if(!getOption(NpcOption.ENABLED) && !player.isPermissionSet("npc.admin") && !player.isOp())
             return;
 
         if(!player.getWorld().getName().equals(serverPlayer.getBukkitEntity().getWorld().getName()))
