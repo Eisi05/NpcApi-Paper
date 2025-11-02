@@ -382,11 +382,31 @@ public class NPC extends NpcHolder
     /**
      * Gets the display name of this NPC.
      *
-     * @return the {@link Component} representing the NPC's name. Will not be null.
+     * @return the {@link NpcName} representing the NPC's name. Will not be null.
      */
-    public @NotNull NpcName getName()
+    public @NotNull NpcName getNpcName()
     {
         return name;
+    }
+
+    /**
+     * Gets the display name of this NPC.
+     *
+     * @return the {@link Component} representing the NPC's name. Will not be null.
+     */
+    public @NotNull Component getName(@NotNull Player player)
+    {
+        return name.getName(player);
+    }
+
+    /**
+     * Gets the display name of this NPC.
+     *
+     * @return the {@link Component} representing the NPC's name. Will not be null.
+     */
+    public @NotNull Component getName()
+    {
+        return name.getName();
     }
 
     public @NotNull String getGameProfileName()
@@ -441,7 +461,7 @@ public class NPC extends NpcHolder
             if(player == null)
                 continue;
 
-            String name = PlainTextComponentSerializer.plainText().serialize(getName().getName(Bukkit.getPlayer(uuid)));
+            String name = PlainTextComponentSerializer.plainText().serialize(getName(Bukkit.getPlayer(uuid)));
             if(nameCache.getOrDefault(uuid, "").equals(name))
                 continue;
 
@@ -945,7 +965,7 @@ public class NPC extends NpcHolder
 
             return new SerializedNPC(npc.getLocation().getWorld().getUID(), npc.getLocation().getX(), npc.getLocation().getY(),
                     npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch(), npc.getUUID(),
-                    npc.getName(), options, npc.clickEvent, npc.createdAt);
+                    npc.getNpcName(), options, npc.clickEvent, npc.createdAt);
         }
 
         @Serial

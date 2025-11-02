@@ -89,7 +89,7 @@ public class Tasks
             @Override
             public void run()
             {
-                NpcManager.getList().stream().filter(npc -> !npc.getName().isStatic()).forEach(NPC::updateNameForAll);
+                NpcManager.getList().stream().filter(npc -> !npc.getNpcName().isStatic()).forEach(NPC::updateNameForAll);
 
                 if(!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
                     return;

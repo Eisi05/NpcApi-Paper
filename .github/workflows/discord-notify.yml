@@ -1,0 +1,28 @@
+name: Notify Discord on New Issue
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord embed
+        run: |
+          curl -H "Content-Type: application/json" \
+               -d "{
+                 \"embeds\": [{
+                   \"title\": \"🆕 New Issue #${{ github.event.issue.number }}\",
+                   \"url\": \"${{ github.event.issue.html_url }}\",
+                   \"description\": \"${{ github.event.issue.title }}\",
+                   \"color\": 5814783,
+                   \"fields\": [
+                     {\"name\": \"Author\", \"value\": \"${{ github.event.issue.user.login }}\", \"inline\": true},
+                     {\"name\": \"State\", \"value\": \"${{ github.event.issue.state }}\", \"inline\": true}
+                   ],
+                   \"footer\": {\"text\": \"GitHub → ${{ github.repository }}\"},
+                   \"timestamp\": \"${{ github.event.issue.created_at }}\"
+                 }]
+               }" \
+               ${{ secrets.DISCORD_WEBHOOK }}

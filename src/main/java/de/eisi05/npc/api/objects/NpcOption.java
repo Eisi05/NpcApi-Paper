@@ -103,7 +103,7 @@ public class NpcOption<T, S extends Serializable>
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
-                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName().getName()));
+                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName()));
                     npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
                     npc.changeUUID(newUUID);
                     return null;
@@ -162,7 +162,7 @@ public class NpcOption<T, S extends Serializable>
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
-                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName().getName()));
+                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName()));
                     npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
                     npc.changeUUID(newUUID);
                     return null;
