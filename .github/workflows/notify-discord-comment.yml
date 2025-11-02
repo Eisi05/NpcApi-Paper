@@ -7,6 +7,12 @@ on:
 jobs:
   notify_comment:
     runs-on: ubuntu-latest
+    
+    # ⬇️ ADD THIS CONDITION TO THE *JOB*
+    # This skips the *entire job* if the commenter is the user you want to ignore.
+    # Replace 'YOUR-USERNAME-TO-IGNORE' with your actual GitHub login.
+    if: github.event.comment.user.login != 'Eisi05'
+
     steps:
       - name: Prepare Embed Data
         id: prep
@@ -16,34 +22,30 @@ jobs:
             const comment = context.payload.comment;
             const issue = context.payload.issue;
 
-            // Skip if the comment is by the actor (yourself)
-            if (comment.user.login === github.actor) return;
-           
+            // ⬇️ REMOVE THIS LINE - the job-level 'if' handles this now.
+            // if (comment.user.login === github.actor) return;
+            
             // 1. Comment body (truncate to 1024)
             let body = comment.body || 'No content provided.';
             if (body.length > 1024) body = body.substring(0, 1021) + '...';
-
-            // Add padding before and after
+            
+            // ... (rest of your script is good) ...
+            
             body = "\n" + body + "\n";
-
-            // Escape for JSON: quotes, backslashes, and newlines
             function escapeJSON(str) {
               return str.replace(/\\/g, '\\\\')
                         .replace(/"/g, '\\"')
                         .replace(/\n/g, '\\n');
             }
-
             body = escapeJSON(body);
-
-            // 2. Labels from the parent issue
             const labels = issue.labels || [];
             let color = labels.length > 0 ? parseInt(labels[0].color, 16) : 5814783;
             let labelsText = labels.length > 0 ? labels.map(l => l.name).join(', ') : 'Label missing';
 
-            // 3. Set outputs
             core.setOutput('title', escapeJSON(`Comment on #${issue.number}: ${issue.title}`));
             core.setOutput('description', body);
             core.setOutput('color', color);
+            // ... (all your other core.setOutput lines) ...
             core.setOutput('labels', escapeJSON(labelsText));
             core.setOutput('issue_url', issue.html_url);
             core.setOutput('comment_author', comment.user.login);
@@ -52,7 +54,8 @@ jobs:
             core.setOutput('timestamp', comment.created_at);
 
       - name: Send Discord embed
-        if: steps.prep.outputs.description != ''  # skip if prep returned nothing (your own comment)
+        # ⬇️ REMOVE THIS 'if' - it's no longer needed.
+        # if: steps.prep.outputs.description != ''
         run: |
           curl -H "Content-Type: application/json" \
           -d "{
