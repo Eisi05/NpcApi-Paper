@@ -38,7 +38,7 @@ This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?lo
 <dependency>
     <groupId>com.github.Eisi05</groupId>
     <artifactId>NpcApi-Paper</artifactId>
-    <version>1.21.x-5</version>
+    <version>1.21.x-7</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -54,7 +54,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    compileOnly 'com.github.Eisi05:NpcApi-Paper:1.21.x-5'
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:1.21.x-7'
 }
 ```
 
@@ -93,7 +93,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>1.21.x-5</version>
+	    <version>1.21.x-7</version>
 	</dependency>
 </dependencies>
 ```
@@ -110,7 +110,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.x-5'
+    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.x-7'
 }
 ```
 
@@ -156,7 +156,7 @@ npc.setEnabled(true);
 npc.setOption(NpcOption.GLOWING, ChatFormat.RED);
 
 // Set a custom skin from a player
-npc.setOption(NpcOption.SKIN, Skin.fromPlayer(player));
+npc.setOption(NpcOption.SKIN, NpcSkin.of(Skin.fromPlayer(player)));
 ```
 
 ### Handling Click Events
