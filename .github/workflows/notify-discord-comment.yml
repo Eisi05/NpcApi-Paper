@@ -1,0 +1,76 @@
+name: Notify Discord on New Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify_comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare Embed Data
+        id: prep
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment;
+            const issue = context.payload.issue;
+
+            // Skip if the comment is by the actor (yourself)
+            if (comment.user.login === github.actor) return;
+           
+            // 1. Comment body (truncate to 1024)
+            let body = comment.body || 'No content provided.';
+            if (body.length > 1024) body = body.substring(0, 1021) + '...';
+
+            // Add padding before and after
+            body = "\n" + body + "\n";
+
+            // Escape for JSON: quotes, backslashes, and newlines
+            function escapeJSON(str) {
+              return str.replace(/\\/g, '\\\\')
+                        .replace(/"/g, '\\"')
+                        .replace(/\n/g, '\\n');
+            }
+
+            body = escapeJSON(body);
+
+            // 2. Labels from the parent issue
+            const labels = issue.labels || [];
+            let color = labels.length > 0 ? parseInt(labels[0].color, 16) : 5814783;
+            let labelsText = labels.length > 0 ? labels.map(l => l.name).join(', ') : 'Label missing';
+
+            // 3. Set outputs
+            core.setOutput('title', escapeJSON(`Comment on #${issue.number}: ${issue.title}`));
+            core.setOutput('description', body);
+            core.setOutput('color', color);
+            core.setOutput('labels', escapeJSON(labelsText));
+            core.setOutput('issue_url', issue.html_url);
+            core.setOutput('comment_author', comment.user.login);
+            core.setOutput('comment_author_url', comment.user.html_url);
+            core.setOutput('comment_author_icon', comment.user.avatar_url);
+            core.setOutput('timestamp', comment.created_at);
+
+      - name: Send Discord embed
+        if: steps.prep.outputs.description != ''  # skip if prep returned nothing (your own comment)
+        run: |
+          curl -H "Content-Type: application/json" \
+          -d "{
+                \"embeds\": [{
+                  \"title\": \"${{ steps.prep.outputs.title }}\",
+                  \"url\": \"${{ steps.prep.outputs.issue_url }}\",
+                  \"description\": \"${{ steps.prep.outputs.description }}\",
+                  \"color\": ${{ steps.prep.outputs.color }},
+                  \"fields\": [
+                    {\"name\": \"Labels\", \"value\": \"${{ steps.prep.outputs.labels }}\", \"inline\": true},
+                    {\"name\": \"State\", \"value\": \"Open\", \"inline\": true}
+                  ],
+                  \"author\": {
+                    \"name\": \"${{ steps.prep.outputs.comment_author }}\",
+                    \"url\": \"${{ steps.prep.outputs.comment_author_url }}\",
+                    \"icon_url\": \"${{ steps.prep.outputs.comment_author_icon }}\"
+                  },
+                  \"timestamp\": \"${{ steps.prep.outputs.timestamp }}\"
+                }]
+              }" \
+          ${{ secrets.DISCORD_WEBHOOK }}
