@@ -1,0 +1,74 @@
+name: Notify Discord on New Issue
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare Embed Data
+        id: prep
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+
+            // Truncate description to 1024
+            let body = issue.body || 'No description provided.';
+            if (body.length > 1024) body = body.substring(0, 1021) + '...';
+
+            body = "\n" + body + "\n";
+
+            // Escape JSON special characters
+            function escapeJSON(str) {
+              return str.replace(/\\/g, '\\\\')
+                        .replace(/"/g, '\\"')
+                        .replace(/\n/g, '\\n');
+            }
+
+            const labels = issue.labels || [];
+            let color = 5814783; // default blue
+            let labelsText = labels.length > 0 ? labels.map(l => l.name).join(', ') : 'Label missing';
+
+            core.setOutput('title', escapeJSON(issue.title || 'No Title'));
+            core.setOutput('description', escapeJSON(body));
+            core.setOutput('color', color);
+            core.setOutput('labels', escapeJSON(labelsText));
+
+      - name: Send Discord embed
+        env:
+          TITLE: ${{ steps.prep.outputs.title }}
+          DESCRIPTION: ${{ steps.prep.outputs.description }}
+          COLOR: ${{ steps.prep.outputs.color }}
+          LABELS: ${{ steps.prep.outputs.labels }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          AUTHOR_NAME: ${{ github.event.issue.user.login }}
+          AUTHOR_URL: ${{ github.event.issue.user.html_url }}
+          AUTHOR_ICON: ${{ github.event.issue.user.avatar_url }}
+          REPO: ${{ github.repository }}
+          TIMESTAMP: ${{ github.event.issue.created_at }}
+        run: |
+          curl -H "Content-Type: application/json" \
+          -d "{
+                \"embeds\": [{
+                  \"title\": \"🆕 New Issue #${ISSUE_NUMBER}: ${TITLE}\",
+                  \"url\": \"${ISSUE_URL}\",
+                  \"description\": \"${DESCRIPTION}\",
+                  \"color\": ${COLOR},
+                  \"fields\": [
+                    {\"name\": \"Labels\", \"value\": \"${LABELS}\", \"inline\": true},
+                    {\"name\": \"State\", \"value\": \"Open\", \"inline\": true}
+                  ],
+                  \"author\": {
+                    \"name\": \"${AUTHOR_NAME}\",
+                    \"url\": \"${AUTHOR_URL}\",
+                    \"icon_url\": \"${AUTHOR_ICON}\"
+                  },
+                  \"footer\": {\"text\": \"GitHub → ${REPO}\"},
+                  \"timestamp\": \"${TIMESTAMP}\"
+                }]
+              }" \
+          ${{ secrets.DISCORD_WEBHOOK }}
