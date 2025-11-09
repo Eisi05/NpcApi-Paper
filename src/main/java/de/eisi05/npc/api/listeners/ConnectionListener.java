@@ -2,6 +2,7 @@ package de.eisi05.npc.api.listeners;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.PacketReader;
 import org.bukkit.event.EventHandler;
@@ -16,6 +17,8 @@ public class ConnectionListener implements Listener
     public void onJoin(PlayerJoinEvent event)
     {
         PacketReader.inject(event.getPlayer());
+
+        TeamManager.clear(event.getPlayer().getUniqueId());
 
         new BukkitRunnable()
         {

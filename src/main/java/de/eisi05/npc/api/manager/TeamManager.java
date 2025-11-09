@@ -40,6 +40,11 @@ public class TeamManager
         teams.clear();
     }
 
+    public static void clear(@NotNull UUID uuid)
+    {
+        teams.remove(uuid);
+    }
+
     public static void clear(String name)
     {
         for(var entry : teams.entrySet())
