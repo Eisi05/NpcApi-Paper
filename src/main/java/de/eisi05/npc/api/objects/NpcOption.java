@@ -278,17 +278,38 @@ public class NpcOption<T, S extends Serializable>
      * The map uses {@link EquipmentSlot} as keys and {@link ItemStack} as values.
      * Serialized form uses item base64 strings.
      */
-    public static final NpcOption<Map<EquipmentSlot, ItemStack>, HashMap<EquipmentSlot, String>> EQUIPMENT = new NpcOption<>("equipment", Map.of(),
+    public static final NpcOption<Map<EquipmentSlot, ItemStack>, HashMap<EquipmentSlot, String>> EQUIPMENT = new NpcOption<>("equipment",
+            new HashMap<>(),
             map ->
             {
                 HashMap<EquipmentSlot, String> serializedMap = new HashMap<>();
-                map.forEach((slot, item) -> serializedMap.put(slot, ItemSerializer.itemStackToBase64(item)));
+                map.forEach((slot, item) ->
+                {
+                    if(item == null)
+                        return;
+
+                    String serialized = ItemSerializer.itemStackToBase64(item);
+                    if(serialized == null)
+                        return;
+
+                    serializedMap.put(slot, serialized);
+                });
                 return serializedMap;
             },
             serializedMap ->
             {
                 HashMap<EquipmentSlot, ItemStack> map = new HashMap<>();
-                serializedMap.forEach((slot, string) -> map.put(slot, ItemSerializer.itemStackFromBase64(string)));
+                serializedMap.forEach((slot, string) ->
+                {
+                    if(string == null)
+                        return;
+
+                    ItemStack item = ItemSerializer.itemStackFromBase64(string);
+                    if(item == null)
+                        return;
+
+                    map.put(slot, item);
+                });
                 return map;
             },
             (map, npc, player) ->
