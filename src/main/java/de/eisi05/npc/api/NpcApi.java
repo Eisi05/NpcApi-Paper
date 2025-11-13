@@ -15,10 +15,13 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.entity.Player;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -33,6 +36,8 @@ public final class NpcApi
      * This is set during the API's initialization.
      */
     public static Plugin plugin;
+
+    private static final List<Listener> listeners = List.of(new ChangeWorldListener(), new ConnectionListener(), new NpcInteractListener());
 
     public static Function<Player, Component> DISABLED_MESSAGE_PROVIDER = player ->
             Component.text("DISABLED").color(NamedTextColor.RED);
@@ -58,9 +63,7 @@ public final class NpcApi
         NpcApi.plugin = plugin;
         NpcApi.config = config;
 
-        Bukkit.getPluginManager().registerEvents(new ChangeWorldListener(), plugin);
-        Bukkit.getPluginManager().registerEvents(new ConnectionListener(), plugin);
-        Bukkit.getPluginManager().registerEvents(new NpcInteractListener(), plugin);
+        listeners.forEach(listener -> Bukkit.getPluginManager().registerEvents(listener, plugin));
 
         ConfigurationSerialization.registerClass(Path.class);
 
@@ -123,6 +126,8 @@ public final class NpcApi
         Tasks.stop();
         TeamManager.clear();
         ConfigurationSerialization.unregisterClass(Path.class);
+
+        listeners.forEach(HandlerList::unregisterAll);
 
         NpcManager.loadExceptions.clear();
         npcApi = null;
