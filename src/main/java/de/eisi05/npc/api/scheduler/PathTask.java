@@ -4,6 +4,7 @@ import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.pathfinding.Path;
+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -11,9 +12,12 @@ import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
@@ -21,6 +25,7 @@ import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalDouble;
 import java.util.Set;
@@ -56,7 +61,7 @@ public class PathTask extends BukkitRunnable
     {
         this.npc = builder.npc;
         this.path = builder.path;
-        this.pathPoints = builder.path.asLocations();
+        this.pathPoints = new ArrayList<>(builder.path.asLocations());
         this.viewers = builder.viewers;
         this.callback = builder.callback;
 
@@ -75,8 +80,8 @@ public class PathTask extends BukkitRunnable
     {
         if(index >= pathPoints.size())
         {
-            finishPath();
-            return;
+            if(finishPath())
+                return;
         }
 
         Vector target = pathPoints.get(index).toVector();
@@ -116,19 +121,22 @@ public class PathTask extends BukkitRunnable
         sendMovePackets(movement, yaw, pitch, physics.isGrounded);
     }
 
-    private void finishPath()
+    private boolean finishPath()
     {
-        finished = true;
-
         Location last = path.getWaypoints().isEmpty() ? null : path.getWaypoints().getLast();
 
         if(last != null)
         {
             if(currentPos.distanceSquared(last.toVector()) > 0.04)
-                forceTeleport(last);
+            {
+                pathPoints.add(last);
+                return false;
+            }
             else
                 smoothEndRotation(last);
         }
+
+        finished = true;
 
         if(updateRealLocation)
         {
@@ -140,6 +148,8 @@ public class PathTask extends BukkitRunnable
             callback.accept(WalkingResult.SUCCESS);
         Bukkit.getPluginManager().callEvent(new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation));
         cancel();
+
+        return true;
     }
 
     private void smoothEndRotation(Location loc)
@@ -147,10 +157,13 @@ public class PathTask extends BukkitRunnable
         if(serverEntity == null)
             return;
 
-        ClientboundRotateHeadPacket head =
-                new ClientboundRotateHeadPacket(serverEntity, (byte) (loc.getYaw() * 256 / 360));
+        ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket(serverEntity, (byte) (loc.getYaw() * 256 / 360));
+        ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(serverEntity.getId(), (byte) (loc.getYaw() * 256 / 360),
+                (byte) (loc.getPitch() * 256 / 360), true);
 
         npc.sendNpcMovePackets(null, head, viewers);
+        for(var viewer : viewers)
+            ((CraftPlayer) viewer).getHandle().connection.send(body);
     }
 
     private boolean hasReachedWaypoint(@NotNull Vector toTarget)
@@ -245,6 +258,9 @@ public class PathTask extends BukkitRunnable
                 block.setBlockData(openable);
                 return y;
             }
+
+            if(Tag.WOOL_CARPETS.isTagged(block.getType()) && Tag.WOOL_CARPETS.isTagged(block.getRelative(BlockFace.UP).getType()))
+                return ++y;
 
             if(!block.getType().isSolid() || block.isPassable())
                 return y;

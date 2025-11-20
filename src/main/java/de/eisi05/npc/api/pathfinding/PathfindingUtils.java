@@ -111,7 +111,6 @@ public class PathfindingUtils
     public static @NotNull Path findNewPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
             @Nullable BiConsumer<Integer, Integer> progressListener) throws PathfindingException
     {
-
         if(waypoints.size() < 2)
             throw new IllegalArgumentException("Waypoints list must contain at least 2 locations.");
 

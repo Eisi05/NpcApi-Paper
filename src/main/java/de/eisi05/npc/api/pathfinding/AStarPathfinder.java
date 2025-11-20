@@ -2,9 +2,12 @@ package de.eisi05.npc.api.pathfinding;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
@@ -146,16 +149,14 @@ public class AStarPathfinder
             return false;
 
         Material type = block.getType();
-        if(type == Material.AIR || type == Material.WATER || type == Material.LAVA)
+        if(type.isAir() || block.isLiquid())
             return false;
+
+        //if(Tag.WOOL_CARPETS.isTagged(type) && block.getRelative(BlockFace.UP).getType().isAir())
+        //    return true;
 
         if(block.isPassable())
-        {
-            if(type.name().contains("CARPET"))
-                return true;
-
             return false;
-        }
 
         return true;
     }
@@ -169,7 +170,13 @@ public class AStarPathfinder
             return false;
 
         Material type = block.getType();
-        if(type == Material.AIR)
+        if(type.isAir())
+            return false;
+
+        if(Tag.WOOL_CARPETS.isTagged(type) && Tag.WOOL_CARPETS.isTagged(block.getRelative(BlockFace.UP).getType()))
+            return true;
+
+        if(Tag.WOOL_CARPETS.isTagged(type))
             return false;
 
         if(block.isPassable())
@@ -181,7 +188,7 @@ public class AStarPathfinder
         return true;
     }
 
-    private List<Location> retracePath(Node current)
+    private @NotNull List<Location> retracePath(Node current)
     {
         List<Location> path = new ArrayList<>();
         while(current != null)
