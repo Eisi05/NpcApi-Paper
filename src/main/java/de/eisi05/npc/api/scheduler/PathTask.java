@@ -16,11 +16,13 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.Openable;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -87,14 +89,14 @@ public class PathTask extends BukkitRunnable
         }
 
         Location nextLoc = pathPoints.get(index);
-        if(isDoorAtLocation(nextLoc))
+        /*if(isDoorAtLocation(nextLoc))
         {
             if(currentPos.distanceSquared(nextLoc.toVector()) > 1e-6)
                 teleportThroughDoor(nextLoc);
 
             index++;
             return;
-        }
+        }*/
 
         Vector movement = calculateHorizontalMovement(toTarget, target);
 
@@ -156,7 +158,7 @@ public class PathTask extends BukkitRunnable
         return toTarget.lengthSquared() < 0.04 && Math.abs(toTarget.getY()) < 0.2;
     }
 
-    private Vector calculateHorizontalMovement(Vector toTarget, Vector targetPoint)
+    private @NotNull Vector calculateHorizontalMovement(@NotNull Vector toTarget, @NotNull Vector targetPoint)
     {
         Vector horizontal = new Vector(toTarget.getX(), 0, toTarget.getZ());
         double distSq = horizontal.lengthSquared();
@@ -177,7 +179,7 @@ public class PathTask extends BukkitRunnable
         return moveStep;
     }
 
-    private PhysicsResult applyPhysics(Vector movement, Vector toTarget)
+    private @NotNull PhysicsResult applyPhysics(Vector movement, Vector toTarget)
     {
         World world = npc.getLocation().getWorld();
         if(world == null)
@@ -227,7 +229,7 @@ public class PathTask extends BukkitRunnable
         return new PhysicsResult(yChange, onGround);
     }
 
-    private double getGroundY(World world, Vector pos)
+    private double getGroundY(@NotNull World world, @NotNull Vector pos)
     {
         int bx = pos.getBlockX();
         int bz = pos.getBlockZ();
@@ -236,8 +238,22 @@ public class PathTask extends BukkitRunnable
         for(int y = startY; y >= startY - 3; y--)
         {
             Block block = world.getBlockAt(bx, y, bz);
-            if(block.getType().isSolid() && !block.isPassable())
-                return y + 1.0;
+
+            if(block.getBlockData() instanceof Openable openable)
+            {
+                openable.setOpen(true);
+                block.setBlockData(openable);
+                return y;
+            }
+
+            if(!block.getType().isSolid() || block.isPassable())
+                return y;
+
+            OptionalDouble maxY = block.getCollisionShape().getBoundingBoxes().stream().mapToDouble(BoundingBox::getMaxY).max();
+            OptionalDouble minY = block.getCollisionShape().getBoundingBoxes().stream().mapToDouble(BoundingBox::getMinY).min();
+
+            if(minY.isPresent() && maxY.isPresent())
+                return y + minY.getAsDouble() + (maxY.getAsDouble() - minY.getAsDouble());
         }
 
         return world.getHighestBlockYAt(bx, bz);
