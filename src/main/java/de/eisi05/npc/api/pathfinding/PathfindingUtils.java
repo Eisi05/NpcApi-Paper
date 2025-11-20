@@ -94,4 +94,57 @@ public class PathfindingUtils
 
         return path;
     }
+
+    /**
+     * Synchronously calculates a path through a list of waypoints.
+     * <p>
+     * Each segment between consecutive waypoints is calculated in parallel internally using {@link CompletableFuture},
+     * but this method blocks until all segments are calculated and combined into a single {@link Path}.
+     *
+     * @param waypoints             the ordered list of locations to traverse
+     * @param maxIterations         the maximum number of iterations the A* algorithm will attempt per segment
+     * @param allowDiagonalMovement whether diagonal movement is allowed
+     * @param progressListener      a progress listener with the signature (segmentIndex, totalSegments)
+     * @return the calculated {@link Path} containing all intermediate locations
+     * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
+     */
+    public static @NotNull Path findNewPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
+            @Nullable BiConsumer<Integer, Integer> progressListener) throws PathfindingException
+    {
+
+        if(waypoints.size() < 2)
+            throw new IllegalArgumentException("Waypoints list must contain at least 2 locations.");
+
+        List<Location> fullPathPoints = new ArrayList<>();
+
+        for(int i = 0; i < waypoints.size() - 1; i++)
+        {
+            Location start = waypoints.get(i);
+            Location end = waypoints.get(i + 1);
+
+            AStarPathfinder aStar = new AStarPathfinder(start, end, maxIterations, allowDiagonalMovement);
+            List<Location> segment = aStar.getPath();
+
+            if(segment == null)
+                throw new PathfindingException("Could not find path between waypoint " + i + " and " + (i + 1));
+
+            if(i > 0 && !segment.isEmpty())
+                segment.removeFirst();
+
+            fullPathPoints.addAll(segment);
+
+            if(progressListener != null)
+                progressListener.accept(i + 1, waypoints.size() - 1);
+        }
+
+        return new Path(fullPathPoints, waypoints);
+    }
+
+    public static class PathfindingException extends Exception
+    {
+        public PathfindingException(String message)
+        {
+            super(message);
+        }
+    }
 }
