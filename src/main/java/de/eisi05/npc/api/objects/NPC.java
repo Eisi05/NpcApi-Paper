@@ -759,16 +759,19 @@ public class NPC extends NpcHolder
      *                         to send the packet to all online registered viewers
      */
     public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players) {
-        if(players != null) {
-            for (var player : players) {
+        if(players != null)
+        {
+            for (var player : players)
+            {
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
                 if (moveEntityPacket != null)
                     serverPlayer.connection.send(moveEntityPacket);
-
             }
         }
-        else {
-            for(UUID uuid : viewers) {
+        else
+        {
+            for(UUID uuid : viewers)
+            {
                 OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
                 if(!offlinePlayer.isOnline())
                     continue;

@@ -4,6 +4,7 @@ import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.utils.Var;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
@@ -12,12 +13,10 @@ import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
-import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
@@ -28,6 +27,11 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import java.util.function.Consumer;
 
+/**
+ * A task that handles the movement of an NPC along a calculated path.
+ * This class extends BukkitRunnable to handle the movement in a scheduled task,
+ * providing smooth movement, physics, and door interaction capabilities.
+ */
 public class PathTask extends BukkitRunnable
 {
     private static final double gravity = -0.08;
@@ -54,9 +58,13 @@ public class PathTask extends BukkitRunnable
     private float previousYaw;
     private double verticalVelocity = 0.0;
 
-    // Door State Tracking
     private final Set<Block> openedDoors = new HashSet<>();
 
+    /**
+     * Private constructor used by the Builder pattern.
+     *
+     * @param builder The builder containing all necessary parameters
+     */
     private PathTask(@NotNull Builder builder)
     {
         this.npc = builder.npc;
@@ -74,7 +82,10 @@ public class PathTask extends BukkitRunnable
         this.serverEntity = (ServerPlayer) npc.getServerPlayer();
     }
 
-
+    /**
+     * The main execution method called by the Bukkit scheduler.
+     * Handles the NPC's movement along the path, including physics and door interactions.
+     */
     @Override
     public void run()
     {
@@ -114,27 +125,39 @@ public class PathTask extends BukkitRunnable
         sendMovePackets(movement, yaw, pitch, physics.isGrounded);
     }
 
+    /**
+     * Processes door interactions along the NPC's path.
+     * Opens doors that are in the NPC's path and within interaction range.
+     */
     private void processDoors() {
         World world = npc.getLocation().getWorld();
-        if (world == null) return;
+        if(world == null)
+            return;
 
-        // Check current position (Feet and Head)
         checkAndOpenDoor(currentPos.toLocation(world).getBlock());
         checkAndOpenDoor(currentPos.toLocation(world).getBlock().getRelative(BlockFace.UP));
 
-        // Check next target position (if close enough to interact)
         if (index < pathPoints.size()) {
             Location next = pathPoints.get(index);
-            if (currentPos.distanceSquared(next.toVector()) < 4.0) { // 2 block reach
+            if(currentPos.distanceSquared(next.toVector()) < 4.0)
+            {
                 checkAndOpenDoor(next.getBlock());
                 checkAndOpenDoor(next.getBlock().getRelative(BlockFace.UP));
             }
         }
     }
 
-    private void checkAndOpenDoor(Block block) {
-        if (block.getBlockData() instanceof Openable openable) {
-            if (!openable.isOpen()) {
+    /**
+     * Checks if a block is a door and opens it if it's closed.
+     *
+     * @param block The block to check for door interaction
+     */
+    private void checkAndOpenDoor(@NotNull Block block)
+    {
+        if(block.getBlockData() instanceof Openable openable)
+        {
+            if(!openable.isOpen())
+            {
                 openable.setOpen(true);
                 block.setBlockData(openable);
                 block.getWorld().playSound(block.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_OPEN, 1f, 1f);
@@ -144,21 +167,31 @@ public class PathTask extends BukkitRunnable
         }
     }
 
-    private void cleanupDoors() {
-        if (openedDoors.isEmpty()) return;
+    /**
+     * Cleans up opened doors that are no longer near the NPC.
+     * Closes doors that the NPC has moved away from.
+     */
+    private void cleanupDoors()
+    {
+        if(openedDoors.isEmpty())
+            return;
 
         Iterator<Block> iterator = openedDoors.iterator();
-        while (iterator.hasNext()) {
+        while(iterator.hasNext())
+        {
             Block door = iterator.next();
-            if (!(door.getBlockData() instanceof Openable openable)) {
+            if(!(door.getBlockData() instanceof Openable openable))
+            {
                 iterator.remove();
                 continue;
             }
 
             double distSq = Math.pow(door.getX() + 0.5 - currentPos.getX(), 2) + Math.pow(door.getZ() + 0.5 - currentPos.getZ(), 2);
 
-            if (distSq > 1.69) {
-                if (openable.isOpen()) {
+            if(distSq > 1.69)
+            {
+                if(openable.isOpen())
+                {
                     openable.setOpen(false);
                     door.setBlockData(openable);
                     door.getWorld().playSound(door.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_CLOSE, 1f, 1f);
@@ -168,9 +201,16 @@ public class PathTask extends BukkitRunnable
         }
     }
 
-    private void forceCloseAllDoors() {
-        for (Block door : openedDoors) {
-            if (door.getBlockData() instanceof Openable openable && openable.isOpen()) {
+    /**
+     * Forces all doors opened by this path task to close.
+     * Used when the path is completed or cancelled.
+     */
+    private void forceCloseAllDoors()
+    {
+        for(Block door : openedDoors)
+        {
+            if(door.getBlockData() instanceof Openable openable && openable.isOpen())
+            {
                 openable.setOpen(false);
                 door.setBlockData(openable);
                 door.getWorld().playSound(door.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_CLOSE, 1f, 1f);
@@ -179,6 +219,12 @@ public class PathTask extends BukkitRunnable
         openedDoors.clear();
     }
 
+    /**
+     * Handles the completion of the path.
+     * Performs final cleanup and calls the completion callback.
+     *
+     * @return true if the path was successfully finished, false otherwise
+     */
     private boolean finishPath()
     {
         Location last = path.getWaypoints().isEmpty() ? null : path.getWaypoints().getLast();
@@ -210,10 +256,14 @@ public class PathTask extends BukkitRunnable
         }
 
         cancel();
-
         return true;
     }
 
+    /**
+     * Smoothly rotates the NPC to face the final direction when reaching the end of the path.
+     *
+     * @param loc The target location to face
+     */
     private void smoothEndRotation(Location loc)
     {
         if(serverEntity == null)
@@ -227,11 +277,24 @@ public class PathTask extends BukkitRunnable
         npc.sendNpcBodyPackets(body, viewers);
     }
 
+    /**
+     * Checks if the NPC has reached the current waypoint.
+     *
+     * @param toTarget The vector to the target waypoint
+     * @return true if the waypoint has been reached, false otherwise
+     */
     private boolean hasReachedWaypoint(@NotNull Vector toTarget)
     {
         return toTarget.lengthSquared() < 0.04 && Math.abs(toTarget.getY()) < 0.2;
     }
 
+    /**
+     * Calculates the horizontal movement vector for the NPC.
+     *
+     * @param toTarget The vector to the target waypoint
+     * @param targetPoint The absolute target point
+     * @return A vector representing the horizontal movement
+     */
     private @NotNull Vector calculateHorizontalMovement(@NotNull Vector toTarget, @NotNull Vector targetPoint)
     {
         Vector horizontal = new Vector(toTarget.getX(), 0, toTarget.getZ());
@@ -253,6 +316,13 @@ public class PathTask extends BukkitRunnable
         return moveStep;
     }
 
+    /**
+     * Applies physics (gravity, jumping, collision) to the NPC's movement.
+     *
+     * @param movement The current movement vector
+     * @param toTarget The vector to the target waypoint
+     * @return A PhysicsResult containing the vertical movement and ground state
+     */
     private @NotNull PhysicsResult applyPhysics(Vector movement, Vector toTarget)
     {
         World world = npc.getLocation().getWorld();
@@ -303,6 +373,13 @@ public class PathTask extends BukkitRunnable
         return new PhysicsResult(yChange, onGround);
     }
 
+    /**
+     * Calculates the Y-coordinate of the ground at a given position.
+     *
+     * @param world The world to check in
+     * @param pos The position to check
+     * @return The Y-coordinate of the ground
+     */
     private double getGroundY(@NotNull World world, @NotNull Vector pos)
     {
         int bx = pos.getBlockX();
@@ -314,11 +391,9 @@ public class PathTask extends BukkitRunnable
             Block block = world.getBlockAt(bx, y, bz);
 
             if(block.getBlockData() instanceof Openable)
-            {
                 continue;
-            }
 
-            if(Tag.WOOL_CARPETS.isTagged(block.getType()) && Tag.WOOL_CARPETS.isTagged(block.getRelative(BlockFace.UP).getType()))
+            if(Var.isCarpet(block.getType()) && Var.isCarpet(block.getRelative(BlockFace.UP).getType()))
                 return ++y;
 
             if(!block.getType().isSolid() || block.isPassable())
@@ -334,6 +409,11 @@ public class PathTask extends BukkitRunnable
         return world.getHighestBlockYAt(bx, bz);
     }
 
+    /**
+     * Calculates smooth rotation for the NPC's head and body.
+     *
+     * @return An array containing [yaw, pitch] for the NPC's rotation
+     */
     private float @NotNull [] calculateSmoothRotation()
     {
         Vector lookDir;
@@ -367,6 +447,12 @@ public class PathTask extends BukkitRunnable
         return new float[]{yaw, pitch};
     }
 
+    /**
+     * Normalizes an angle to be between -180 and 180 degrees.
+     *
+     * @param angle The angle to normalize
+     * @return The normalized angle
+     */
     private float normalizeAngle(float angle)
     {
         while(angle > 180)
@@ -376,6 +462,14 @@ public class PathTask extends BukkitRunnable
         return angle;
     }
 
+    /**
+     * Sends movement and rotation packets to update the NPC's position for viewers.
+     *
+     * @param movement The movement vector
+     * @param yaw The yaw rotation
+     * @param pitch The pitch rotation
+     * @param onGround Whether the NPC is on the ground
+     */
     private void sendMovePackets(Vector movement, float yaw, float pitch, boolean onGround)
     {
         if(serverEntity == null)
@@ -388,6 +482,12 @@ public class PathTask extends BukkitRunnable
         npc.sendNpcMovePackets(teleport, head, viewers);
     }
 
+    /**
+     * Cancels the path task and cleans up resources.
+     * Calls the callback with CANCELLED status if not already finished.
+     *
+     * @throws IllegalStateException if the task was already cancelled
+     */
     @Override
     public synchronized void cancel() throws IllegalStateException
     {
@@ -416,56 +516,105 @@ public class PathTask extends BukkitRunnable
 
     }
 
+    /**
+     * Checks if the path task has been completed.
+     *
+     * @return true if the task is finished, false otherwise
+     */
     public boolean isFinished()
     {
         return finished;
     }
 
+    /**
+     * A record representing the result of physics calculations.
+     *
+     * @param yChange The vertical movement to apply
+     * @param isGrounded Whether the NPC is on the ground
+     */
     private record PhysicsResult(double yChange, boolean isGrounded) {}
 
     // --- Builder Class ---
 
+    /**
+     * Builder class for creating PathTask instances with a fluent API.
+     * Allows for optional configuration of the path task.
+     */
     public static class Builder
     {
         private final NPC npc;
         private final Path path;
 
-        // Optional / Default Params
         private Player[] viewers = null;
         private Consumer<WalkingResult> callback = null;
         private double speed = 1.0;
         private boolean updateRealLocation = false;
 
+        /**
+         * Creates a new Builder for a PathTask.
+         *
+         * @param npc The NPC that will follow the path
+         * @param path The path for the NPC to follow
+         */
         public Builder(@NotNull NPC npc, @NotNull Path path)
         {
             this.npc = npc;
             this.path = path;
         }
 
+        /**
+         * Sets the viewers who can see the NPC's movement.
+         *
+         * @param viewers Array of players who can see the NPC
+         * @return This builder instance for method chaining
+         */
         public @NotNull Builder viewers(@Nullable Player... viewers)
         {
             this.viewers = viewers;
             return this;
         }
 
+        /**
+         * Sets the movement speed of the NPC.
+         *
+         * @param speed The movement speed (blocks per tick)
+         * @return This builder instance for method chaining
+         */
         public @NotNull Builder speed(double speed)
         {
             this.speed = speed;
             return this;
         }
 
+        /**
+         * Sets whether to update the NPC's actual location after movement.
+         *
+         * @param update true to update the NPC's real location, false otherwise
+         * @return This builder instance for method chaining
+         */
         public @NotNull Builder updateRealLocation(boolean update)
         {
             this.updateRealLocation = update;
             return this;
         }
 
+        /**
+         * Sets the callback to be executed when the path is completed or cancelled.
+         *
+         * @param callback The callback to execute
+         * @return This builder instance for method chaining
+         */
         public @NotNull Builder callback(@Nullable Consumer<WalkingResult> callback)
         {
             this.callback = callback;
             return this;
         }
 
+        /**
+         * Builds and returns a new PathTask instance.
+         *
+         * @return A new PathTask with the configured settings
+         */
         public @NotNull PathTask build()
         {
             return new PathTask(this);

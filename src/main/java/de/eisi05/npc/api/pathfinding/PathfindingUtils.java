@@ -20,7 +20,7 @@ public class PathfindingUtils
      * <p>
      * Each segment between consecutive waypoints is calculated in parallel using {@link CompletableFuture}.
      * The returned future completes with a {@link Path} containing the full path, or completes exceptionally
-     * if an {@link AStar.InvalidPathException} occurs.
+     * if an {@link PathfindingException} occurs.
      *
      * @param waypoints             the ordered list of locations to traverse
      * @param maxIterations         the maximum number of iterations the A* algorithm will attempt per segment
@@ -36,7 +36,7 @@ public class PathfindingUtils
             try
             {
                 return findPath(waypoints, maxIterations, allowDiagonalMovement, progressListener);
-            } catch(AStar.InvalidPathException e)
+            } catch(PathfindingException e)
             {
                 throw new RuntimeException(e);
             }
@@ -54,61 +54,9 @@ public class PathfindingUtils
      * @param allowDiagonalMovement whether diagonal movement is allowed
      * @param progressListener      a progress listener with the signature (segmentIndex, totalSegments)
      * @return the calculated {@link Path} containing all intermediate locations
-     * @throws AStar.InvalidPathException if any segment's start or end location is invalid/unwalkable
-     */
-    public static @NotNull Path findPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
-            @Nullable BiConsumer<Integer, Integer> progressListener) throws AStar.InvalidPathException
-    {
-        List<CompletableFuture<List<Location>>> futures = new ArrayList<>();
-
-        for(int i = 0; i < waypoints.size() - 1; i++)
-        {
-            final int idx = i;
-            futures.add(CompletableFuture.supplyAsync(() ->
-            {
-                try
-                {
-                    AStar aStar = new AStar(waypoints.get(idx), waypoints.get(idx + 1), maxIterations, allowDiagonalMovement);
-                    var segment = aStar.iterate().stream()
-                            .map(tile -> tile.getLocation(aStar.getStart()).add(0.5, 1, 0.5))
-                            .toList();
-
-                    if(progressListener != null)
-                        progressListener.accept(idx + 1, waypoints.size());
-
-                    return segment;
-                } catch(AStar.InvalidPathException e)
-                {
-                    throw new RuntimeException(e);
-                }
-            }));
-        }
-
-        Path path = new Path(futures.stream()
-                .map(CompletableFuture::join)
-                .flatMap(List::stream)
-                .toList(), waypoints);
-
-        if(progressListener != null)
-            progressListener.accept(waypoints.size(), waypoints.size());
-
-        return path;
-    }
-
-    /**
-     * Synchronously calculates a path through a list of waypoints.
-     * <p>
-     * Each segment between consecutive waypoints is calculated in parallel internally using {@link CompletableFuture},
-     * but this method blocks until all segments are calculated and combined into a single {@link Path}.
-     *
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the A* algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param progressListener      a progress listener with the signature (segmentIndex, totalSegments)
-     * @return the calculated {@link Path} containing all intermediate locations
      * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
-    public static @NotNull Path findNewPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
+    public static @NotNull Path findPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
             @Nullable BiConsumer<Integer, Integer> progressListener) throws PathfindingException
     {
         if(waypoints.size() < 2)
@@ -116,18 +64,18 @@ public class PathfindingUtils
 
         List<Location> fullPathPoints = new ArrayList<>();
 
+        AStarPathfinder aStar = new AStarPathfinder(maxIterations, allowDiagonalMovement);
         for(int i = 0; i < waypoints.size() - 1; i++)
         {
             Location start = waypoints.get(i);
             Location end = waypoints.get(i + 1);
 
-            AStarPathfinder aStar = new AStarPathfinder(start, end, maxIterations, allowDiagonalMovement);
-            List<Location> segment = aStar.getPath();
+            List<Location> segment = aStar.getPath(start, end);
 
             if(segment == null)
                 throw new PathfindingException("Could not find path between waypoint " + i + " and " + (i + 1));
 
-            if(i > 0 && !segment.isEmpty())
+            if(i > 0 && !segment.isEmpty() && !fullPathPoints.isEmpty())
                 segment.removeFirst();
 
             fullPathPoints.addAll(segment);

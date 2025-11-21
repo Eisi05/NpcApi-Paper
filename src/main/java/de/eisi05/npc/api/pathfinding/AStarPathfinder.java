@@ -1,40 +1,38 @@
 package de.eisi05.npc.api.pathfinding;
 
+import de.eisi05.npc.api.utils.Var;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
 public class AStarPathfinder
 {
-    private final Location start;
-    private final Location end;
     private final int maxIterations;
     private final boolean allowDiagonal;
-    private final World world;
+    private World world;
 
     private final PriorityQueue<Node> openSet = new PriorityQueue<>();
     private final Map<Long, Node> allNodes = new HashMap<>();
 
-    public AStarPathfinder(Location start, Location end, int maxIterations, boolean allowDiagonal)
+    public AStarPathfinder(int maxIterations, boolean allowDiagonal)
     {
-        this.start = start;
-        this.end = end;
         this.maxIterations = maxIterations;
         this.allowDiagonal = allowDiagonal;
-        this.world = start.getWorld();
     }
 
-    public List<Location> getPath() throws PathfindingUtils.PathfindingException
+    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end) throws PathfindingUtils.PathfindingException
     {
         if(!start.getWorld().equals(end.getWorld()))
             return null;
+
+        this.world = start.getWorld();
 
         Block startFloor = world.getBlockAt(start.getBlockX(), start.getBlockY() - 1, start.getBlockZ());
         if(!isSafeFloor(startFloor))
@@ -152,9 +150,6 @@ public class AStarPathfinder
         if(type.isAir() || block.isLiquid())
             return false;
 
-        //if(Tag.WOOL_CARPETS.isTagged(type) && block.getRelative(BlockFace.UP).getType().isAir())
-        //    return true;
-
         if(block.isPassable())
             return false;
 
@@ -173,10 +168,10 @@ public class AStarPathfinder
         if(type.isAir())
             return false;
 
-        if(Tag.WOOL_CARPETS.isTagged(type) && Tag.WOOL_CARPETS.isTagged(block.getRelative(BlockFace.UP).getType()))
+        if(Var.isCarpet(type) && Var.isCarpet(block.getRelative(BlockFace.UP).getType()))
             return true;
 
-        if(Tag.WOOL_CARPETS.isTagged(type))
+        if(Var.isCarpet(type))
             return false;
 
         if(block.isPassable())
