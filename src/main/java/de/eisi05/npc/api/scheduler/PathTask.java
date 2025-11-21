@@ -25,10 +25,7 @@ import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.OptionalDouble;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class PathTask extends BukkitRunnable
@@ -56,6 +53,9 @@ public class PathTask extends BukkitRunnable
     private Vector previousMoveDir;
     private float previousYaw;
     private double verticalVelocity = 0.0;
+
+    // Door State Tracking
+    private final Set<Block> openedDoors = new HashSet<>();
 
     private PathTask(@NotNull Builder builder)
     {
@@ -93,15 +93,8 @@ public class PathTask extends BukkitRunnable
             return;
         }
 
-        Location nextLoc = pathPoints.get(index);
-        /*if(isDoorAtLocation(nextLoc))
-        {
-            if(currentPos.distanceSquared(nextLoc.toVector()) > 1e-6)
-                teleportThroughDoor(nextLoc);
-
-            index++;
-            return;
-        }*/
+        processDoors();
+        cleanupDoors();
 
         Vector movement = calculateHorizontalMovement(toTarget, target);
 
@@ -121,6 +114,71 @@ public class PathTask extends BukkitRunnable
         sendMovePackets(movement, yaw, pitch, physics.isGrounded);
     }
 
+    private void processDoors() {
+        World world = npc.getLocation().getWorld();
+        if (world == null) return;
+
+        // Check current position (Feet and Head)
+        checkAndOpenDoor(currentPos.toLocation(world).getBlock());
+        checkAndOpenDoor(currentPos.toLocation(world).getBlock().getRelative(BlockFace.UP));
+
+        // Check next target position (if close enough to interact)
+        if (index < pathPoints.size()) {
+            Location next = pathPoints.get(index);
+            if (currentPos.distanceSquared(next.toVector()) < 4.0) { // 2 block reach
+                checkAndOpenDoor(next.getBlock());
+                checkAndOpenDoor(next.getBlock().getRelative(BlockFace.UP));
+            }
+        }
+    }
+
+    private void checkAndOpenDoor(Block block) {
+        if (block.getBlockData() instanceof Openable openable) {
+            if (!openable.isOpen()) {
+                openable.setOpen(true);
+                block.setBlockData(openable);
+                block.getWorld().playSound(block.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_OPEN, 1f, 1f);
+
+                openedDoors.add(block);
+            }
+        }
+    }
+
+    private void cleanupDoors() {
+        if (openedDoors.isEmpty()) return;
+
+        Iterator<Block> iterator = openedDoors.iterator();
+        while (iterator.hasNext()) {
+            Block door = iterator.next();
+            if (!(door.getBlockData() instanceof Openable openable)) {
+                iterator.remove();
+                continue;
+            }
+
+            double distSq = Math.pow(door.getX() + 0.5 - currentPos.getX(), 2) + Math.pow(door.getZ() + 0.5 - currentPos.getZ(), 2);
+
+            if (distSq > 1.69) {
+                if (openable.isOpen()) {
+                    openable.setOpen(false);
+                    door.setBlockData(openable);
+                    door.getWorld().playSound(door.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_CLOSE, 1f, 1f);
+                }
+                iterator.remove();
+            }
+        }
+    }
+
+    private void forceCloseAllDoors() {
+        for (Block door : openedDoors) {
+            if (door.getBlockData() instanceof Openable openable && openable.isOpen()) {
+                openable.setOpen(false);
+                door.setBlockData(openable);
+                door.getWorld().playSound(door.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_CLOSE, 1f, 1f);
+            }
+        }
+        openedDoors.clear();
+    }
+
     private boolean finishPath()
     {
         Location last = path.getWaypoints().isEmpty() ? null : path.getWaypoints().getLast();
@@ -137,6 +195,7 @@ public class PathTask extends BukkitRunnable
         }
 
         finished = true;
+        forceCloseAllDoors();
 
         if(updateRealLocation)
         {
@@ -251,11 +310,9 @@ public class PathTask extends BukkitRunnable
         {
             Block block = world.getBlockAt(bx, y, bz);
 
-            if(block.getBlockData() instanceof Openable openable)
+            if(block.getBlockData() instanceof Openable)
             {
-                openable.setOpen(true);
-                block.setBlockData(openable);
-                return y;
+                continue;
             }
 
             if(Tag.WOOL_CARPETS.isTagged(block.getType()) && Tag.WOOL_CARPETS.isTagged(block.getRelative(BlockFace.UP).getType()))
@@ -328,85 +385,6 @@ public class PathTask extends BukkitRunnable
         npc.sendNpcMovePackets(teleport, head, viewers);
     }
 
-    private void forceTeleport(Location loc)
-    {
-        if(serverEntity == null)
-            return;
-
-        this.currentPos = loc.toVector();
-        this.previousYaw = loc.getYaw();
-        this.verticalVelocity = 0;
-
-        Vec3 pos = new Vec3(currentPos.toVector3f());
-        Vec3 delta = new Vec3(currentPos.clone().subtract(previousMoveDir).toVector3f());
-        ClientboundRotateHeadPacket headPacket = new ClientboundRotateHeadPacket(serverEntity, (byte) (loc.getYaw() * 256 / 360));
-        ClientboundTeleportEntityPacket teleportPacket = new ClientboundTeleportEntityPacket(serverEntity.getId(),
-                new PositionMoveRotation(pos, delta, loc.getYaw(), loc.getPitch()), Set.of(), true);
-
-        npc.sendNpcMovePackets(teleportPacket, headPacket, viewers);
-    }
-
-    private boolean isDoorAtLocation(@NotNull Location loc)
-    {
-        World world = loc.getWorld();
-        if(world == null)
-            return false;
-
-        int bx = loc.getBlockX();
-        int by = loc.getBlockY();
-        int bz = loc.getBlockZ();
-
-        Block bFeet = world.getBlockAt(bx, by, bz);
-        Block bHead = world.getBlockAt(bx, by + 1, bz);
-
-        if(isOpenable(bFeet) || isOpenable(bHead))
-            return true;
-
-        Block bFloor = world.getBlockAt(bx, by - 1, bz);
-        if(isOpenable(bFloor))
-            return true;
-
-        return false;
-    }
-
-    private boolean isOpenable(Block block)
-    {
-        if(block == null)
-            return false;
-        try
-        {
-            return block.getBlockData() instanceof Openable;
-        } catch(Throwable t)
-        {
-            return false;
-        }
-    }
-
-    private void teleportThroughDoor(@NotNull Location loc)
-    {
-        World world = loc.getWorld();
-        if(world == null)
-        {
-            forceTeleport(loc);
-            return;
-        }
-
-        Vector tmp = loc.toVector();
-        double groundY = getGroundY(world, tmp);
-
-        double finalY = groundY;
-        if(loc.getY() > groundY + 0.5)
-            finalY = loc.getY();
-
-        Location teleportLoc = new Location(world, loc.getX(), finalY, loc.getZ(), loc.getYaw(), loc.getPitch());
-
-        this.currentPos = teleportLoc.toVector();
-        this.previousYaw = teleportLoc.getYaw();
-        this.verticalVelocity = 0;
-
-        forceTeleport(teleportLoc);
-    }
-
     @Override
     public synchronized void cancel() throws IllegalStateException
     {
@@ -417,6 +395,7 @@ public class PathTask extends BukkitRunnable
         }
 
         finished = true;
+        forceCloseAllDoors();
         super.cancel();
 
         if(callback != null)
