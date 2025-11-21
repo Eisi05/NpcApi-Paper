@@ -368,7 +368,9 @@ public class NPC extends NpcHolder
     public void setLocation(@NotNull Location location)
     {
         this.location = location;
-        Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        if(serverPlayer != null) {
+            Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        }
     }
 
     /**
@@ -775,6 +777,9 @@ public class NPC extends NpcHolder
      */
     public void changeRealLocation(Location location, @Nullable Player... excludedPlayers)
     {
+        if(serverPlayer == null)
+            return;
+
         setLocation(location);
 
         Set<UUID> excluded = excludedPlayers == null ? Collections.emptySet() :
