@@ -197,15 +197,18 @@ public class PathTask extends BukkitRunnable
         finished = true;
         forceCloseAllDoors();
 
-        if(updateRealLocation)
+        if(callback != null)
+            callback.accept(WalkingResult.SUCCESS);
+
+        NpcStopWalkingEvent event = new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation);
+        Bukkit.getPluginManager().callEvent(event);
+
+        if(event.changeRealLocation())
         {
             Location loc = path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast();
             npc.changeRealLocation(loc, viewers);
         }
 
-        if(callback != null)
-            callback.accept(WalkingResult.SUCCESS);
-        Bukkit.getPluginManager().callEvent(new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation));
         cancel();
 
         return true;

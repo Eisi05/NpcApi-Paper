@@ -718,11 +718,24 @@ public class NPC extends NpcHolder
         return pathTask.runTaskTimer(NpcApi.plugin, 1L, 1L);
     }
 
+    /**
+     * Checks whether the NPC is currently walking.
+     * <p>
+     * The NPC is considered walking if a path task exists and has not yet finished.
+     *
+     * @return true if the NPC is still walking, false otherwise
+     */
     public boolean isWalking()
     {
         return pathTask != null && !pathTask.isFinished();
     }
 
+    /**
+     * Cancels the NPC's current walking task if one is active.
+     * <p>
+     * If the NPC is walking, the path task is cancelled and cleared. If no
+     * walking task is active, this method has no effect.
+     */
     public void cancelWalking()
     {
         if(pathTask != null)
@@ -732,6 +745,19 @@ public class NPC extends NpcHolder
         }
     }
 
+    /**
+     * Sends movement-related packets for the NPC's body to specific players.
+     * <p>
+     * If one or more {@link Player} instances are provided, the packet is sent only
+     * to those players. If {@code players} is {@code null}, the packet is sent to all
+     * currently online players who are registered as viewers of the NPC.
+     * <p>
+     * If {@code moveEntityPacket} is {@code null}, no packets are sent.
+     *
+     * @param moveEntityPacket the movement packet to send, or {@code null} to send nothing
+     * @param players          the target players to receive the packet, or {@code null}
+     *                         to send the packet to all online registered viewers
+     */
     public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players) {
         if(players != null) {
             for (var player : players) {
