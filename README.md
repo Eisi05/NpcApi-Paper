@@ -38,7 +38,7 @@ This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?lo
 <dependency>
     <groupId>com.github.Eisi05</groupId>
     <artifactId>NpcApi-Paper</artifactId>
-    <version>1.21.x-11</version>
+    <version>1.21.x-12</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -54,7 +54,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    compileOnly 'com.github.Eisi05:NpcApi-Paper:1.21.x-11'
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:1.21.x-12'
 }
 ```
 
@@ -93,7 +93,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>1.21.x-11</version>
+	    <version>1.21.x-12</version>
 	</dependency>
 </dependencies>
 ```
@@ -110,7 +110,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.x-11'
+    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.x-12'
 }
 ```
 
@@ -224,7 +224,7 @@ NPC npc = NpcManager.fromUUID(npcUuid);
 | `hideNpcFromPlayer(Player)`           | Hide NPC from specific player            |
 | `lookAtPlayer(Player)`                | Make NPC look at player                  |
 | `delete()`                            | Remove NPC permanently                   |
-| `walkTo(Path, player, double, boolean, Consumer<Result>)` | Let the NPC walk along a path (can be created with PathfindingUtils class)  |
+| `walkTo(Path, double, boolean, Consumer<Result>, players)` | Let the NPC walk along a path (can be created with PathfindingUtils class)  |
 
 ## Requirements
 
