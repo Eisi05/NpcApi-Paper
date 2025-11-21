@@ -368,17 +368,22 @@ public class NPC extends NpcHolder
     public void setLocation(@NotNull Location location)
     {
         this.location = location;
-        Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        if(serverPlayer != null) {
+            Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        }
     }
 
     /**
      * Gets the unique identifier (UUID) of this NPC.
      *
-     * @return the {@link UUID} of the NPC. Will not be null.
+     * @return the {@link UUID} of the NPC. Can be null if NPC is deleted.
      */
-    public @NotNull UUID getUUID()
+    public @Nullable UUID getUUID()
     {
-        return serverPlayer.getUUID();
+        if(serverPlayer != null) {
+            return serverPlayer.getUUID();
+        }
+        return null;
     }
 
     /**
@@ -677,7 +682,7 @@ public class NPC extends NpcHolder
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation)
     {
-        return walkTo(path, walkSpeed, changeRealLocation, null);
+        return walkTo(path, walkSpeed, changeRealLocation, null, (Player[]) null);
     }
 
     /**
@@ -710,22 +715,68 @@ public class NPC extends NpcHolder
                 .updateRealLocation(event.isChangeRealLocation())
                 .callback(onEnd).build();
 
-        //TODO maybe add ability to change walking params from event ???
-
         return pathTask.runTaskTimer(NpcApi.plugin, 1L, 1L);
     }
 
+    /**
+     * Checks whether the NPC is currently walking.
+     * <p>
+     * The NPC is considered walking if a path task exists and has not yet finished.
+     *
+     * @return true if the NPC is still walking, false otherwise
+     */
     public boolean isWalking()
     {
         return pathTask != null && !pathTask.isFinished();
     }
 
+    /**
+     * Cancels the NPC's current walking task if one is active.
+     * <p>
+     * If the NPC is walking, the path task is cancelled and cleared. If no
+     * walking task is active, this method has no effect.
+     */
     public void cancelWalking()
     {
         if(pathTask != null)
         {
             pathTask.cancel();
             pathTask = null;
+        }
+    }
+
+    /**
+     * Sends movement-related packets for the NPC's body to specific players.
+     * <p>
+     * If one or more {@link Player} instances are provided, the packet is sent only
+     * to those players. If {@code players} is {@code null}, the packet is sent to all
+     * currently online players who are registered as viewers of the NPC.
+     * <p>
+     * If {@code moveEntityPacket} is {@code null}, no packets are sent.
+     *
+     * @param moveEntityPacket the movement packet to send, or {@code null} to send nothing
+     * @param players          the target players to receive the packet, or {@code null}
+     *                         to send the packet to all online registered viewers
+     */
+    public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players) {
+        if(players != null) {
+            for (var player : players) {
+                ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
+                if (moveEntityPacket != null)
+                    serverPlayer.connection.send(moveEntityPacket);
+
+            }
+        }
+        else {
+            for(UUID uuid : viewers) {
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+                if(!offlinePlayer.isOnline())
+                    continue;
+
+                ServerPlayer serverPlayer = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
+                if (moveEntityPacket != null)
+                    serverPlayer.connection.send(moveEntityPacket);
+            }
         }
     }
 
@@ -775,6 +826,9 @@ public class NPC extends NpcHolder
      */
     public void changeRealLocation(Location location, @Nullable Player... excludedPlayers)
     {
+        if(serverPlayer == null)
+            return;
+
         setLocation(location);
 
         Set<UUID> excluded = excludedPlayers == null ? Collections.emptySet() :
