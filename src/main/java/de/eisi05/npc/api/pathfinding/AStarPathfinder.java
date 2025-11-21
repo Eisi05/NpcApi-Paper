@@ -7,6 +7,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
+import org.checkerframework.checker.units.qual.N;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,6 +33,8 @@ public class AStarPathfinder
         if(!start.getWorld().equals(end.getWorld()))
             return null;
 
+        openSet.clear();
+        allNodes.clear();
         this.world = start.getWorld();
 
         Block startFloor = world.getBlockAt(start.getBlockX(), start.getBlockY() - 1, start.getBlockZ());
@@ -60,7 +63,7 @@ public class AStarPathfinder
 
             Node current = openSet.poll();
 
-            if(distance(current, end) < 1.5)
+            if(distance(current, end) < 2)
                 return retracePath(current);
 
             current.closed = true;
@@ -73,7 +76,8 @@ public class AStarPathfinder
                     {
                         if(x == 0 && y == 0 && z == 0)
                             continue;
-                        if(!allowDiagonal && (Math.abs(x) + Math.abs(z) > 1))
+
+                        if(!allowDiagonal && (Math.abs(x) + Math.abs(z) > 1.5))
                             continue;
 
                         int targetX = current.x + x;
@@ -183,7 +187,7 @@ public class AStarPathfinder
         return true;
     }
 
-    private @NotNull List<Location> retracePath(Node current)
+    private @NotNull List<Location> retracePath(@NotNull Node current)
     {
         List<Location> path = new ArrayList<>();
         while(current != null)
@@ -195,11 +199,13 @@ public class AStarPathfinder
         return path;
     }
 
-    private double distance(Node n, Location l)
+    private double distance(@NotNull Node n, @NotNull Location l)
     {
-        return Math.sqrt(Math.pow(n.x - l.getBlockX(), 2) +
-                Math.pow(n.y - l.getBlockY(), 2) +
-                Math.pow(n.z - l.getBlockZ(), 2));
+        double dx = (n.x + 0.5) - l.getBlockX();
+        double dy = n.y - l.getBlockY();
+        double dz = (n.z + 0.5) - l.getBlockZ();
+
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private static class Node implements Comparable<Node>
@@ -225,11 +231,9 @@ public class AStarPathfinder
             return ((long) x & 0x3FFFFFF) | (((long) z & 0x3FFFFFF) << 26) | (((long) y & 0xFFF) << 52);
         }
 
-        public void calculateH(Location end)
+        public void calculateH(@NotNull Location end)
         {
-            this.hCost = Math.sqrt(Math.pow(x - end.getBlockX(), 2) +
-                    Math.pow(y - end.getBlockY(), 2) +
-                    Math.pow(z - end.getBlockZ(), 2));
+            this.hCost = Math.hypot(Math.hypot(x - end.getBlockX(), y - end.getBlockY()), z - end.getBlockZ());
         }
 
         public double getFCost()
@@ -238,7 +242,7 @@ public class AStarPathfinder
         }
 
         @Override
-        public int compareTo(Node other)
+        public int compareTo(@NotNull Node other)
         {
             return Double.compare(this.getFCost(), other.getFCost());
         }
