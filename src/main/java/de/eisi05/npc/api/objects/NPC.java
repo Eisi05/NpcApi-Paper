@@ -729,6 +729,28 @@ public class NPC extends NpcHolder
         }
     }
 
+    public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players) {
+        if(players != null) {
+            for (var player : players) {
+                ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
+                if (moveEntityPacket != null)
+                    serverPlayer.connection.send(moveEntityPacket);
+
+            }
+        }
+        else {
+            for(UUID uuid : viewers) {
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+                if(!offlinePlayer.isOnline())
+                    continue;
+
+                ServerPlayer serverPlayer = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
+                if (moveEntityPacket != null)
+                    serverPlayer.connection.send(moveEntityPacket);
+            }
+        }
+    }
+
     /**
      * Sends NPC movement and rotation packets to a specific player or all viewers.
      *

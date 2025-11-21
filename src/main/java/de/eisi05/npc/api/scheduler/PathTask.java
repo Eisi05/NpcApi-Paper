@@ -162,8 +162,7 @@ public class PathTask extends BukkitRunnable
                 (byte) (loc.getPitch() * 256 / 360), true);
 
         npc.sendNpcMovePackets(null, head, viewers);
-        for(var viewer : viewers)
-            ((CraftPlayer) viewer).getHandle().connection.send(body);
+        npc.sendNpcBodyPackets(body, viewers);
     }
 
     private boolean hasReachedWaypoint(@NotNull Vector toTarget)
