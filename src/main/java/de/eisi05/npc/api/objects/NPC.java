@@ -368,9 +368,8 @@ public class NPC extends NpcHolder
     public void setLocation(@NotNull Location location)
     {
         this.location = location;
-        if(serverPlayer != null) {
+        if(serverPlayer != null)
             Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-        }
     }
 
     /**
@@ -380,9 +379,8 @@ public class NPC extends NpcHolder
      */
     public @Nullable UUID getUUID()
     {
-        if(serverPlayer != null) {
+        if(serverPlayer != null)
             return serverPlayer.getUUID();
-        }
         return null;
     }
 
@@ -786,9 +784,9 @@ public class NPC extends NpcHolder
     /**
      * Sends NPC movement and rotation packets to a specific player or all viewers.
      *
-     * @param players               Players to send packets to. If null, packets are sent to all viewers.
      * @param teleportEntityPacket The packet containing the NPC's teleport/move data. Must not be null.
      * @param rotateHeadPacket     The packet containing the NPC's head rotation data. Must not be null.
+     * @param players              Players to send packets to. If null, packets are sent to all viewers.
      */
     public void sendNpcMovePackets(@Nullable ClientboundTeleportEntityPacket teleportEntityPacket,
             @Nullable ClientboundRotateHeadPacket rotateHeadPacket, @Nullable Player... players)

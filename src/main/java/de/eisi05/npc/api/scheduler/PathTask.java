@@ -273,7 +273,11 @@ public class PathTask extends BukkitRunnable
         ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(serverEntity.getId(), (byte) (loc.getYaw() * 256 / 360),
                 (byte) (loc.getPitch() * 256 / 360), true);
 
-        npc.sendNpcMovePackets(null, head, viewers);
+        ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverEntity.getId(),
+                new PositionMoveRotation(new Vec3(loc.toVector().toVector3f()), new Vec3(loc.toVector().toVector3f()), loc.getYaw(), loc.getPitch()),
+                Set.of(), true);
+
+        npc.sendNpcMovePackets(teleport, head, viewers);
         npc.sendNpcBodyPackets(body, viewers);
     }
 
