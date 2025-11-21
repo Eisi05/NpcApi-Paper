@@ -679,7 +679,7 @@ public class NPC extends NpcHolder
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation)
     {
-        return walkTo(path, walkSpeed, changeRealLocation, null, (Player) null);
+        return walkTo(path, walkSpeed, changeRealLocation, null, (Player[]) null);
     }
 
     /**
