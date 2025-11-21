@@ -20,7 +20,7 @@ public class PathfindingUtils
      * <p>
      * Each segment between consecutive waypoints is calculated in parallel using {@link CompletableFuture}.
      * The returned future completes with a {@link Path} containing the full path, or completes exceptionally
-     * if an {@link AStar.InvalidPathException} occurs.
+     * if an {@link PathfindingException} occurs.
      *
      * @param waypoints             the ordered list of locations to traverse
      * @param maxIterations         the maximum number of iterations the A* algorithm will attempt per segment
@@ -36,7 +36,7 @@ public class PathfindingUtils
             try
             {
                 return findPath(waypoints, maxIterations, allowDiagonalMovement, progressListener);
-            } catch(AStar.InvalidPathException e)
+            } catch(PathfindingException e)
             {
                 throw new RuntimeException(e);
             }
@@ -54,44 +54,51 @@ public class PathfindingUtils
      * @param allowDiagonalMovement whether diagonal movement is allowed
      * @param progressListener      a progress listener with the signature (segmentIndex, totalSegments)
      * @return the calculated {@link Path} containing all intermediate locations
-     * @throws AStar.InvalidPathException if any segment's start or end location is invalid/unwalkable
+     * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
     public static @NotNull Path findPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
-            @Nullable BiConsumer<Integer, Integer> progressListener) throws AStar.InvalidPathException
+            @Nullable BiConsumer<Integer, Integer> progressListener) throws PathfindingException
     {
-        List<CompletableFuture<List<Location>>> futures = new ArrayList<>();
+        if(waypoints.size() < 2)
+            throw new IllegalArgumentException("Waypoints list must contain at least 2 locations.");
 
+        List<Location> fullPathPoints = new ArrayList<>();
+
+        AStarPathfinder aStar = new AStarPathfinder(maxIterations, allowDiagonalMovement);
         for(int i = 0; i < waypoints.size() - 1; i++)
         {
-            final int idx = i;
-            futures.add(CompletableFuture.supplyAsync(() ->
-            {
-                try
-                {
-                    AStar aStar = new AStar(waypoints.get(idx), waypoints.get(idx + 1), maxIterations, allowDiagonalMovement);
-                    var segment = aStar.iterate().stream()
-                            .map(tile -> tile.getLocation(aStar.getStart()).add(0.5, 1, 0.5))
-                            .toList();
+            Location start = waypoints.get(i);
+            Location end = waypoints.get(i + 1);
 
-                    if(progressListener != null)
-                        progressListener.accept(idx + 1, waypoints.size());
+            List<Location> segment = aStar.getPath(start, end);
 
-                    return segment;
-                } catch(AStar.InvalidPathException e)
-                {
-                    throw new RuntimeException(e);
-                }
-            }));
+            if(segment == null)
+                throw new PathfindingException("Could not find path between waypoint " + i + " and " + (i + 1));
+
+            if(!fullPathPoints.isEmpty() && !segment.isEmpty() && isAbove(segment.getFirst(), fullPathPoints.getLast()))
+                segment.removeFirst();
+            else if(!segment.isEmpty())
+                segment.set(0, segment.getFirst().subtract(0, 1, 0));
+
+            fullPathPoints.addAll(segment);
+
+            if(progressListener != null)
+                progressListener.accept(i + 1, waypoints.size() - 1);
         }
 
-        Path path = new Path(futures.stream()
-                .map(CompletableFuture::join)
-                .flatMap(List::stream)
-                .toList(), waypoints);
+        return new Path(fullPathPoints, waypoints);
+    }
 
-        if(progressListener != null)
-            progressListener.accept(waypoints.size(), waypoints.size());
+    private static boolean isAbove(@NotNull Location l1, @NotNull Location l2)
+    {
+        return l1.getX() == l2.getX() && l1.getY() - 1 == l2.getY() && l1.getZ() == l2.getZ();
+    }
 
-        return path;
+    public static class PathfindingException extends Exception
+    {
+        public PathfindingException(String message)
+        {
+            super(message);
+        }
     }
 }

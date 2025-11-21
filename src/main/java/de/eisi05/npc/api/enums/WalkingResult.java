@@ -1,6 +1,6 @@
 package de.eisi05.npc.api.enums;
 
-public enum Result
+public enum WalkingResult
 {
     SUCCESS,
     CANCELLED

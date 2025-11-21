@@ -3,10 +3,12 @@ package de.eisi05.npc.api.objects;
 import com.google.common.collect.ImmutableList;
 import com.mojang.authlib.GameProfile;
 import de.eisi05.npc.api.NpcApi;
-import de.eisi05.npc.api.enums.Result;
+import de.eisi05.npc.api.enums.WalkingResult;
+import de.eisi05.npc.api.events.NpcStartWalkingEvent;
 import de.eisi05.npc.api.interfaces.NpcClickAction;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
+import de.eisi05.npc.api.scheduler.PathTask;
 import de.eisi05.npc.api.utils.ObjectSaver;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Var;
@@ -39,13 +41,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -60,6 +60,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Represents a Non-Player Character (NPC) with location, appearance, options, and interaction logic.
@@ -77,6 +78,7 @@ public class NPC extends NpcHolder
     private NpcClickAction clickEvent;
     private Instant createdAt = Instant.now();
     private Path npcPath;
+    private PathTask pathTask;
 
     /**
      * Creates an NPC at the specified location with a random UUID and default name.
@@ -366,17 +368,20 @@ public class NPC extends NpcHolder
     public void setLocation(@NotNull Location location)
     {
         this.location = location;
-        Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+        if(serverPlayer != null)
+            Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
     }
 
     /**
      * Gets the unique identifier (UUID) of this NPC.
      *
-     * @return the {@link UUID} of the NPC. Will not be null.
+     * @return the {@link UUID} of the NPC. Can be null if NPC is deleted.
      */
-    public @NotNull UUID getUUID()
+    public @Nullable UUID getUUID()
     {
-        return serverPlayer.getUUID();
+        if(serverPlayer != null)
+            return serverPlayer.getUUID();
+        return null;
     }
 
     /**
@@ -669,228 +674,133 @@ public class NPC extends NpcHolder
      * The NPC's position and rotation are updated each tick and sent to the specified player(s).
      *
      * @param path               The {@link de.eisi05.npc.api.pathfinding.Path} containing the ordered waypoints the NPC should follow.
-     * @param player             The player who should see the NPC move. If null, updates all viewers in the `viewers` set.
+     * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
+     * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
+     * @return The {@link BukkitTask} representing the movement task.
+     */
+    public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation)
+    {
+        return walkTo(path, walkSpeed, changeRealLocation, null, (Player[]) null);
+    }
+
+    /**
+     * Moves the NPC along a precomputed {@link de.eisi05.npc.api.pathfinding.Path}, simulating walking, jumping, and gravity.
+     * The NPC's position and rotation are updated each tick and sent to the specified player(s).
+     *
+     * @param path               The {@link de.eisi05.npc.api.pathfinding.Path} containing the ordered waypoints the NPC should follow.
      * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
      * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
      * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
+     * @param viewers             The players who should see the NPC move. If null, updates all viewers in the `viewers` set.
      * @return The {@link BukkitTask} representing the movement task.
      */
-    public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, @Nullable Player player, double walkSpeed,
-            boolean changeRealLocation, @Nullable Consumer<Result> onEnd)
+    public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
+            boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, @Nullable Player... viewers)
     {
+        if(isWalking())
+            cancelWalking();
+
         final double speed = Math.max(Math.min(walkSpeed, 1), 0.1);
 
-        final double gravity = -0.08;
-        final double jumpVelocity = 0.5;
-        final double terminal = -0.5;
-        final double stepHeight = 0.6;
+        NpcStartWalkingEvent event = new NpcStartWalkingEvent(this, path, speed, changeRealLocation);
+        Bukkit.getPluginManager().callEvent(event);
+        if(event.isCancelled())
+            return null;
 
-        return new BukkitRunnable()
+        pathTask = new PathTask.Builder(this, path)
+                .speed(event.getWalkSpeed())
+                .viewers(viewers)
+                .updateRealLocation(event.isChangeRealLocation())
+                .callback(onEnd).build();
+
+        return pathTask.runTaskTimer(NpcApi.plugin, 1L, 1L);
+    }
+
+    /**
+     * Checks whether the NPC is currently walking.
+     * <p>
+     * The NPC is considered walking if a path task exists and has not yet finished.
+     *
+     * @return true if the NPC is still walking, false otherwise
+     */
+    public boolean isWalking()
+    {
+        return pathTask != null && !pathTask.isFinished();
+    }
+
+    /**
+     * Cancels the NPC's current walking task if one is active.
+     * <p>
+     * If the NPC is walking, the path task is cancelled and cleared. If no
+     * walking task is active, this method has no effect.
+     */
+    public void cancelWalking()
+    {
+        if(pathTask != null)
         {
-            final List<Location> pathPoints = path.asLocations();
-            int index = 0;
-            org.bukkit.util.Vector current = location.toVector();
-            double yVel = 0.0;
-            float previousYaw = location.getYaw();
-            org.bukkit.util.Vector previousMovement = location.getDirection();
+            pathTask.cancel();
+            pathTask = null;
+        }
+    }
 
-            @Override
-            public void run()
+    /**
+     * Sends movement-related packets for the NPC's body to specific players.
+     * <p>
+     * If one or more {@link Player} instances are provided, the packet is sent only
+     * to those players. If {@code players} is {@code null}, the packet is sent to all
+     * currently online players who are registered as viewers of the NPC.
+     * <p>
+     * If {@code moveEntityPacket} is {@code null}, no packets are sent.
+     *
+     * @param moveEntityPacket the movement packet to send, or {@code null} to send nothing
+     * @param players          the target players to receive the packet, or {@code null}
+     *                         to send the packet to all online registered viewers
+     */
+    public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players) {
+        if(players != null)
+        {
+            for (var player : players)
             {
-                if(index >= pathPoints.size())
-                {
-                    if(!path.getWaypoints().isEmpty())
-                    {
-                        Location last = path.getWaypoints().getLast();
-
-                        org.bukkit.util.Vector lastVector = last.toVector();
-                        org.bukkit.util.Vector lastMovement = lastVector.clone().subtract(current);
-
-                        ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(serverPlayer,
-                                (byte) (last.getYaw() * 256 / 360));
-                        ClientboundTeleportEntityPacket teleportEntityPacket = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
-                                new PositionMoveRotation(new Vec3(lastVector.toVector3f()), new Vec3(lastMovement.toVector3f()), last.getYaw(),
-                                        last.getPitch()), Set.of(), true);
-
-                        sendNpcMovePackets(player, teleportEntityPacket, rotateHeadPacket);
-                    }
-
-                    if(changeRealLocation)
-                    {
-                        setLocation(path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast());
-                        if(player != null)
-                        {
-                            for(UUID uuid : viewers)
-                            {
-                                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
-                                if(!offlinePlayer.isOnline() || uuid.equals(player.getUniqueId()))
-                                    continue;
-
-                                hideNpcFromPlayer(offlinePlayer.getPlayer());
-                                showNPCToPlayer(offlinePlayer.getPlayer());
-                            }
-                        }
-                    }
-
-                    if(onEnd != null)
-                        onEnd.accept(Result.SUCCESS);
-
-                    cancel();
-                    return;
-                }
-
-                org.bukkit.util.Vector target = pathPoints.get(index).toVector();
-                org.bukkit.util.Vector toTarget = target.clone().subtract(current);
-
-                if(toTarget.lengthSquared() < 0.04 && Math.abs(toTarget.getY()) < 0.2)
-                {
-                    index++;
-                    return;
-                }
-
-                org.bukkit.util.Vector horizontal = new org.bukkit.util.Vector(toTarget.getX(), 0, toTarget.getZ());
-                org.bukkit.util.Vector horizontalMove =
-                        (horizontal.lengthSquared() > 1e-6) ? horizontal.clone().normalize().multiply(speed) : new org.bukkit.util.Vector(0, 0, 0);
-
-                double nextDist = target.clone().subtract(current.clone().add(horizontalMove)).lengthSquared();
-                if(nextDist > toTarget.lengthSquared())
-                {
-                    current = target;
-                    index++;
-                    return;
-                }
-
-                World world = location.getWorld();
-                int bx = (int) Math.floor(current.getX());
-                int bz = (int) Math.floor(current.getZ());
-                int searchStart = (int) Math.floor(current.getY());
-                int groundBlockY = Integer.MIN_VALUE;
-
-                for(int y = searchStart; y >= searchStart - 3; y--)
-                {
-                    Block block = world.getBlockAt(bx, y - 1, bz);
-                    if(block.getType().isSolid() && !block.getType().isAir() && !block.isPassable())
-                    {
-                        groundBlockY = y - 1;
-                        break;
-                    }
-                }
-                if(groundBlockY == Integer.MIN_VALUE)
-                    groundBlockY = world.getHighestBlockYAt(bx, bz) - 1;
-                double groundY = groundBlockY + 1.0;
-                boolean onGround = current.getY() <= groundY + 1e-5;
-
-                if(onGround)
-                {
-                    if(toTarget.getY() > 0 && toTarget.getY() <= stepHeight && horizontal.lengthSquared() > 1e-6)
-                    {
-                        current = current.clone().add(new org.bukkit.util.Vector(0, Math.min(toTarget.getY(), stepHeight), 0));
-                        yVel = 0;
-                        onGround = true;
-                    }
-                    else if(toTarget.getY() > 0.5)
-                    {
-                        yVel = jumpVelocity;
-                        onGround = false;
-                    }
-                    else
-                    {
-                        yVel = 0;
-                        current = new org.bukkit.util.Vector(current.getX(), groundY, current.getZ());
-                    }
-                }
-
-                double yDelta = 0;
-                if(!onGround)
-                {
-                    yVel += gravity;
-                    if(yVel < terminal)
-                        yVel = terminal;
-                    yDelta = yVel;
-
-                    if(current.getY() + yDelta <= groundY)
-                    {
-                        yDelta = groundY - current.getY();
-                        yVel = 0;
-                        onGround = true;
-                    }
-                }
-
-                org.bukkit.util.Vector movement = new org.bukkit.util.Vector(horizontalMove.getX(), yDelta, horizontalMove.getZ());
-                current = current.clone().add(movement);
-
-                org.bukkit.util.Vector lookDir;
-                if(index + 1 < pathPoints.size())
-                {
-                    org.bukkit.util.Vector currentTarget = pathPoints.get(index).toVector().clone();
-                    org.bukkit.util.Vector nextTarget = pathPoints.get(index + 1).toVector().clone();
-
-                    lookDir = currentTarget.clone().add(nextTarget).multiply(0.5).subtract(current);
-                }
-                else
-                    lookDir = pathPoints.get(index).toVector().clone().subtract(current);
-
-                org.bukkit.util.Vector horizontalVec = new org.bukkit.util.Vector(lookDir.getX(), 0, lookDir.getZ());
-                if(horizontalVec.lengthSquared() < 1e-6)
-                    horizontalVec = previousMovement.clone();
-
-                float targetYaw = (float) (Math.atan2(horizontalVec.getZ(), horizontalVec.getX()) * 180 / Math.PI - 90);
-
-                while(targetYaw > 180)
-                    targetYaw -= 360;
-                while(targetYaw < -180)
-                    targetYaw += 360;
-
-                float diff = targetYaw - previousYaw;
-                if(diff > 180)
-                    diff -= 360;
-                if(diff < -180)
-                    diff += 360;
-
-                float maxTurn = 15f;
-                diff = Math.max(-maxTurn, Math.min(maxTurn, diff));
-
-                float yaw = previousYaw + diff;
-                previousYaw = yaw;
-
-                previousMovement = horizontalVec.clone();
-
-                org.bukkit.util.Vector targetVec = pathPoints.get(Math.min(index + 1, pathPoints.size() - 1)).toVector().clone().subtract(current);
-                double horizontalLen = Math.sqrt(targetVec.getX() * targetVec.getX() + targetVec.getZ() * targetVec.getZ());
-                float pitch = (float) (-Math.atan2(targetVec.getY(), horizontalLen) * 180 / Math.PI) / 1.5f;
-
-                ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(serverPlayer, (byte) (yaw * 256 / 360));
-                ClientboundTeleportEntityPacket teleportEntityPacket = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
-                        new PositionMoveRotation(new Vec3(current.toVector3f()), new Vec3(movement.toVector3f()), yaw, pitch), Set.of(), onGround);
-
-                sendNpcMovePackets(player, teleportEntityPacket, rotateHeadPacket);
+                ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
+                if (moveEntityPacket != null)
+                    serverPlayer.connection.send(moveEntityPacket);
             }
-
-            @Override
-            public synchronized void cancel() throws IllegalStateException
+        }
+        else
+        {
+            for(UUID uuid : viewers)
             {
-                super.cancel();
-                if(onEnd != null)
-                    onEnd.accept(Result.CANCELLED);
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+                if(!offlinePlayer.isOnline())
+                    continue;
+
+                ServerPlayer serverPlayer = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
+                if (moveEntityPacket != null)
+                    serverPlayer.connection.send(moveEntityPacket);
             }
-        }.runTaskTimer(NpcApi.plugin, 1L, 1L);
+        }
     }
 
     /**
      * Sends NPC movement and rotation packets to a specific player or all viewers.
      *
-     * @param player               The player to send packets to. If null, packets are sent to all viewers.
      * @param teleportEntityPacket The packet containing the NPC's teleport/move data. Must not be null.
      * @param rotateHeadPacket     The packet containing the NPC's head rotation data. Must not be null.
+     * @param players              Players to send packets to. If null, packets are sent to all viewers.
      */
-    private void sendNpcMovePackets(@Nullable Player player, @NotNull ClientboundTeleportEntityPacket teleportEntityPacket,
-            @NotNull ClientboundRotateHeadPacket rotateHeadPacket)
+    public void sendNpcMovePackets(@Nullable ClientboundTeleportEntityPacket teleportEntityPacket,
+            @Nullable ClientboundRotateHeadPacket rotateHeadPacket, @Nullable Player... players)
     {
-        if(player != null)
+        if(players != null)
         {
-            ServerPlayer serverPlayer1 = ((CraftPlayer) player).getHandle();
-            serverPlayer1.connection.send(teleportEntityPacket);
-            serverPlayer1.connection.send(rotateHeadPacket);
+            for(Player player : players)
+            {
+                ServerPlayer serverPlayer1 = ((CraftPlayer) player).getHandle();
+                if(teleportEntityPacket != null)
+                    serverPlayer1.connection.send(teleportEntityPacket);
+                if(rotateHeadPacket != null)
+                    serverPlayer1.connection.send(rotateHeadPacket);
+            }
         }
         else
         {
@@ -901,9 +811,44 @@ public class NPC extends NpcHolder
                     continue;
 
                 ServerPlayer serverPlayer1 = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
-                serverPlayer1.connection.send(teleportEntityPacket);
-                serverPlayer1.connection.send(rotateHeadPacket);
+                if(teleportEntityPacket != null)
+                    serverPlayer1.connection.send(teleportEntityPacket);
+                if(rotateHeadPacket != null)
+                    serverPlayer1.connection.send(rotateHeadPacket);
             }
+        }
+    }
+
+    /**
+     * Updates the real location of the NPC and refreshes visibility for viewers.
+     * * @param location The new target location.
+     *
+     * @param excludedPlayers Players who should NOT see the respawn/refresh.
+     */
+    public void changeRealLocation(Location location, @Nullable Player... excludedPlayers)
+    {
+        if(serverPlayer == null)
+            return;
+
+        setLocation(location);
+
+        Set<UUID> excluded = excludedPlayers == null ? Collections.emptySet() :
+                Arrays.stream(excludedPlayers).filter(Objects::nonNull).map(Player::getUniqueId).collect(Collectors.toSet());
+
+        ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
+                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
+                        location.getPitch()), Set.of(), true);
+
+        for(UUID uuid : viewers)
+        {
+            Player viewer = Bukkit.getPlayer(uuid);
+            if(viewer == null)
+                continue;
+
+            if(excluded.contains(viewer.getUniqueId()))
+                continue;
+
+            ((CraftPlayer) viewer).getHandle().connection.send(teleport);
         }
     }
 
@@ -911,9 +856,11 @@ public class NPC extends NpcHolder
     {
         try
         {
+            boolean isSaved = isSaved();
             Files.deleteIfExists(npcPath);
             npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(newUUID + ".npc");
-            save();
+            if(isSaved)
+                save();
         } catch(Exception e)
         {
             throw new RuntimeException(e);
