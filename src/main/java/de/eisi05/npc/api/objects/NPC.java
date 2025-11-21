@@ -376,11 +376,14 @@ public class NPC extends NpcHolder
     /**
      * Gets the unique identifier (UUID) of this NPC.
      *
-     * @return the {@link UUID} of the NPC. Will not be null.
+     * @return the {@link UUID} of the NPC. Can be null if NPC is deleted.
      */
-    public @NotNull UUID getUUID()
+    public @Nullable UUID getUUID()
     {
-        return serverPlayer.getUUID();
+        if(serverPlayer != null) {
+            return serverPlayer.getUUID();
+        }
+        return null;
     }
 
     /**
