@@ -100,5 +100,11 @@ public class PathfindingUtils
         {
             super(message);
         }
+
+        @Override
+        public String toString()
+        {
+            return getMessage();
+        }
     }
 }
