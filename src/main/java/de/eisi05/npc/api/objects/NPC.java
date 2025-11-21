@@ -679,7 +679,7 @@ public class NPC extends NpcHolder
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation)
     {
-        return walkTo(path, walkSpeed, changeRealLocation, null);
+        return walkTo(path, walkSpeed, changeRealLocation, null, (Player) null);
     }
 
     /**
@@ -711,8 +711,6 @@ public class NPC extends NpcHolder
                 .viewers(viewers)
                 .updateRealLocation(event.isChangeRealLocation())
                 .callback(onEnd).build();
-
-        //TODO maybe add ability to change walking params from event ???
 
         return pathTask.runTaskTimer(NpcApi.plugin, 1L, 1L);
     }
