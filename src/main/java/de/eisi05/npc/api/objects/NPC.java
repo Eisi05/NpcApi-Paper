@@ -2,6 +2,7 @@ package de.eisi05.npc.api.objects;
 
 import com.google.common.collect.ImmutableList;
 import com.mojang.authlib.GameProfile;
+import com.mojang.datafixers.util.Either;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStartWalkingEvent;
@@ -852,21 +853,6 @@ public class NPC extends NpcHolder
         }
     }
 
-    void changeUUID(@NotNull UUID newUUID)
-    {
-        try
-        {
-            boolean isSaved = isSaved();
-            Files.deleteIfExists(npcPath);
-            npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(newUUID + ".npc");
-            if(isSaved)
-                save();
-        } catch(Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
     public CustomNameTag getNameTag()
     {
         return nameTag;
@@ -934,19 +920,22 @@ public class NPC extends NpcHolder
          *
          * @param <T> The type of the NpcOption value.
          * @param <S> The serializable type of the NpcOption value.
-         * @return A new {@link NPC} instance reconstructed from the serialized data. Will not be null.
+         * @return an {@code Either} containing the deserialized {@link NPC} on the left,
+         *         or the world UUID on the right if the world is not currently loaded
          */
         @SuppressWarnings("unchecked")
-        public <T, S extends Serializable> @NotNull NPC deserializedNPC()
+        public <T, S extends Serializable> @NotNull Either<NPC, UUID> deserializedNPC()
         {
             World world1 = Bukkit.getWorld(world);
+            if(world1 == null)
+                return Either.right(world);
 
-            NPC npc = new NPC(new Location(world1 == null ? Bukkit.getWorld("world") : world1, x, y, z, yaw, pitch), id, (NpcName) name).setClickEvent(
+            NPC npc = new NPC(new Location(world1, x, y, z, yaw, pitch), id, (NpcName) name).setClickEvent(
                     clickEvent == null ? clickEvent : clickEvent.initialize());
             options.forEach((string, serializable) -> NpcOption.getOption(string)
                     .ifPresent(npcOption -> npc.setOption((NpcOption<T, S>) npcOption, (T) npcOption.deserialize(Var.unsafeCast(serializable)))));
             npc.createdAt = createdAt == null ? Instant.now() : createdAt;
-            return npc;
+            return Either.left(npc);
         }
     }
 }

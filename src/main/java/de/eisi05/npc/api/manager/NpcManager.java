@@ -1,8 +1,10 @@
 package de.eisi05.npc.api.manager;
 
+import com.mojang.datafixers.util.Either;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.ObjectSaver;
+import org.bukkit.World;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -14,6 +16,12 @@ import java.util.*;
  */
 public class NpcManager
 {
+    /**
+     * Stores serialized NPCs that should be loaded once their world becomes available.
+     * The key is the world UUID, and the value is a list of NPCs waiting to be deserialized.
+     */
+    private static final Map<UUID, List<NPC.SerializedNPC>> toLoadNPCs = new HashMap<>();
+
     /**
      * Map storing the file name and the exception that occurred during loading.
      */
@@ -95,15 +103,18 @@ public class NpcManager
             {
                 NPC.SerializedNPC serializedNPC = new ObjectSaver(file1).read();
 
-                NPC npc = serializedNPC.deserializedNPC();
+                Either<NPC, UUID> npcEither = serializedNPC.deserializedNPC();
 
-                LocalDate date = LocalDate.of(2025, 10, 22);
-                LocalTime time = LocalTime.of(22, 0);
-                Instant instant = LocalDateTime.of(date, time).atZone(ZoneId.of("UTC")).toInstant();
-                if(npc.getCreatedAt().isBefore(instant))
-                    npc.setEditable(true);
+                if(npcEither.right().isPresent())
+                {
+                    toLoadNPCs.computeIfAbsent(npcEither.right().get(), k -> new ArrayList<>()).add(serializedNPC);
+                    return;
+                }
 
-                npc.showNpcToAllPlayers();
+                if(npcEither.left().isEmpty())
+                    return;
+
+                loadNpc(npcEither.left().get());
                 successCounter++;
             } catch(Exception e)
             {
@@ -125,5 +136,55 @@ public class NpcManager
 
         if(exception != null && NpcApi.config.debug())
             exception.printStackTrace();
+    }
+
+    /**
+     * Loads all serialized NPCs that were queued for the given world and initializes them.
+     *
+     * @param world the world whose queued NPCs should be deserialized and spawned
+     */
+    public static void loadWorld(@NotNull World world)
+    {
+        List<NPC.SerializedNPC> serializedNPCS = toLoadNPCs.remove(world.getUID());
+
+        if(serializedNPCS == null || serializedNPCS.isEmpty())
+            return;
+
+        Exception exception = null;
+        for(NPC.SerializedNPC serializedNPC : serializedNPCS)
+        {
+            try
+            {
+                Either<NPC, ?> either = serializedNPC.deserializedNPC();
+
+                if(either.left().isEmpty())
+                    return;
+
+                loadNpc(either.left().get());
+            } catch(Exception e)
+            {
+                exception = e;
+            }
+        }
+
+        if(exception != null && NpcApi.config.debug())
+            exception.printStackTrace();
+    }
+
+    /**
+     * Initializes the given NPC, applying editability rules based on its creation time
+     * and making it visible to all online players.
+     *
+     * @param npc the NPC to load and display
+     */
+    private static void loadNpc(@NotNull NPC npc)
+    {
+        LocalDate date = LocalDate.of(2025, 10, 22);
+        LocalTime time = LocalTime.of(22, 0);
+        Instant instant = LocalDateTime.of(date, time).atZone(ZoneId.of("UTC")).toInstant();
+        if(npc.getCreatedAt().isBefore(instant))
+            npc.setEditable(true);
+
+        npc.showNpcToAllPlayers();
     }
 }

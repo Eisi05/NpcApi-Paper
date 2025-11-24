@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
+import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Versions;
 import net.minecraft.server.level.ServerPlayer;
@@ -208,6 +209,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             return Optional.of(skin);
         } catch(IOException | InterruptedException e)
         {
+            if(NpcApi.config.debug())
+                e.printStackTrace();
+
             return Optional.empty();
         }
     }

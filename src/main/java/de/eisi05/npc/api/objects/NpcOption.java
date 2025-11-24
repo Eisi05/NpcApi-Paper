@@ -92,9 +92,8 @@ public class NpcOption<T, S extends Serializable>
                             Reflections.getField(property, "value").get().equals(Reflections.getField(npcProperty, "value").get())))
                         return null;
 
-                    UUID newUUID = UUID.randomUUID();
                     PropertyMap propertyMap =  new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", property)));
-                    GameProfile profile = new GameProfile(newUUID, "NPC" + newUUID.toString().substring(0, 13), propertyMap);
+                    GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
                     MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
@@ -105,7 +104,6 @@ public class NpcOption<T, S extends Serializable>
                             CommonListenerCookie.createInitial(profile, true));
                     npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName()));
                     npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
-                    npc.changeUUID(newUUID);
                     return null;
                 }
 
@@ -149,11 +147,10 @@ public class NpcOption<T, S extends Serializable>
                             (npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get())))
                         return null;
 
-                    UUID newUUID = UUID.randomUUID();
                     var textures = new Property("textures", skin.value(), skin.signature());
 
                     PropertyMap propertyMap =  new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures)));
-                    GameProfile profile = new GameProfile(newUUID, "NPC" + newUUID.toString().substring(0, 13), propertyMap);
+                    GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
                     MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
@@ -164,7 +161,6 @@ public class NpcOption<T, S extends Serializable>
                             CommonListenerCookie.createInitial(profile, true));
                     npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName()));
                     npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
-                    npc.changeUUID(newUUID);
                     return null;
                 }
 
