@@ -108,11 +108,11 @@ public class NpcManager
                 if(npcEither.right().isPresent())
                 {
                     toLoadNPCs.computeIfAbsent(npcEither.right().get(), k -> new ArrayList<>()).add(serializedNPC);
-                    return;
+                    continue;
                 }
 
                 if(npcEither.left().isEmpty())
-                    return;
+                    continue;
 
                 loadNpc(npcEither.left().get());
                 successCounter++;
@@ -158,7 +158,7 @@ public class NpcManager
                 Either<NPC, ?> either = serializedNPC.deserializedNPC();
 
                 if(either.left().isEmpty())
-                    return;
+                    continue;
 
                 loadNpc(either.left().get());
             } catch(Exception e)
