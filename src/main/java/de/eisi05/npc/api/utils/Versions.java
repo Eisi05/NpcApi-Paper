@@ -89,7 +89,12 @@ public enum Versions
     /**
      * Minecraft 1.21.9 version.
      */
-    V1_21_9("v1_21_R6");
+    V1_21_9("v1_21_R6"),
+
+    /**
+     * Minecraft 1.21.11 version.
+     */
+    V1_21_11("v1_21_R7");
 
     /**
      * Caches the determined current server version to avoid repeated lookups.
@@ -143,6 +148,7 @@ public enum Versions
             case "1.21.6" -> Versions.V1_21_6;
             case "1.21.7", "1.21.8" -> V1_21_7;
             case "1.21.9", "1.21.10" -> V1_21_9;
+            case "1.21.11" -> V1_21_11;
             default -> Versions.NONE;
         };
     }
