@@ -63,5 +63,5 @@ publishing {
     }
 }
 
-tasks.assemble { dependsOn tasks.reobfJar }
+tasks.assemble { dependsOn tasks.shadowJar }
 

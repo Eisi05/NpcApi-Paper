@@ -692,7 +692,7 @@ public class NPC extends NpcHolder
      * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
      * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
      * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
-     * @param viewers             The players who should see the NPC move. If null, updates all viewers in the `viewers` set.
+     * @param viewers            The players who should see the NPC move. If null, updates all viewers in the `viewers` set.
      * @return The {@link BukkitTask} representing the movement task.
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
@@ -757,13 +757,14 @@ public class NPC extends NpcHolder
      * @param players          the target players to receive the packet, or {@code null}
      *                         to send the packet to all online registered viewers
      */
-    public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players) {
+    public void sendNpcBodyPackets(@Nullable ClientboundMoveEntityPacket moveEntityPacket, @Nullable Player... players)
+    {
         if(players != null)
         {
-            for (var player : players)
+            for(var player : players)
             {
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
-                if (moveEntityPacket != null)
+                if(moveEntityPacket != null)
                     serverPlayer.connection.send(moveEntityPacket);
             }
         }
@@ -776,7 +777,7 @@ public class NPC extends NpcHolder
                     continue;
 
                 ServerPlayer serverPlayer = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
-                if (moveEntityPacket != null)
+                if(moveEntityPacket != null)
                     serverPlayer.connection.send(moveEntityPacket);
             }
         }
@@ -921,7 +922,7 @@ public class NPC extends NpcHolder
          * @param <T> The type of the NpcOption value.
          * @param <S> The serializable type of the NpcOption value.
          * @return an {@code Either} containing the deserialized {@link NPC} on the left,
-         *         or the world UUID on the right if the world is not currently loaded
+         * or the world UUID on the right if the world is not currently loaded
          */
         @SuppressWarnings("unchecked")
         public <T, S extends Serializable> @NotNull Either<NPC, UUID> deserializedNPC()
