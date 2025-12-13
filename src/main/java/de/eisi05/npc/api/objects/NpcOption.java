@@ -407,7 +407,7 @@ public class NpcOption<T, S extends Serializable>
 
                     ClientboundSetPassengersPacket passengerPacket = new ClientboundSetPassengersPacket(textDisplay);
                     ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket((ServerPlayer) npc.getServerPlayer(),
-                            (byte) (player.getLocation().getYaw() * 256 / 360));
+                            (byte) (npc.getLocation().getYaw() * 256 / 360));
 
                     return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
                 }
