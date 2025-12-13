@@ -93,7 +93,7 @@ public class NpcOption<T, S extends Serializable>
                             Reflections.getField(property, "value").get().equals(Reflections.getField(npcProperty, "value").get())))
                         return null;
 
-                    PropertyMap propertyMap =  new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", property)));
+                    PropertyMap propertyMap = new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", property)));
                     GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
@@ -150,7 +150,7 @@ public class NpcOption<T, S extends Serializable>
 
                     var textures = new Property("textures", skin.value(), skin.signature());
 
-                    PropertyMap propertyMap =  new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures)));
+                    PropertyMap propertyMap = new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures)));
                     GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
@@ -221,7 +221,7 @@ public class NpcOption<T, S extends Serializable>
                 if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
                     npcServerPlayer.connection = new ServerGamePacketListenerImpl(
                             (MinecraftServer) Reflections.invokeMethod(npcServerPlayer, "getServer").get(),
-                        new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
+                            new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
                 else
                     npcServerPlayer.connection = new ServerGamePacketListenerImpl(npcServerPlayer.level().getServer(),
                             new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
@@ -241,64 +241,6 @@ public class NpcOption<T, S extends Serializable>
 
                 return new ClientboundRemoveEntitiesPacket(((Entity) npc.getNameTag().getDisplay()).getId());
             });
-
-    /**
-     * NPC option to set the pose of the NPC (e.g., standing, sleeping, swimming).
-     * For a full list look at {@link Pose}.
-     */
-    @SuppressWarnings("unchecked")
-    public static final NpcOption<Pose, Pose> POSE = new NpcOption<>("pose", Pose.STANDING,
-            pose -> pose, pose -> pose,
-            (pose, npc, player) ->
-            {
-                net.minecraft.world.entity.Pose nmsPose = net.minecraft.world.entity.Pose.values()[pose.ordinal()];
-
-                if(nmsPose == null)
-                    throw new RuntimeException("Pose (" + pose.name() + ") not found");
-
-                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
-
-                npcServerPlayer.setPose(nmsPose);
-
-                SynchedEntityData data = npcServerPlayer.getEntityData();
-                data.set(EntityDataSerializers.POSE.createAccessor(6), nmsPose);
-
-                if(pose == Pose.SPIN_ATTACK)
-                    data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x04);
-                else
-                    data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
-
-                if(pose == Pose.FALL_FLYING)
-                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) (npc.getOption(NpcOption.GLOWING) != null ? 0xC0 : 0x80));
-                else if(pose == Pose.SWIMMING)
-                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) (npc.getOption(NpcOption.GLOWING) != null ? 0x50 : 0x10));
-                else
-                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0);
-
-                if(pose == Pose.SITTING)
-                {
-                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.serverPlayer.level());
-                    textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
-                    npc.toDeleteEntities.add(textDisplay.getId());
-
-                    Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
-
-                    SynchedEntityData entityData = textDisplay.getEntityData();
-                    entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x20);
-                    Packet<? super ClientGamePacketListener> entityDataPacket = (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(textDisplay.getId(), entityData);
-
-                    textDisplay.passengers = ImmutableList.of((ServerPlayer) npc.getServerPlayer());
-
-                    ClientboundSetPassengersPacket passengerPacket = new ClientboundSetPassengersPacket(textDisplay);
-                    ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket((ServerPlayer) npc.getServerPlayer(),
-                            (byte) (player.getLocation().getYaw() * 256 / 360));
-
-                    return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
-                }
-
-                return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
-            });
-
     /**
      * NPC option to set the equipment worn by the NPC (armor, items in hand).
      * The map uses {@link EquipmentSlot} as keys and {@link ItemStack} as values.
@@ -350,7 +292,6 @@ public class NpcOption<T, S extends Serializable>
 
                 return new ClientboundSetEquipmentPacket(((ServerPlayer) npc.getServerPlayer()).getId(), list);
             });
-
     /**
      * NPC option to control which parts of the NPC's skin are visible (e.g., hat, jacket).
      * For a full list look at {@link SkinParts}.
@@ -365,7 +306,6 @@ public class NpcOption<T, S extends Serializable>
                         (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
                 return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
             });
-
     /**
      * NPC option to make the NPC look at the player if they are within a certain distance.
      * The value is the maximum distance in blocks. A value of 0 or less disables this.
@@ -374,7 +314,6 @@ public class NpcOption<T, S extends Serializable>
     public static final NpcOption<Double, Double> LOOK_AT_PLAYER = new NpcOption<>("look-at-player", 0.0,
             distance -> distance, distance -> distance,
             (distance, npc, player) -> null);
-
     /**
      * NPC option to make the NPC glow with a specific color.
      * If null, the glowing effect is removed.
@@ -408,7 +347,74 @@ public class NpcOption<T, S extends Serializable>
                         (Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) SetEntityDataPacket.create(
                                 npcServerPlayer.getId(), entityData)));
             });
+    /**
+     * NPC option to set the pose of the NPC (e.g., standing, sleeping, swimming).
+     * For a full list look at {@link Pose}.
+     */
+    @SuppressWarnings("unchecked")
+    public static final NpcOption<Pose, Pose> POSE = new NpcOption<>("pose", Pose.STANDING,
+            pose -> pose, pose -> pose,
+            (pose, npc, player) ->
+            {
+                net.minecraft.world.entity.Pose nmsPose = net.minecraft.world.entity.Pose.values()[pose.ordinal()];
 
+                if(nmsPose == null)
+                    throw new RuntimeException("Pose (" + pose.name() + ") not found");
+
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
+                npcServerPlayer.setPose(nmsPose);
+
+                SynchedEntityData data = npcServerPlayer.getEntityData();
+                data.set(EntityDataSerializers.POSE.createAccessor(6), nmsPose);
+
+                Packet<? super ClientGamePacketListener> packet = null;
+                if(pose == Pose.FALL_FLYING)
+                {
+                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) (npc.getOption(NpcOption.GLOWING) != null ? 0xC0 : 0x80));
+                    packet = new ClientboundMoveEntityPacket.Rot(npcServerPlayer.getId(), (byte) (npc.getLocation().getYaw() * 256 / 360),
+                            (byte) 0, npcServerPlayer.onGround());
+                }
+                else if(pose == Pose.SWIMMING)
+                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) (npc.getOption(NpcOption.GLOWING) != null ? 0x50 : 0x10));
+                else
+                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0);
+
+                if(pose == Pose.SPIN_ATTACK)
+                {
+                    data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x04);
+                    packet = new ClientboundMoveEntityPacket.Rot(npcServerPlayer.getId(), (byte) (npc.getLocation().getYaw() * 256 / 360),
+                            (byte) -90, npcServerPlayer.onGround());
+                }
+                else
+                    data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
+
+                if(pose == Pose.SITTING)
+                {
+                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.serverPlayer.level());
+                    textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
+                    npc.toDeleteEntities.add(textDisplay.getId());
+
+                    Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(
+                            Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
+
+                    SynchedEntityData entityData = textDisplay.getEntityData();
+                    entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x20);
+                    Packet<? super ClientGamePacketListener> entityDataPacket = (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(
+                            textDisplay.getId(), entityData);
+
+                    textDisplay.passengers = ImmutableList.of((ServerPlayer) npc.getServerPlayer());
+
+                    ClientboundSetPassengersPacket passengerPacket = new ClientboundSetPassengersPacket(textDisplay);
+                    ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket((ServerPlayer) npc.getServerPlayer(),
+                            (byte) (player.getLocation().getYaw() * 256 / 360));
+
+                    return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
+                }
+
+                return packet == null ? (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data) : new ClientboundBundlePacket(
+                        List.of(packet, (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data)));
+            });
     /**
      * NPC option to set the scale (size) of the NPC.
      * A value of 1.0 is normal size. Requires Minecraft 1.20.6 or newer.
