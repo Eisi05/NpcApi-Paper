@@ -70,6 +70,7 @@ public class NPC extends NpcHolder
 {
     private transient final Map<UUID, String> nameCache = new HashMap<>();
 
+    final List<Integer> toDeleteEntities = new ArrayList<>();
     ServerPlayer serverPlayer;
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
@@ -78,7 +79,7 @@ public class NPC extends NpcHolder
     private Location location;
     private NpcClickAction clickEvent;
     private Instant createdAt = Instant.now();
-    private Path npcPath;
+    private final Path npcPath;
     private PathTask pathTask;
 
     /**
@@ -613,6 +614,8 @@ public class NPC extends NpcHolder
                     ClientboundSetPlayerTeamPacket.Action.REMOVE));
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
         }
+
+        toDeleteEntities.forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
 
         connection.send(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
 

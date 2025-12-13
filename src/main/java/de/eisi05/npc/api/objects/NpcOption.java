@@ -30,6 +30,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.scores.PlayerTeam;
@@ -245,6 +246,7 @@ public class NpcOption<T, S extends Serializable>
      * NPC option to set the pose of the NPC (e.g., standing, sleeping, swimming).
      * For a full list look at {@link Pose}.
      */
+    @SuppressWarnings("unchecked")
     public static final NpcOption<Pose, Pose> POSE = new NpcOption<>("pose", Pose.STANDING,
             pose -> pose, pose -> pose,
             (pose, npc, player) ->
@@ -265,6 +267,34 @@ public class NpcOption<T, S extends Serializable>
                     data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x04);
                 else
                     data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
+
+                if(pose == Pose.FALL_FLYING)
+                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) (npc.getOption(NpcOption.GLOWING) != null ? 0xC0 : 0x80));
+                else if(pose == Pose.SWIMMING)
+                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) (npc.getOption(NpcOption.GLOWING) != null ? 0x50 : 0x10));
+                else
+                    data.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0);
+
+                if(pose == Pose.SITTING)
+                {
+                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.serverPlayer.level());
+                    textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
+                    npc.toDeleteEntities.add(textDisplay.getId());
+
+                    Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
+
+                    SynchedEntityData entityData = textDisplay.getEntityData();
+                    entityData.set(EntityDataSerializers.BYTE.createAccessor(0), (byte) 0x20);
+                    Packet<? super ClientGamePacketListener> entityDataPacket = (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(textDisplay.getId(), entityData);
+
+                    textDisplay.passengers = ImmutableList.of((ServerPlayer) npc.getServerPlayer());
+
+                    ClientboundSetPassengersPacket passengerPacket = new ClientboundSetPassengersPacket(textDisplay);
+                    ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket((ServerPlayer) npc.getServerPlayer(),
+                            (byte) (player.getLocation().getYaw() * 256 / 360));
+
+                    return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
+                }
 
                 return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
             });

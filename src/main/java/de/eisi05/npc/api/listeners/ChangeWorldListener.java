@@ -2,7 +2,6 @@ package de.eisi05.npc.api.listeners;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
-import de.eisi05.npc.api.manager.TeamManager;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
@@ -13,8 +12,6 @@ public class ChangeWorldListener implements Listener
     @EventHandler
     public void onChange(PlayerChangedWorldEvent event)
     {
-        TeamManager.clear(event.getPlayer().getUniqueId());
-
         new BukkitRunnable()
         {
             @Override
