@@ -10,6 +10,7 @@ import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcConfig;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.utils.Metrics;
 import de.eisi05.npc.api.utils.PacketReader;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -32,15 +33,13 @@ import java.util.function.Function;
  */
 public final class NpcApi
 {
+    private static final List<Listener> listeners = List.of(new ChangeWorldListener(), new ConnectionListener(), new NpcInteractListener(),
+            new WorldLoadListener());
     /**
      * A static reference to the Bukkit plugin instance that is using this API.
      * This is set during the API's initialization.
      */
     public static Plugin plugin;
-
-    private static final List<Listener> listeners = List.of(new ChangeWorldListener(), new ConnectionListener(), new NpcInteractListener(),
-            new WorldLoadListener());
-
     public static Function<Player, Component> DISABLED_MESSAGE_PROVIDER = player ->
             Component.text("DISABLED").color(NamedTextColor.RED);
 
@@ -73,6 +72,8 @@ public final class NpcApi
         PacketReader.injectAll();
 
         Tasks.start();
+
+        new Metrics(plugin, 28179).addCustomChart(new Metrics.SingleLineChart("npcCount", () -> NpcManager.getList().size()));
     }
 
     /**
@@ -104,18 +105,6 @@ public final class NpcApi
     }
 
     /**
-     * Sets a function that provides the message shown when an NPC is disabled.
-     *
-     * @param function a {@link Function} that takes a {@link Player} and returns the disabled message
-     * @return this {@link NpcApi} instance for method chaining
-     */
-    public @NotNull NpcApi setDisabledMessageProvider(Function<Player, Component> function)
-    {
-        DISABLED_MESSAGE_PROVIDER = function;
-        return this;
-    }
-
-    /**
      * Disables the NPC API, performing the necessary cleanup.
      * This includes hiding all active NPCs from players, clearing the NPC manager,
      * and uninjecting packet readers. It also nullifies the static references.
@@ -134,5 +123,17 @@ public final class NpcApi
         NpcManager.loadExceptions.clear();
         npcApi = null;
         plugin = null;
+    }
+
+    /**
+     * Sets a function that provides the message shown when an NPC is disabled.
+     *
+     * @param function a {@link Function} that takes a {@link Player} and returns the disabled message
+     * @return this {@link NpcApi} instance for method chaining
+     */
+    public @NotNull NpcApi setDisabledMessageProvider(Function<Player, Component> function)
+    {
+        DISABLED_MESSAGE_PROVIDER = function;
+        return this;
     }
 }
