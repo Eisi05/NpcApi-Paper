@@ -9,6 +9,11 @@
 A powerful and easy-to-use NPC (Non-Player Character) API for Minecraft Spigot plugins that allows you to create, manage, and customize NPCs with
 advanced features.
 
+## Wiki
+
+See the in-repo wiki pages under:
+[📚 Project Wiki](https://github.com/Eisi05/NpcApi-Paper/wiki)
+
 ## Features
 
 - 🎭 Create custom NPCs with ease
