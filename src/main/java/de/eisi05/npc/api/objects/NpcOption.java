@@ -186,19 +186,19 @@ public class NpcOption<T, S extends Serializable>
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (show, npc, player) ->
             {
-                if(show)
-                    return null;
-
-                new BukkitRunnable()
+                if(!show)
                 {
-                    @Override
-                    public void run()
+                    new BukkitRunnable()
                     {
-                        ((CraftPlayer) player).getHandle().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(npc.getUUID())));
-                    }
-                }.runTaskLater(NpcApi.plugin, 50);
-                return null;
-            });
+                        @Override
+                        public void run()
+                        {
+                            ((CraftPlayer) player).getHandle().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(npc.getUUID())));
+                        }
+                    }.runTaskLater(NpcApi.plugin, 50);
+                }
+                return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, (ServerPlayer) npc.getServerPlayer());
+            }).loadBefore(true);
 
     /**
      * NPC option to set the simulated latency (ping) of the NPC in the tab list.
@@ -393,7 +393,7 @@ public class NpcOption<T, S extends Serializable>
                 {
                     Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.serverPlayer.level());
                     textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
-                    npc.toDeleteEntities.add(textDisplay.getId());
+                    npc.toDeleteEntities.put("sit", textDisplay.getId());
 
                     Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(
                             Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
@@ -411,9 +411,20 @@ public class NpcOption<T, S extends Serializable>
 
                     return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
                 }
+                else
+                {
+                    Integer toDelete = npc.toDeleteEntities.get("sit");
 
-                return packet == null ? (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data) : new ClientboundBundlePacket(
-                        List.of(packet, (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data)));
+                    if(toDelete == null)
+                        return packet == null ? (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data) :
+                                new ClientboundBundlePacket(List.of((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data), packet));
+
+                    npc.toDeleteEntities.remove("sit");
+                    return packet == null ? new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
+                            (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data)))
+                            : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
+                            (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data), packet));
+                }
             });
     /**
      * NPC option to set the scale (size) of the NPC.
@@ -487,7 +498,7 @@ public class NpcOption<T, S extends Serializable>
      * @param packet       The packet generation function. Must not be null.
      */
     private NpcOption(@NotNull String path, @Nullable T defaultValue, @NotNull Function<T, S> serializer, @NotNull Function<S, T> deserializer,
-            @NotNull TriFunction<T, NPC, Player, Packet<?>> packet)
+                      @NotNull TriFunction<T, NPC, Player, Packet<?>> packet)
     {
         this.path = path;
         this.defaultValue = defaultValue;

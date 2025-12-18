@@ -70,7 +70,7 @@ public class NPC extends NpcHolder
 {
     private transient final Map<UUID, String> nameCache = new HashMap<>();
 
-    final List<Integer> toDeleteEntities = new ArrayList<>();
+    final Map<String, Integer> toDeleteEntities = new HashMap<>();
     ServerPlayer serverPlayer;
     private final List<UUID> viewers = new ArrayList<>();
     private final Map<NpcOption<?, ?>, Object> options;
@@ -615,7 +615,7 @@ public class NPC extends NpcHolder
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
         }
 
-        toDeleteEntities.forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
+        toDeleteEntities.values().forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
 
         connection.send(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
 
