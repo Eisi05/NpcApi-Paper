@@ -19,6 +19,8 @@ public class ConnectionListener implements Listener
     {
         PacketReader.inject(event.getPlayer());
 
+        TeamManager.clear(event.getPlayer().getUniqueId());
+
         new BukkitRunnable()
         {
             @Override
