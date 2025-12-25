@@ -8,17 +8,16 @@ import de.eisi05.npc.api.utils.PacketReader;
 import io.papermc.paper.event.player.PlayerClientLoadedWorldEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
 public class ConnectionListener implements Listener
 {
     @EventHandler
-    public void onJoin(PlayerClientLoadedWorldEvent event)
+    public void onJoin(PlayerJoinEvent event)
     {
         PacketReader.inject(event.getPlayer());
-
-        TeamManager.clear(event.getPlayer().getUniqueId());
 
         new BukkitRunnable()
         {

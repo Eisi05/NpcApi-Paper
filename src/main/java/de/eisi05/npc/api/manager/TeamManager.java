@@ -12,7 +12,7 @@ import java.util.UUID;
 
 public class TeamManager
 {
-    private static final Map<UUID, Map<String, PlayerTeam>> teams = new HashMap<>();
+    public static final Map<UUID, Map<String, PlayerTeam>> teams = new HashMap<>();
 
     public static @NotNull Object create(@NotNull Player player, @NotNull String name)
     {
