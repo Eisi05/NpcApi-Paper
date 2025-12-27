@@ -74,12 +74,12 @@ public class NPC extends NpcHolder
     private final Map<NpcOption<?, ?>, Object> options;
     private final CustomNameTag nameTag;
     private final Path npcPath;
+    private final Map<UUID, PathTask> pathTasks = new HashMap<>();
     ServerPlayer serverPlayer;
     private NpcName name;
     private Location location;
     private NpcClickAction clickEvent;
     private Instant createdAt = Instant.now();
-    private PathTask pathTask;
 
     /**
      * Creates an NPC at the specified location with a random UUID and default name. The default name is an empty component.
@@ -687,8 +687,14 @@ public class NPC extends NpcHolder
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
                                       boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, @Nullable Player... viewers)
     {
-        if(isWalking())
-            cancelWalking();
+        if(viewers != null)
+        {
+            for(Player player : viewers)
+            {
+                if(isWalking(player))
+                    cancelWalking(player);
+            }
+        }
 
         final double speed = Math.max(Math.min(walkSpeed, 1), 0.1);
 
@@ -697,11 +703,17 @@ public class NPC extends NpcHolder
         if(event.isCancelled())
             return null;
 
-        pathTask = new PathTask.Builder(this, path)
+        PathTask pathTask = new PathTask.Builder(this, path)
                 .speed(event.getWalkSpeed())
                 .viewers(viewers)
                 .updateRealLocation(event.isChangeRealLocation())
                 .callback(onEnd).build();
+
+        if(viewers != null)
+        {
+            for(Player player : viewers)
+                pathTasks.put(player.getUniqueId(), pathTask);
+        }
 
         return pathTask.runTaskTimer(NpcApi.plugin, 1L, 1L);
     }
@@ -713,23 +725,22 @@ public class NPC extends NpcHolder
      *
      * @return true if the NPC is still walking, false otherwise
      */
-    public boolean isWalking()
+    public boolean isWalking(@NotNull Player viewer)
     {
-        return pathTask != null && !pathTask.isFinished();
+        return pathTasks.containsKey(viewer.getUniqueId()) && !pathTasks.get(viewer.getUniqueId()).isFinished();
     }
 
     /**
      * Cancels the NPC's current walking task if one is active.
      * <p>
-     * If the NPC is walking, the path task is cancelled and cleared. If no walking task is active, this method has no effect.
+     * If the NPC is walking, the path task is canceled and cleared. If no walking task is active, this method has no effect.
      */
-    public void cancelWalking()
+    public void cancelWalking(@NotNull Player viewer)
     {
-        if(pathTask != null)
-        {
-            pathTask.cancel();
-            pathTask = null;
-        }
+        if(!pathTasks.containsKey(viewer.getUniqueId()))
+            return;
+
+        pathTasks.remove(viewer.getUniqueId()).cancel();
     }
 
     /**
