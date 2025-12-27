@@ -589,15 +589,18 @@ public class NPC extends NpcHolder
      */
     public void hideNpcFromPlayer(@NotNull Player player)
     {
+        if(!viewers.contains(player.getUniqueId()))
+            return;
+
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
         connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
 
         if(TeamManager.exists(player, getGameProfileName()))
         {
             PlayerTeam team = (PlayerTeam) TeamManager.create(player, getGameProfileName());
-            connection.send((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(team, getGameProfileName(),
-                    ClientboundSetPlayerTeamPacket.Action.REMOVE));
+            connection.send((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(team, getGameProfileName(), ClientboundSetPlayerTeamPacket.Action.REMOVE));
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
+            TeamManager.clear(player.getUniqueId(), getGameProfileName());
         }
 
         toDeleteEntities.values().forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));

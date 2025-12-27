@@ -50,4 +50,9 @@ public class TeamManager
         for(var entry : teams.entrySet())
             entry.getValue().keySet().removeIf(s -> s.equals(name));
     }
+
+    public static void clear(UUID uuid, String name)
+    {
+        teams.get(uuid).remove(name);
+    }
 }
