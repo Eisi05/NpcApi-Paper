@@ -89,12 +89,10 @@ public class NpcOption<T, S extends Serializable>
                     Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
 
                     if((property == null && npcProperty == null) || (property != null && npcProperty != null &&
-                                                                     Reflections.getField(property, "value")
-                                                                             .get()
-                                                                             .equals(Reflections.getField(npcProperty, "value").get())))
+                            Reflections.getField(property, "value").get().equals(Reflections.getField(npcProperty, "value").get())))
                         return null;
 
-                    PropertyMap propertyMap = new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", property)));
+                    PropertyMap propertyMap = new PropertyMap(Multimaps.forMap(property == null ? Map.of() : Map.of("textures", property)));
                     GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
@@ -145,7 +143,7 @@ public class NpcOption<T, S extends Serializable>
 
                     Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
                     if((skin == null && npcProperty == null) ||
-                       (npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get())))
+                            (npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get())))
                         return null;
 
                     var textures = new Property("textures", skin.value(), skin.signature());
@@ -412,13 +410,13 @@ public class NpcOption<T, S extends Serializable>
 
                     if(toDelete == null)
                         return packet == null ? (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data) :
-                               new ClientboundBundlePacket(
-                                       List.of((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data), packet));
+                                new ClientboundBundlePacket(
+                                        List.of((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data), packet));
 
                     npc.toDeleteEntities.remove("sit");
                     return packet == null ? new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data)))
-                                          : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
+                            : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npcServerPlayer.getId(), data), packet));
                 }
             });
