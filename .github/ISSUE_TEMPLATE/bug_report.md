@@ -1,38 +1,51 @@
 ---
-name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: ''
-
+name: Bug Report
+about: Report an issue with NpcAPI to help us improve
+labels: bug
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+<!-- Please search existing issues to avoid creating duplicates. -->
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+## Bug Report
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+### Description
+<!-- A clear and concise description of what the bug is. -->
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+### Environment
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+- **NpcAPI Version**: [e.g., 1.0.0]
+- **Server Software**: 
+  - [ ] Spigot
+  - [ ] Paper
+  - [ ] Other (please specify):
+- **Server Version**: [e.g., 1.21.11]
+- **Java Version**: [e.g., Java 21]
+- **Using API/Plugin**: 
+  - [ ] Using NpcAPI as a dependency
+  - [ ] Using NpcAPI as a plugin
+  - [ ] Both
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+### Steps to Reproduce
+1. ...
+2. ...
+3. ...
 
-**Additional context**
-Add any other context about the problem here.
+### Expected Behavior
+<!-- A clear and concise description of what you expected to happen. -->
+
+### Actual Behavior
+<!-- What actually happened? -->
+
+### Error Logs
+```
+Paste any error logs here (use code blocks for better readability)
+```
+
+### Additional Context
+<!-- Add any other context about the problem here. -->
+
+### Possible Solution
+<!-- If you have a suggestion for a fix, please describe it here. -->
+
+### Screenshots/Videos
+<!-- If applicable, add screenshots or videos to help explain your problem. -->

@@ -1,20 +1,24 @@
 ---
-name: Feature request
-about: Suggest an idea for this project
-title: ''
-labels: ''
-assignees: ''
-
+name: Feature Request
+about: Suggest a new feature or improvement for NpcAPI
+labels: enhancement, needs-triage
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+<!-- Please search existing issues to avoid duplicates. -->
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+## Feature Request
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+### Description
+<!-- A clear and concise description of the feature or improvement you're suggesting. -->
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+### Environment (if applicable)
+- **Server Software**: 
+  - [ ] Spigot
+  - [ ] Paper
+  - [ ] Other (please specify):
+- **Server Version**: [e.g., 1.21.11]
+- **Java Version**: [e.g., Java 21]
+- **Using API/Plugin**: 
+  - [ ] Using NpcAPI as a dependency
+  - [ ] Using NpcAPI as a plugin
+  - [ ] Both
