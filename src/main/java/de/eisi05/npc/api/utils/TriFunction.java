@@ -1,5 +1,7 @@
 package de.eisi05.npc.api.utils;
 
+import java.io.Serializable;
+
 /**
  * Represents a function that accepts three arguments and produces a result.
  * This is a functional interface whose functional method is {@link #apply(Object, Object, Object)}.
@@ -10,7 +12,7 @@ package de.eisi05.npc.api.utils;
  * @param <R> the type of the result of the function
  */
 @FunctionalInterface
-public interface TriFunction<T, U, V, R>
+public interface TriFunction<T, U, V, R> extends Serializable
 {
     /**
      * Applies this function to the given arguments.

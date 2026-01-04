@@ -48,6 +48,7 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -60,7 +61,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -296,7 +296,7 @@ public class NPC extends NpcHolder
         {
             if(option.equals(NpcOption.SKIN) || option.equals(NpcOption.USE_PLAYER_SKIN))
             {
-                updateSkin(player -> true);
+                updateSkin(viewers.stream().map(Bukkit::getPlayer).filter(Objects::nonNull).toArray(Player[]::new));
                 return;
             }
 
@@ -469,28 +469,20 @@ public class NPC extends NpcHolder
         }
     }
 
-    /**
-     * Updates the NPC's skin for a subset of players based on a condition.
-     * <p>
-     * Iterates over all viewers of the NPC and, for each player that satisfies the given {@link Predicate}, hides and then shows the NPC to refresh its skin.
-     * </p>
+    /** Updates the NPC's skin for the specified players by hiding and then showing the NPC. This forces a skin refresh for each player in the provided array.
      *
-     * @param predicate a {@link java.util.function.Predicate} that determines which players should have the skin updated.
+     * @param players the players who should see the updated skin. If no players are provided, no action is taken.
+     * @throws IllegalArgumentException if the players array is null
+     * @see #hideNpcFromPlayer(Player)
+     * @see #showNPCToPlayer(Player)
      */
-    public void updateSkin(@NotNull Predicate<Player> predicate)
+    public void updateSkin(@NotNull Player... players)
     {
-        for(UUID uuid : viewers)
-        {
-            Player player = Bukkit.getPlayer(uuid);
-            if(player == null)
-                continue;
-
-            if(!predicate.test(player))
-                continue;
-
+        for(Player player : players)
             hideNpcFromPlayer(player);
+
+        for(Player player : players)
             showNPCToPlayer(player);
-        }
     }
 
     /**
@@ -501,6 +493,12 @@ public class NPC extends NpcHolder
     public Instant getCreatedAt()
     {
         return createdAt;
+    }
+
+    @ApiStatus.Internal
+    public List<UUID> getViewers()
+    {
+        return viewers;
     }
 
     /**
@@ -531,13 +529,13 @@ public class NPC extends NpcHolder
         if(!viewers.contains(player.getUniqueId()))
             viewers.add(player.getUniqueId());
 
-        if(!name.isStatic() && getOption(NpcOption.SHOW_TAB_LIST))
-            setOption(NpcOption.SHOW_TAB_LIST, false);
-
         List<Packet<?>> packets = new ArrayList<>();
 
         Arrays.stream(NpcOption.values()).filter(NpcOption::loadBefore)
                 .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
+
+        if(!name.isStatic() && getOption(NpcOption.SHOW_TAB_LIST))
+            setOption(NpcOption.SHOW_TAB_LIST, false);
 
         packets.add(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(serverPlayer, true));
         packets.add(serverPlayer.getAddEntityPacket(Var.getServerEntity(serverPlayer, Var.getServerLevel(serverPlayer))));
@@ -643,7 +641,7 @@ public class NPC extends NpcHolder
 
         double dx = playerLoc.getX() - npcLoc.getX();
         double dy = ((playerLoc.getY() + viewer.getEyeHeight())) -
-                    ((npcLoc.getY() + serverPlayer.getBukkitEntity().getEyeHeight() * getOption(NpcOption.SCALE)));
+                ((npcLoc.getY() + serverPlayer.getBukkitEntity().getEyeHeight() * getOption(NpcOption.SCALE)));
         double dz = playerLoc.getZ() - npcLoc.getZ();
 
         double distanceXZ = Math.sqrt(dx * dx + dz * dz);
@@ -831,7 +829,7 @@ public class NPC extends NpcHolder
         setLocation(location);
 
         Set<UUID> excluded = excludedPlayers == null ? Collections.emptySet() :
-                             Arrays.stream(excludedPlayers).filter(Objects::nonNull).map(Player::getUniqueId).collect(Collectors.toSet());
+                Arrays.stream(excludedPlayers).filter(Objects::nonNull).map(Player::getUniqueId).collect(Collectors.toSet());
 
         ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
                 new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),

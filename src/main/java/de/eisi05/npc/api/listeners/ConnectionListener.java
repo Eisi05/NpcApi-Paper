@@ -4,6 +4,9 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.objects.NpcSkin;
+import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.PacketReader;
 import io.papermc.paper.event.player.PlayerClientLoadedWorldEvent;
 import org.bukkit.event.EventHandler;
@@ -26,7 +29,15 @@ public class ConnectionListener implements Listener
             @Override
             public void run()
             {
-                NpcManager.getList().forEach(npc -> npc.showNPCToPlayer(event.getPlayer()));
+                NpcManager.getList().forEach(npc ->
+                {
+                    npc.showNPCToPlayer(event.getPlayer());
+                    NpcSkin npcSkin = npc.getOption(NpcOption.SKIN);
+                    if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN))
+                        return;
+
+                    Tasks.updateSkin(event.getPlayer(), npc, npcSkin);
+                });
             }
         }.runTaskLater(NpcApi.plugin, 10L);
     }

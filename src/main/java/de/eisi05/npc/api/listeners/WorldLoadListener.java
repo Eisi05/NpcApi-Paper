@@ -24,7 +24,7 @@ public class WorldLoadListener implements Listener
 
         NpcManager.getList()
                 .stream()
-                .filter(npc -> npc.getLocation().getChunk().getX() == chunkX && npc.getLocation().getChunk().getZ() == chunkZ)
+                .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
                 .forEach(NPC::showNpcToAllPlayers);
     }
 
@@ -36,7 +36,7 @@ public class WorldLoadListener implements Listener
 
         NpcManager.getList()
                 .stream()
-                .filter(npc -> npc.getLocation().getChunk().getX() == chunkX && npc.getLocation().getChunk().getZ() == chunkZ)
+                .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
                 .forEach(NPC::hideNpcFromAllPlayers);
     }
 }

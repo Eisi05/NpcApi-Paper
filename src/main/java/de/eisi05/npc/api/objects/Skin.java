@@ -28,10 +28,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Represents a player's skin, containing its name, value, and signature.
- * This record is immutable and implements {@link Serializable} for easy persistence.
- * The skin value and signature are typically obtained from Mojang's session servers
- * and are used to display the correct player texture.
+ * Represents a player's skin, containing its name, value, and signature. This record is immutable and implements {@link Serializable} for easy persistence. The
+ * skin value and signature are typically obtained from Mojang's session servers and are used to display the correct player texture.
  *
  * @param name      The name associated with the skin (usually the player's username). Can be {@code null}.
  * @param value     The base64 encoded string representing the skin data (texture URL, model, etc.).
@@ -43,16 +41,14 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     private static final long serialVersionUID = 1L;
 
     /**
-     * A static cache to store fetched skins, mapping UUIDs to Skin objects.
-     * This helps reduce redundant API calls to Mojang's servers.
+     * A static cache to store fetched skins, mapping UUIDs to Skin objects. This helps reduce redundant API calls to Mojang's servers.
      */
     private static final Map<String, Skin> skinCacheName = new HashMap<>();
     private static final Map<UUID, Skin> skinCacheUUID = new HashMap<>();
     private static final Map<File, Skin> skinCacheFile = new HashMap<>();
 
     /**
-     * Retrieves the skin data directly from a currently online Bukkit player.
-     * This method uses reflection to access the player's game profile properties.
+     * Retrieves the skin data directly from a currently online Bukkit player. This method uses reflection to access the player's game profile properties.
      *
      * @param player The Bukkit player from whom to retrieve the skin. Must not be {@code null}.
      * @return A {@link Skin} object representing the player's current skin, or {@code null} if no skin properties are found.
@@ -123,7 +119,8 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
 
                 return Optional.empty();
             }
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             skinCacheUUID.put(uuid, null);
             return Optional.empty();
@@ -153,7 +150,8 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
                         "(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})",
                         "$1-$2-$3-$4-$5")));
             }
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             skinCacheName.put(name, null);
             return Optional.empty();
@@ -207,7 +205,8 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             Skin skin = new Skin(null, value, signature);
             skinCacheFile.put(skinFile, skin);
             return Optional.of(skin);
-        } catch(IOException | InterruptedException e)
+        }
+        catch(IOException | InterruptedException e)
         {
             if(NpcApi.config.debug())
                 e.printStackTrace();
@@ -284,5 +283,15 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     public static boolean isPreLoaded(@NotNull UUID uuid)
     {
         return skinCacheUUID.containsKey(uuid);
+    }
+
+    /**
+     * Converts this Skin to a NpcSkin.
+     *
+     * @return the NpcSkin representation of this Skin
+     */
+    public NpcSkin toNpcSkin()
+    {
+        return NpcSkin.of(this);
     }
 }

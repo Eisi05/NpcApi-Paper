@@ -98,7 +98,9 @@ public class NpcOption<T, S extends Serializable>
                     Location location = npc.getLocation();
                     MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
                     ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
+                    int id = npc.serverPlayer.getId();
                     npc.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
+                    npc.serverPlayer.setId(id);
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
@@ -154,7 +156,9 @@ public class NpcOption<T, S extends Serializable>
                     Location location = npc.getLocation();
                     MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
                     ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
+                    int id = npc.serverPlayer.getId();
                     npc.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
+                    npc.serverPlayer.setId(id);
                     Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
                     npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
                             CommonListenerCookie.createInitial(profile, true));
