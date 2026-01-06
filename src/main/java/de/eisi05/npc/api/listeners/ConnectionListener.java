@@ -10,6 +10,7 @@ import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.PacketReader;
 import io.papermc.paper.event.player.PlayerClientLoadedWorldEvent;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -17,7 +18,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 public class ConnectionListener implements Listener
 {
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event)
     {
         PacketReader.inject(event.getPlayer());

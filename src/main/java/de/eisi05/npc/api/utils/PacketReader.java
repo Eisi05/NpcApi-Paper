@@ -54,6 +54,10 @@ public class PacketReader
     public static void inject(@NotNull Player player)
     {
         Channel channel = ((CraftPlayer) player).getHandle().connection.connection.channel;
+
+        if(channel == null)
+            return;
+
         channels.put(player.getUniqueId(), channel);
 
         if(channel.pipeline().get(NpcApi.plugin.getName()) != null)
