@@ -19,7 +19,7 @@ labels: bug
   - [ ] Paper
   - [ ] Other (please specify):
 - **Server Version**: [e.g., 1.21.11]
-- **Java Version**: [e.g., Java 21]
+- **Plugin Version** (Use /npc version): [e.g., 1.7.5 or 1.4.5-SNAPSHOT]
 - **Using API/Plugin**: 
   - [ ] Using NpcAPI as a dependency
   - [ ] Using NpcAPI as a plugin
