@@ -8,7 +8,6 @@ import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.objects.NpcSkin;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.PacketReader;
-import io.papermc.paper.event.player.PlayerClientLoadedWorldEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
