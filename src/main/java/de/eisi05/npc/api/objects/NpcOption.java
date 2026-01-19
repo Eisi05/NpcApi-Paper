@@ -326,8 +326,6 @@ public class NpcOption<T, S extends Serializable>
             color -> color, color -> color,
             (color, npc, player) ->
             {
-                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
-
                 SynchedEntityData entityData = npc.entity.getEntityData();
                 EntityDataAccessor<Byte> accessor = EntityDataSerializers.BYTE.createAccessor(0);
 

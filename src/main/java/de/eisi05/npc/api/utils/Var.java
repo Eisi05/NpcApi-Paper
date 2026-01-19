@@ -1,6 +1,5 @@
 package de.eisi05.npc.api.utils;
 
-import de.eisi05.npc.api.wrapper.objects.WrappedEntitySnapshot;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ServerEntity;
@@ -184,7 +183,7 @@ public class Var
     {
         byte flags = 0;
 
-        if(entity.getFireTicks() > 0 || entity.getVisualFire().toBoolean())
+        if(entity.getFireTicks() > 0 || entity.getVisualFire().toBooleanOrElse(false))
             flags |= 0x01;
 
         if(entity instanceof Player player && player.isSneaking())
