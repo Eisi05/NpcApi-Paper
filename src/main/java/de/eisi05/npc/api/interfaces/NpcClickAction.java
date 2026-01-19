@@ -7,8 +7,7 @@ import java.io.Serial;
 import java.io.Serializable;
 
 /**
- * Functional interface representing an action to be performed
- * when an NPC is clicked.
+ * Functional interface representing an action to be performed when an NPC is clicked.
  */
 @FunctionalInterface
 public interface NpcClickAction extends Serializable
@@ -24,19 +23,15 @@ public interface NpcClickAction extends Serializable
     void call(@NotNull NpcInteractEvent event);
 
     /**
-     * Returns a copy of this NpcClickAction.
-     * The default implementation returns the same instance.
+     * Returns a copy of this NpcClickAction. The default implementation returns the same instance.
      *
      * @return a copy of this action
      */
     default NpcClickAction copy() {return this;}
 
     /**
-     * Initializes this {@link NpcClickAction}.
-     * This method can be used for any setup or configuration that needs to occur
-     * after the action is created or loaded.
-     * The default implementation simply returns the current instance,
-     * indicating no specific initialization is required by default.
+     * Initializes this {@link NpcClickAction}. This method can be used for any setup or configuration that needs to occur after the action is created or
+     * loaded. The default implementation simply returns the current instance, indicating no specific initialization is required by default.
      *
      * @return The initialized {@link NpcClickAction} instance. By default, it returns {@code this}.
      */

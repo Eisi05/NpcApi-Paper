@@ -7,10 +7,8 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Called when an NPC stops walking along its current path.
  * <p>
- * This event is fired after the walking process ends, either because the NPC
- * successfully reached its destination ({@link WalkingResult#SUCCESS}) or because
- * the walk was cancelled ({@link WalkingResult#CANCELLED}). Listeners may also
- * control whether the NPC's real (server-side) location should be updated to the
+ * This event is fired after the walking process ends, either because the NPC successfully reached its destination ({@link WalkingResult#SUCCESS}) or because
+ * the walk was canceled ({@link WalkingResult#CANCELLED}). Listeners may also control whether the NPC's real (server-side) location should be updated to the
  * NPC's final visual position.
  */
 public class NpcStopWalkingEvent extends NpcWalkingEvent
@@ -36,17 +34,18 @@ public class NpcStopWalkingEvent extends NpcWalkingEvent
      *
      * @return the walking result
      */
-    public @NotNull WalkingResult getWalkingResult() {
+    public @NotNull WalkingResult getWalkingResult()
+    {
         return walkingResult;
     }
 
     /**
-     * Checks whether the NPC's real location should be updated to its final
-     * walking position.
+     * Checks whether the NPC's real location should be updated to its final walking position.
      *
      * @return true if the real location should change, false otherwise
      */
-    public boolean changeRealLocation() {
+    public boolean changeRealLocation()
+    {
         return changeRealLocation;
     }
 
@@ -55,7 +54,8 @@ public class NpcStopWalkingEvent extends NpcWalkingEvent
      *
      * @param changeRealLocation true to apply the real location update
      */
-    public void setChangeRealLocation(boolean changeRealLocation) {
+    public void setChangeRealLocation(boolean changeRealLocation)
+    {
         this.changeRealLocation = changeRealLocation;
     }
 }

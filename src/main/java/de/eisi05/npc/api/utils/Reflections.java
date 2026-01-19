@@ -11,8 +11,7 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Utility class providing methods for reflective operations such as loading classes,
- * invoking methods, and accessing fields dynamically at runtime.
+ * Utility class providing methods for reflective operations such as loading classes, invoking methods, and accessing fields dynamically at runtime.
  */
 @SuppressWarnings("unchecked")
 public class Reflections
@@ -29,7 +28,8 @@ public class Reflections
         try
         {
             return Optional.of((Class<T>) Class.forName(path));
-        } catch(ClassNotFoundException e)
+        }
+        catch(ClassNotFoundException e)
         {
             e.printStackTrace();
             return Optional.empty();
@@ -56,7 +56,8 @@ public class Reflections
             Constructor<?> ctor = clazz.getDeclaredConstructors()[0];
             ctor.setAccessible(true);
             return Optional.of((T) ctor.newInstance(args));
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             e.printStackTrace();
             return Optional.empty();
@@ -73,7 +74,8 @@ public class Reflections
             Constructor<?> ctor = clazz.getDeclaredConstructor(argTypes);
             ctor.setAccessible(true);
             return Optional.of((T) ctor.newInstance(args));
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             e.printStackTrace();
             return Optional.empty();
@@ -121,8 +123,7 @@ public class Reflections
     /**
      * Checks if a given set of argument types is compatible with the parameter types of a method.
      * <p>
-     * This method supports both regular and varargs methods. It also handles primitive-to-wrapper
-     * type conversions (e.g., int to Integer).
+     * This method supports both regular and varargs methods. It also handles primitive-to-wrapper type conversions (e.g., int to Integer).
      *
      * @param args      The types of the provided arguments.
      * @param params    The types of the method's parameters.
@@ -176,7 +177,8 @@ public class Reflections
             Method method = findMethod(object.getClass(), methodName, args);
             method.setAccessible(true);
             return new ReflectionChain<>((V) method.invoke(object, args));
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -199,7 +201,31 @@ public class Reflections
             Method method = findMethod(clazz, methodName, args);
             method.setAccessible(true);
             return new ReflectionChain<>((V) method.invoke(null, args));
-        } catch(Exception e)
+        }
+        catch(Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Invokes a static method of a class given its fully qualified name.
+     *
+     * @param clazz      the class of the method
+     * @param methodName name of the static method
+     * @param args       method arguments
+     * @param <V>        return type of the method
+     * @return a ReflectionChain wrapping the method's return value
+     */
+    public static <V> @NotNull ReflectionChain<V> invokeStaticMethod(@NotNull Class<?> clazz, @NotNull String methodName, @Nullable Object... args)
+    {
+        try
+        {
+            Method method = findMethod(clazz, methodName, args);
+            method.setAccessible(true);
+            return new ReflectionChain<>((V) method.invoke(null, args));
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -222,7 +248,8 @@ public class Reflections
                 Field field = clazz.getDeclaredField(fieldName);
                 field.setAccessible(true);
                 return field;
-            } catch(NoSuchFieldException ignored)
+            }
+            catch(NoSuchFieldException ignored)
             {
                 clazz = clazz.getSuperclass();
             }
@@ -244,7 +271,8 @@ public class Reflections
         {
             Field field = findField(object.getClass(), fieldName);
             return new ReflectionChain<>((T) field.get(object));
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -265,7 +293,8 @@ public class Reflections
         {
             Field field = findField(clazz, fieldName);
             return (V) field.get(null);
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -286,7 +315,8 @@ public class Reflections
             Class<?> clazz = Class.forName(classPath);
             Field field = findField(clazz, fieldName);
             return (T) field.get(null);
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -305,7 +335,8 @@ public class Reflections
         {
             Field field = findField(object.getClass(), fieldName);
             field.set(object, value);
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -325,7 +356,8 @@ public class Reflections
             Class<?> clazz = Class.forName(classPath);
             Field field = findField(clazz, fieldName);
             field.set(null, value);
-        } catch(Exception e)
+        }
+        catch(Exception e)
         {
             throw new RuntimeException(e);
         }
@@ -367,7 +399,8 @@ public class Reflections
                 Method method = findMethod(value.getClass(), methodName, args);
                 method.setAccessible(true);
                 return new ReflectionChain<>((V) method.invoke(value, args));
-            } catch(Exception e)
+            }
+            catch(Exception e)
             {
                 throw new RuntimeException(e);
             }
@@ -387,7 +420,8 @@ public class Reflections
             {
                 Field field = findField(value.getClass(), fieldName);
                 return new ReflectionChain<>((V) field.get(value));
-            } catch(Exception e)
+            }
+            catch(Exception e)
             {
                 throw new RuntimeException(e);
             }

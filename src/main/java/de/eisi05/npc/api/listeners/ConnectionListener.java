@@ -15,6 +15,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
+
 public class ConnectionListener implements Listener
 {
     @EventHandler(priority = EventPriority.LOWEST)
@@ -29,15 +31,15 @@ public class ConnectionListener implements Listener
             @Override
             public void run()
             {
-                NpcManager.getList().forEach(npc ->
+                for(NPC npc : new ArrayList<>(NpcManager.getList()))
                 {
                     npc.showNPCToPlayer(event.getPlayer());
                     NpcSkin npcSkin = npc.getOption(NpcOption.SKIN);
                     if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN))
-                        return;
+                        continue;
 
                     Tasks.updateSkin(event.getPlayer(), npc, npcSkin);
-                });
+                }
             }
         }.runTaskLater(NpcApi.plugin, 10L);
     }
@@ -47,7 +49,12 @@ public class ConnectionListener implements Listener
     {
         PacketReader.uninject(event.getPlayer());
 
+        Tasks.placeholderCache.remove(event.getPlayer().getUniqueId());
+
         for(NPC npc : NpcManager.getList())
+        {
+            npc.nameCache.remove(event.getPlayer().getUniqueId());
             npc.hideNpcFromPlayer(event.getPlayer());
+        }
     }
 }

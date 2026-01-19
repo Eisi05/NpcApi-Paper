@@ -4,8 +4,11 @@ import com.mojang.datafixers.util.Either;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.ObjectSaver;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import org.bukkit.World;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.time.*;
@@ -17,17 +20,17 @@ import java.util.*;
 public class NpcManager
 {
     /**
-     * Stores serialized NPCs that should be loaded once their world becomes available.
-     * The key is the world UUID, and the value is a list of NPCs waiting to be deserialized.
+     * Stores serialized NPCs that should be loaded once their world becomes available. The key is the world UUID, and the value is a list of NPCs waiting to be
+     * deserialized.
      */
     private static final Map<UUID, List<NPC.SerializedNPC>> toLoadNPCs = new HashMap<>();
+
+    private static final Map<Integer, NPC> npcById = new HashMap<>();
 
     /**
      * Map storing the file name and the exception that occurred during loading.
      */
     public static Map<String, Exception> loadExceptions = new HashMap<>();
-
-    private static final List<NPC> listNPC = new ArrayList<>();
 
     /**
      * Adds an NPC to the manager's list.
@@ -36,17 +39,17 @@ public class NpcManager
      */
     public static void addNPC(@NotNull NPC npc)
     {
-        listNPC.add(npc);
+        npcById.put(((ServerPlayer) npc.getServerPlayer()).getId(), npc);
     }
 
     /**
-     * Returns the list of all managed NPCs.
+     * Returns the set of all managed NPCs.
      *
-     * @return the list of NPCs
+     * @return the set of NPCs
      */
-    public static @NotNull List<NPC> getList()
+    public static @NotNull Collection<NPC> getList()
     {
-        return listNPC;
+        return npcById.values();
     }
 
     /**
@@ -56,7 +59,13 @@ public class NpcManager
      */
     public static void removeNPC(@NotNull NPC npc)
     {
-        listNPC.remove(npc);
+        npcById.remove(((ServerPlayer) npc.getServerPlayer()).getId());
+        npcById.remove(((Entity) npc.getEntity()).getId());
+    }
+
+    public static void addID(int id, @NotNull NPC npc)
+    {
+        npcById.put(id, npc);
     }
 
     /**
@@ -64,7 +73,7 @@ public class NpcManager
      */
     public static void clear()
     {
-        listNPC.clear();
+        npcById.clear();
     }
 
     /**
@@ -75,12 +84,22 @@ public class NpcManager
      */
     public static @NotNull Optional<NPC> fromUUID(@NotNull UUID uuid)
     {
-        return listNPC.stream().filter(npc -> npc.getUUID().equals(uuid)).findFirst();
+        return getList().stream().filter(npc -> npc.getUUID().equals(uuid)).findFirst();
     }
 
     /**
-     * Loads NPCs from disk files in the plugin data folder.
-     * Logs the count of successfully and unsuccessfully loaded NPCs.
+     * Finds an NPC by its entity ID.
+     *
+     * @param id the entity ID to search for
+     * @return an Optional containing the NPC if found, empty otherwise
+     */
+    public static @Nullable Optional<NPC> fromId(int id)
+    {
+        return Optional.ofNullable(npcById.get(id));
+    }
+
+    /**
+     * Loads NPCs from disk files in the plugin data folder. Logs the count of successfully and unsuccessfully loaded NPCs.
      */
     public static void loadNPCs()
     {
@@ -102,7 +121,6 @@ public class NpcManager
             try
             {
                 NPC.SerializedNPC serializedNPC = new ObjectSaver(file1).read();
-
                 Either<NPC, UUID> npcEither = serializedNPC.deserializedNPC();
 
                 if(npcEither.right().isPresent())
@@ -116,7 +134,8 @@ public class NpcManager
 
                 loadNpc(npcEither.left().get());
                 successCounter++;
-            } catch(Exception e)
+            }
+            catch(Exception e)
             {
                 failCounter++;
                 exception = e;
@@ -161,7 +180,8 @@ public class NpcManager
                     continue;
 
                 loadNpc(either.left().get());
-            } catch(Exception e)
+            }
+            catch(Exception e)
             {
                 exception = e;
             }
@@ -172,8 +192,7 @@ public class NpcManager
     }
 
     /**
-     * Initializes the given NPC, applying editability rules based on its creation time
-     * and making it visible to all online players.
+     * Initializes the given NPC, applying editability rules based on its creation time and making it visible to all online players.
      *
      * @param npc the NPC to load and display
      */

@@ -11,8 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.Serializable;
 
 /**
- * Event triggered when a player interacts with an NPC.
- * Contains information about the player, the NPC, and the type of click action.
+ * Event triggered when a player interacts with an NPC. Contains information about the player, the NPC, and the type of click action.
  */
 public class NpcInteractEvent extends Event implements Serializable, Cancellable
 {

@@ -165,6 +165,11 @@ public class Path implements ConfigurationSerializable
                     waypoints == null ? null : waypoints.stream().map(SerializableLocation::toLocation).toList()).setName(name);
         }
 
+        public @NotNull String getName()
+        {
+            return name;
+        }
+
         private static class SerializableLocation implements Serializable
         {
             @Serial
