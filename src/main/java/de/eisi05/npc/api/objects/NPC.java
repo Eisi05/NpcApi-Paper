@@ -582,6 +582,9 @@ public class NPC extends NpcHolder
 
         packets.add(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(serverPlayer, true));
 
+        Arrays.stream(NpcOption.values()).filter(npcOption -> !npcOption.equals(NpcOption.ENABLED) && !npcOption.loadBefore())
+                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption, player), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
+
         NpcOption.ENABLED.getPacket(isEnabled(), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
 
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
