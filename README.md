@@ -27,6 +27,8 @@ See the in-repo wiki pages under:
 ## Installation
 Choose your preferred installation method based on your project needs:
 
+[!WARNING] Version 2.0.0-beta is currently not stable, use at your own risk! Last stable version is 1.21.x-21.
+
 ### Method 1: Plugin Dependency (Recommended)
 
 This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?loader=paper#download) to be installed as a separate plugin on the server.
