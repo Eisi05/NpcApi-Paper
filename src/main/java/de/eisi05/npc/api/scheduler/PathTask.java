@@ -273,9 +273,9 @@ public class PathTask extends BukkitRunnable
         ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(serverEntity.getId(), (byte) (loc.getYaw() * 256 / 360),
                 (byte) (loc.getPitch() * 256 / 360), true);
 
+        Vec3 vec = new Vec3(loc.toVector().getX(), loc.toVector().getY(), loc.toVector().getZ());
         ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverEntity.getId(),
-                new PositionMoveRotation(new Vec3(loc.toVector().toVector3f()), new Vec3(loc.toVector().toVector3f()), loc.getYaw(), loc.getPitch()),
-                Set.of(), true);
+                new PositionMoveRotation(vec, vec, loc.getYaw(), loc.getPitch()), Set.of(), true);
 
         npc.sendNpcMovePackets(teleport, head, viewers);
         npc.sendNpcBodyPackets(body, viewers);
@@ -480,8 +480,12 @@ public class PathTask extends BukkitRunnable
             return;
 
         ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket(serverEntity, (byte) (yaw * 256 / 360));
+
+        Vec3 currentVec = new Vec3(currentPos.getX(), currentPos.getY(), currentPos.getZ());
+        Vec3 movementVec = new Vec3(movement.getX(), movement.getY(), movement.getZ());
+
         ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverEntity.getId(),
-                new PositionMoveRotation(new Vec3(currentPos.toVector3f()), new Vec3(movement.toVector3f()), yaw, pitch), Set.of(), onGround);
+                new PositionMoveRotation(currentVec, movementVec, yaw, pitch), Set.of(), onGround);
 
         npc.sendNpcMovePackets(teleport, head, viewers);
     }
