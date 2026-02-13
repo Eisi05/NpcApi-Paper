@@ -1,5 +1,6 @@
 package de.eisi05.npc.api.pathfinding;
 
+import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.utils.Var;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -37,11 +38,11 @@ public class AStarPathfinder
         this.world = start.getWorld();
 
         Block startFloor = world.getBlockAt(start.getBlockX(), start.getBlockY() - 1, start.getBlockZ());
-        if(!isSafeFloor(startFloor))
+        if(NpcApi.config.checkValidPath() && !isSafeFloor(startFloor))
             throw new PathfindingUtils.PathfindingException("Start not on a valid floor: " + start);
 
         Block endFloor = world.getBlockAt(end.getBlockX(), end.getBlockY() - 1, end.getBlockZ());
-        if(!isSafeFloor(endFloor))
+        if(NpcApi.config.checkValidPath() && !isSafeFloor(endFloor))
             throw new PathfindingUtils.PathfindingException("End not on a valid floor: " + end);
 
         Node startNode = new Node(start.getBlockX(), start.getBlockY(), start.getBlockZ(), null);
