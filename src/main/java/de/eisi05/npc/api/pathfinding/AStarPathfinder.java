@@ -37,11 +37,13 @@ public class AStarPathfinder
         allNodes.clear();
         this.world = start.getWorld();
 
-        Block startFloor = world.getBlockAt(start.getBlockX(), start.getBlockY() - 1, start.getBlockZ());
+        int startOffset = Math.abs(start.getY() - start.getBlockY()) > 0 ? 0 : 1;
+        Block startFloor = world.getBlockAt(start.getBlockX(), start.getBlockY() - startOffset, start.getBlockZ());
         if(NpcApi.config.checkValidPath() && !isSafeFloor(startFloor))
             throw new PathfindingUtils.PathfindingException("Start not on a valid floor: " + start);
 
-        Block endFloor = world.getBlockAt(end.getBlockX(), end.getBlockY() - 1, end.getBlockZ());
+        int endOffset = Math.abs(end.getY() - end.getBlockY()) > 0 ? 0 : 1;
+        Block endFloor = world.getBlockAt(end.getBlockX(), end.getBlockY() - endOffset, end.getBlockZ());
         if(NpcApi.config.checkValidPath() && !isSafeFloor(endFloor))
             throw new PathfindingUtils.PathfindingException("End not on a valid floor: " + end);
 
