@@ -16,7 +16,9 @@ labels: enhancement, needs-triage
   - [ ] Spigot
   - [ ] Paper
   - [ ] Other (please specify):
-- **Server Version**: [e.g., 1.21.11]
+
+<!-- e.g., 1.21.11 -->
+- **Server Version**: 
 - **Using API/Plugin**: 
   - [ ] Using NpcAPI as a dependency
   - [ ] Using NpcAPI as a plugin
