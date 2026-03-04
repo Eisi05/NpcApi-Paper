@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
@@ -20,10 +21,8 @@ import java.util.function.Consumer;
 public class Var
 {
     /**
-     * Performs an unchecked cast of an object to a specified type.
-     * This method can be used to bypass Java's type checking at compile time,
-     * but it comes with the risk of {@link ClassCastException} at runtime if the
-     * object is not an instance of the target type.
+     * Performs an unchecked cast of an object to a specified type. This method can be used to bypass Java's type checking at compile time, but it comes with
+     * the risk of {@link ClassCastException} at runtime if the object is not an instance of the target type.
      *
      * @param o   The object to cast. Can be {@code null}.
      * @param <T> The target type to which the object will be cast.
@@ -128,31 +127,39 @@ public class Var
     {
         byte flags = 0;
 
-        if(nbt.getBooleanOr("HasVisualFire", false))
+        if(getBoolean(nbt, "HasVisualFire"))
             flags |= 0x01;
 
-        if(nbt.getBooleanOr("IsCrouching", false))
+        if(getBoolean(nbt, "IsCrouching"))
             flags |= 0x02;
 
-        if(nbt.getBooleanOr("IsRiding", false))
+        if(getBoolean(nbt, "IsRiding"))
             flags |= 0x04;
 
-        if(nbt.getBooleanOr("IsSprinting", false))
+        if(getBoolean(nbt, "IsSprinting"))
             flags |= 0x08;
 
-        if(nbt.getBooleanOr("IsSwimming", false))
+        if(getBoolean(nbt, "IsSwimming"))
             flags |= 0x10;
 
-        if(nbt.getBooleanOr("IsInvisible", false))
+        if(getBoolean(nbt, "IsInvisible"))
             flags |= 0x20;
 
-        if(nbt.getBooleanOr("IsGlowing", false))
+        if(getBoolean(nbt, "IsGlowing"))
             flags |= 0x40;
 
-        if(nbt.getBooleanOr("IsFallFlying", false))
+        if(getBoolean(nbt, "IsFallFlying"))
             flags |= (byte) 0x80;
 
         return flags;
+    }
+
+    private static boolean getBoolean(@NotNull CompoundTag nbt, @NotNull String name)
+    {
+        Object o = Reflections.invokeMethod(nbt, "getBoolean", name).get();
+        if(o instanceof Optional<?> optional)
+            return optional.map(o1 -> (boolean) o1).orElse(false);
+        return (boolean) o;
     }
 
     /**
@@ -183,7 +190,10 @@ public class Var
     {
         byte flags = 0;
 
-        if(entity.getFireTicks() > 0 || entity.getVisualFire().toBooleanOrElse(false))
+        boolean isFire = Versions.isCurrentVersionSmallerThan(Versions.V1_21_2) ? (boolean) Reflections.invokeMethod(entity, "isVisualFire").get() :
+                entity.getVisualFire().toBooleanOrElse(false);
+
+        if(entity.getFireTicks() > 0 || isFire)
             flags |= 0x01;
 
         if(entity instanceof Player player && player.isSneaking())
