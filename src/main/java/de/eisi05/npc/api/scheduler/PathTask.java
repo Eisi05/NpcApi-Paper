@@ -8,7 +8,7 @@ import de.eisi05.npc.api.utils.Var;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
@@ -43,7 +43,7 @@ public class PathTask extends BukkitRunnable
     private final Path path;
     private final List<Location> pathPoints;
     private final Player[] viewers;
-    private final ServerPlayer serverEntity;
+    private final Entity serverEntity;
     private final Consumer<WalkingResult> callback;
 
     // Settings
@@ -79,7 +79,7 @@ public class PathTask extends BukkitRunnable
         this.currentPos = npc.getLocation().toVector();
         this.previousYaw = npc.getLocation().getYaw();
         this.previousMoveDir = npc.getLocation().getDirection();
-        this.serverEntity = (ServerPlayer) npc.getServerPlayer();
+        this.serverEntity = (Entity) npc.getEntity();
     }
 
     /**

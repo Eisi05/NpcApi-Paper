@@ -650,6 +650,33 @@ public class NPC extends NpcHolder
     }
 
     /**
+     * Rotates the NPC's head to the specified yaw and pitch angles. This sends rotation packets to all current viewers.
+     *
+     * @param yaw   The horizontal rotation angle in degrees (0-360)
+     * @param pitch The vertical rotation angle in degrees (-90 to 90)
+     */
+    public void rotateHead(float yaw, float pitch)
+    {
+        rotateHead(yaw, pitch, this.viewers.stream().map(Bukkit::getPlayer).filter(Objects::nonNull).toList());
+    }
+
+    /**
+     * Rotates the NPC's head to the specified yaw and pitch angles. This sends rotation packets only to the specified viewers.
+     *
+     * @param yaw     The horizontal rotation angle in degrees (0-360)
+     * @param pitch   The vertical rotation angle in degrees (-90 to 90)
+     * @param viewers The list of players who should see the rotation. Must not be null.
+     */
+    public void rotateHead(float yaw, float pitch, List<Player> viewers)
+    {
+        ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket(entity, (byte) (yaw * 256 / 360));
+        ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (yaw * 256 / 360), (byte) (pitch * 256 / 360), true);
+
+        sendNpcMovePackets(null, head, viewers.toArray(new Player[0]));
+        sendNpcBodyPackets(body, viewers.toArray(new Player[0]));
+    }
+
+    /**
      * Makes the NPC look at a specific player. This calculates the required yaw and pitch and sends update packets to the viewing player.
      *
      * @param viewer the player the NPC should look at. Must not be null.
