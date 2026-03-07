@@ -723,7 +723,7 @@ public class NPC extends NpcHolder
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
                                       @Nullable Consumer<WalkingResult> onEnd)
     {
-        return walkTo(path, walkSpeed, changeRealLocation, onEnd, (Player[]) null);
+        return walkTo(path, walkSpeed, changeRealLocation, onEnd, null);
     }
 
     /**
@@ -738,9 +738,9 @@ public class NPC extends NpcHolder
      * @return The {@link BukkitTask} representing the movement task.
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
-                                      boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, @NotNull Player... viewers)
+                                      boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, @Nullable List<Player> viewers)
     {
-        viewers = viewers == null ? this.viewers.stream().map(Bukkit::getPlayer).filter(Objects::nonNull).toArray(Player[]::new) : viewers;
+        viewers = viewers == null || viewers.isEmpty() ? this.viewers.stream().map(Bukkit::getPlayer).filter(Objects::nonNull).toList() : viewers;
 
         for(Player player : viewers)
         {
@@ -757,7 +757,7 @@ public class NPC extends NpcHolder
 
         PathTask pathTask = new PathTask.Builder(this, path)
                 .speed(event.getWalkSpeed())
-                .viewers(viewers)
+                .viewers(viewers.toArray(new Player[0]))
                 .updateRealLocation(event.isChangeRealLocation())
                 .callback(onEnd).build();
 
