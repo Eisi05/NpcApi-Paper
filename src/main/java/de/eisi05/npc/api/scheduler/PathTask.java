@@ -521,7 +521,6 @@ public class PathTask extends BukkitRunnable
             Location loc = new Location(world, currentPos.getX(), currentPos.getY(), currentPos.getZ());
             npc.changeRealLocation(loc, viewers);
         }
-
     }
 
     /**
