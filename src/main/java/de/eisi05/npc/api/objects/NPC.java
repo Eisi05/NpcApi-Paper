@@ -51,6 +51,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.scoreboard.Team;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -572,6 +573,11 @@ public class NPC extends NpcHolder
         if(!viewers.contains(player.getUniqueId()))
             viewers.add(player.getUniqueId());
 
+        ServerPlayer wrappedServerPlayer = ((CraftPlayer) player).getHandle();
+        Team team = player.getScoreboard().getEntryTeam(player.getName());
+        wrappedServerPlayer.listName = team == null ? wrappedServerPlayer.getName() : CraftChatMessage.fromJSON(
+                JSONComponentSerializer.json().serialize(team.prefix().append(player.name().color(team.color())).append(team.suffix())));
+
         List<Packet<?>> packets = new ArrayList<>();
 
         Arrays.stream(NpcOption.values()).filter(NpcOption::loadBefore)
@@ -587,7 +593,12 @@ public class NPC extends NpcHolder
 
         NpcOption.ENABLED.getPacket(isEnabled(), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
 
-        ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
+        packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, wrappedServerPlayer));
+
+        if(!Versions.isCurrentVersionSmallerThan(Versions.V1_19_3))
+            packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED, wrappedServerPlayer));
+
+        ServerGamePacketListenerImpl connection = wrappedServerPlayer.connection;
         packets.forEach(connection::send);
 
         Bukkit.getPluginManager().callEvent(new NpcPostShowEvent(player, this, npcPreShowEvent.wasViewer()));
