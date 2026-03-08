@@ -339,6 +339,7 @@ public class NpcOption<T, S extends Serializable>
         boolean modified = TeamManager.exists(player, teamName);
         PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, teamName);
         wrappedPlayerTeam.setSeeFriendlyInvisibles(true);
+        wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.HIDE_FOR_OWN_TEAM);
 
         var teamPacket = (Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified);
 
@@ -349,19 +350,30 @@ public class NpcOption<T, S extends Serializable>
 
         byte modifier = 0x20;
 
+        List<Packet<? super ClientGamePacketListener>> packets = new ArrayList<>(List.of(teamPacket));
+
+        var removeNpc = (Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, npc.getGameProfileName(),
+                ClientboundSetPlayerTeamPacket.Action.REMOVE);
+
+        if(wrappedPlayerTeam.getPlayers().remove(npc.getGameProfileName()))
+            packets.add(removeNpc);
+
         if(visibility == NpcVisibility.FULLY_VISIBLE)
         {
             entityData.set(accessor, (byte) (flags & ~modifier));
-            return new ClientboundBundlePacket(
-                    List.of(teamPacket, (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), entityData)));
+            packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), entityData));
+            return new ClientboundBundlePacket(packets);
         }
 
         entityData.set(accessor, (byte) (flags | modifier));
 
         if(visibility == NpcVisibility.INVISIBLE)
-            return new ClientboundBundlePacket(
-                    List.of(teamPacket, (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), entityData)));
+        {
+            packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), entityData));
+            return new ClientboundBundlePacket(packets);
+        }
 
+        wrappedPlayerTeam.getPlayers().add(npc.getGameProfileName());
         var addNpc = (Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, npc.getGameProfileName(),
                 ClientboundSetPlayerTeamPacket.Action.ADD);
         var addPlayer = (Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam,
@@ -599,6 +611,11 @@ public class NpcOption<T, S extends Serializable>
                 boolean modified = TeamManager.exists(player, teamName);
                 PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, teamName);
                 wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.NEVER);
+
+                if(!teamName.startsWith("trans"))
+                    wrappedPlayerTeam.getPlayers().add(npc.getGameProfileName());
+                else
+                    ((PlayerTeam) TeamManager.create(player, npc.getGameProfileName())).getPlayers().remove(npc.getGameProfileName());
 
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified));
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, npc.getGameProfileName(),

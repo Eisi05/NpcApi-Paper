@@ -631,7 +631,6 @@ public class NPC extends NpcHolder
         if(TeamManager.exists(player, getGameProfileName()))
         {
             PlayerTeam team = (PlayerTeam) TeamManager.create(player, getGameProfileName());
-            connection.send((Packet<?>) SetPlayerTeamPacket.createPlayerPacket(team, getGameProfileName(), ClientboundSetPlayerTeamPacket.Action.REMOVE));
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
             TeamManager.clear(player.getUniqueId(), getGameProfileName());
         }
