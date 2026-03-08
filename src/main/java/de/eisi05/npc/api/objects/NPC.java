@@ -20,6 +20,7 @@ import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.network.Connection;
@@ -575,8 +576,10 @@ public class NPC extends NpcHolder
 
         ServerPlayer wrappedServerPlayer = ((CraftPlayer) player).getHandle();
         Team team = player.getScoreboard().getEntryTeam(player.getName());
+
         wrappedServerPlayer.listName = team == null ? wrappedServerPlayer.getName() : CraftChatMessage.fromJSON(
-                JSONComponentSerializer.json().serialize(team.prefix().append(player.name().color(team.color())).append(team.suffix())));
+                JSONComponentSerializer.json().serialize(team.prefix().append(player.name().color(team.hasColor() ? team.color() : NamedTextColor.WHITE))
+                        .append(team.suffix())));
 
         List<Packet<?>> packets = new ArrayList<>();
 
