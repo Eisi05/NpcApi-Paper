@@ -40,7 +40,6 @@ public class NpcManager
     public static void addNPC(@NotNull NPC npc)
     {
         npcById.put(((ServerPlayer) npc.getServerPlayer()).getId(), npc);
-        npcById.put(((Entity) npc.getEntity()).getId(), npc);
     }
 
     /**

@@ -115,8 +115,7 @@ public class PacketReader
 
         int id = interactPacket.getEntityId();
 
-        NPC npc = NpcManager.getList().stream().filter(npc1 -> ((ServerPlayer) npc1.getServerPlayer()).getId() == id).findFirst().orElse(null);
-
+        NPC npc = NpcManager.fromId(id).orElse(null);
         if(npc == null)
             return;
 
