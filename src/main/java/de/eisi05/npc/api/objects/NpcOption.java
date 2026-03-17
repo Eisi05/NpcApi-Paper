@@ -46,6 +46,7 @@ import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
+import org.bukkit.craftbukkit.scoreboard.CraftScoreboard;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
@@ -220,20 +221,15 @@ public class NpcOption<T, S extends Serializable>
 
                 CommonListenerCookie commonListenerCookie;
                 if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
-                    commonListenerCookie = Reflections.getInstanceFirstConstructor(CommonListenerCookie.class,
+                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
                 else
-                    commonListenerCookie = Reflections.getInstanceFirstConstructor(CommonListenerCookie.class,
+                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
                             new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
 
-                if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-                    npcServerPlayer.connection = new ServerGamePacketListenerImpl(
-                            (MinecraftServer) Reflections.invokeMethod(npcServerPlayer, "getServer").get(),
-                            new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
-                else
-                    npcServerPlayer.connection = new ServerGamePacketListenerImpl(npcServerPlayer.level().getServer(),
-                            new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
+                npcServerPlayer.connection = new ServerGamePacketListenerImpl(((CraftServer) Bukkit.getServer()).getServer(),
+                        new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
 
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, npcServerPlayer);
             });
@@ -336,8 +332,10 @@ public class NpcOption<T, S extends Serializable>
             visibility -> visibility, visibility -> visibility, (visibility, npc, player) ->
     {
         String teamName = "trans-" + player.getEntityId();
-        boolean modified = TeamManager.exists(player, teamName);
-        PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, teamName);
+        PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
+
+        boolean modified = TeamManager.exists(player, teamName) || playerTeam != null;
+        PlayerTeam wrappedPlayerTeam = playerTeam != null ? playerTeam : (PlayerTeam) TeamManager.create(player, teamName);
         wrappedPlayerTeam.setSeeFriendlyInvisibles(true);
         wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.HIDE_FOR_OWN_TEAM);
 
@@ -607,9 +605,13 @@ public class NpcOption<T, S extends Serializable>
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.serverPlayer.getId()));
                 packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
 
+                PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
+                TeamManager.create(player,  npc.getGameProfileName());
+
                 String teamName = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? "trans-" + player.getEntityId() : npc.getGameProfileName();
-                boolean modified = TeamManager.exists(player, teamName);
-                PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, teamName);
+                boolean modified = TeamManager.exists(player, teamName) || (playerTeam != null && npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT);
+                PlayerTeam wrappedPlayerTeam = playerTeam != null && npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? playerTeam :
+                        (PlayerTeam) TeamManager.create(player, teamName);
                 wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.NEVER);
 
                 if(!teamName.startsWith("trans"))

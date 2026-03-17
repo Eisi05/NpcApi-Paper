@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -20,6 +21,8 @@ import java.util.function.Consumer;
 
 public class Var
 {
+    public static final boolean obfuscated = Arrays.stream(Entity.class.getDeclaredMethods()).noneMatch(method -> method.getName().equals("level"));
+
     /**
      * Performs an unchecked cast of an object to a specified type. This method can be used to bypass Java's type checking at compile time, but it comes with
      * the risk of {@link ClassCastException} at runtime if the object is not an instance of the target type.
@@ -36,7 +39,9 @@ public class Var
 
     public static void moveEntity(Entity entity, double x, double y, double z, float yaw, float pitch)
     {
-        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
+        if(obfuscated)
+            Reflections.invokeMethod(entity, "a", x, y, z, yaw, pitch);
+        else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
             Reflections.invokeMethod(entity, "absMoveTo", x, y, z, yaw, pitch);
         else
             Reflections.invokeMethod(entity, "snapTo", x, y, z, yaw, pitch);
@@ -44,6 +49,24 @@ public class Var
 
     public static ServerLevel getServerLevel(ServerPlayer player)
     {
+        if(obfuscated)
+        {
+            String methodName = switch(Versions.getVersion())
+            {
+                case V1_21_11 -> "ao";
+                case V1_21_9 -> "an";
+                case V1_21_6 -> "ai";
+                case V1_21_5, V1_21_2, V1_21_4 -> "cU";
+                case V1_21 -> "cN";
+                default -> null;
+            };
+
+            if(methodName == null)
+                throw new RuntimeException("Cannot get level of player!");
+
+            return (ServerLevel) Reflections.invokeMethod(player, methodName).get();
+        }
+
         return (ServerLevel) Reflections.invokeMethod(player, "level").get();
     }
 
@@ -51,7 +74,7 @@ public class Var
     {
         ServerEntity serverEntity;
         if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
-            serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
+            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
                     new Consumer<Packet<?>>()
                     {
                         @Override
@@ -68,7 +91,7 @@ public class Var
                     },
                     Set.of()).orElseThrow();
         else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-            serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
+            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
                     new Consumer<Packet<?>>()
                     {
                         @Override
@@ -98,7 +121,7 @@ public class Var
                         }
                     }, Set.of()).orElseThrow();
         else
-            serverEntity = Reflections.getInstanceFirstConstructor(ServerEntity.class, level, entity, 0, false,
+            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
                     null, Set.of()).orElseThrow();
 
         return serverEntity;
@@ -156,6 +179,9 @@ public class Var
 
     private static boolean getBoolean(@NotNull CompoundTag nbt, @NotNull String name)
     {
+        if(obfuscated)
+            return (boolean) Reflections.invokeMethod(nbt, Versions.isCurrentVersionSmallerThan(Versions.V1_21_5) ? "q" : "b", name).get();
+
         Object o = Reflections.invokeMethod(nbt, "getBoolean", name).get();
         if(o instanceof Optional<?> optional)
             return optional.map(o1 -> (boolean) o1).orElse(false);
@@ -190,8 +216,15 @@ public class Var
     {
         byte flags = 0;
 
-        boolean isFire = Versions.isCurrentVersionSmallerThan(Versions.V1_21_2) ? (boolean) Reflections.invokeMethod(entity, "isVisualFire").get() :
-                entity.getVisualFire().toBooleanOrElse(false);
+        boolean isFire = false;
+        try
+        {
+            isFire = Versions.isCurrentVersionSmallerThan(Versions.V1_21_2) ? (boolean) Reflections.invokeMethod(entity, "isVisualFire").get() :
+                    entity.getVisualFire().toBooleanOrElse(false);
+        }
+        catch(Exception e)
+        {
+        }
 
         if(entity.getFireTicks() > 0 || isFire)
             flags |= 0x01;

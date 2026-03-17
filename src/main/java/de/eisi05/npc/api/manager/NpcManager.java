@@ -6,6 +6,7 @@ import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.ObjectSaver;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -99,6 +100,16 @@ public class NpcManager
     }
 
     /**
+     * Returns a flattened list of all serialized NPCs that are scheduled to be loaded.
+     *
+     * @return a non-null list containing all {@link NPC.SerializedNPC} instances across all worlds
+     */
+    public static @NotNull List<NPC.SerializedNPC> getToLoadNPCs()
+    {
+        return toLoadNPCs.values().stream().flatMap(Collection::stream).toList();
+    }
+
+    /**
      * Loads NPCs from disk files in the plugin data folder. Logs the count of successfully and unsuccessfully loaded NPCs.
      */
     public static void loadNPCs()
@@ -189,6 +200,51 @@ public class NpcManager
 
         if(exception != null && NpcApi.config.debug())
             exception.printStackTrace();
+    }
+
+    /**
+     * Attempts to load the given serialized NPC, optionally overriding its location.
+     * <p>
+     * The NPC is removed from the internal loading map before attempting deserialization. If a non-null location is provided, it will replace the NPC's stored
+     * location. If deserialization succeeds, the NPC is loaded and {@code true} is returned. Otherwise, {@code false} is returned.
+     * <p>
+     * Any exceptions during deserialization are caught and optionally printed if debug mode is enabled.
+     *
+     * @param serializedNPC the serialized NPC to load, must not be null
+     * @param location      an optional location to override the NPC's position, may be null
+     * @return {@code true} if the NPC was successfully loaded, otherwise {@code false}
+     */
+    public static boolean loadSerializedNPC(@NotNull NPC.SerializedNPC serializedNPC, @Nullable Location location)
+    {
+        toLoadNPCs.computeIfPresent(
+                serializedNPC.getWorld(),
+                (k, list) ->
+                {
+                    list.remove(serializedNPC);
+                    return list.isEmpty() ? null : list;
+                }
+        );
+
+        if(location != null)
+            serializedNPC.setLocation(location);
+
+        try
+        {
+            Either<NPC, ?> either = serializedNPC.deserializedNPC();
+
+            if(either.left().isEmpty())
+                return false;
+
+            loadNpc(either.left().get());
+            return true;
+        }
+        catch(Exception e)
+        {
+            if(NpcApi.config.debug())
+                e.printStackTrace();
+
+            return false;
+        }
     }
 
     /**

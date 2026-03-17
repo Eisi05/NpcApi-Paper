@@ -129,12 +129,12 @@ public class PacketReader
             return;
         }
 
-        var action = Reflections.getField(interactPacket, "action");
+        var action = Reflections.getField(interactPacket, Var.obfuscated ? "c" : "action");
 
         if(action.get().getClass().getDeclaredFields().length == 2)
             return;
 
-        InteractionHand hand = (InteractionHand) action.thanGetField("hand").get();
+        InteractionHand hand = (InteractionHand) action.thanGetField(Var.obfuscated ? "a" : "hand").get();
 
         if(hand == InteractionHand.MAIN_HAND)
         {

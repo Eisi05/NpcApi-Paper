@@ -953,14 +953,13 @@ public class NPC extends NpcHolder
     {
         @Serial
         private static final long serialVersionUID = 1L;
-        private final @NotNull UUID world;
-        private final double x, y, z;
-        private final float yaw, pitch;
         private final @NotNull UUID id;
         private final @NotNull Serializable name;
         private final @Nullable NpcClickAction clickEvent;
         private final @NotNull Instant createdAt;
-
+        private @NotNull UUID world;
+        private double x, y, z;
+        private float yaw, pitch;
         /**
          * Legacy options storage (pre-2.0.0).
          *
@@ -1109,6 +1108,53 @@ public class NPC extends NpcHolder
 
             npc.createdAt = createdAt == null ? Instant.now() : createdAt;
             return Either.left(npc);
+        }
+
+        /**
+         * Gets the unique identifier of this NPC.
+         *
+         * @return the non-null UUID of the NPC
+         */
+        public @NotNull UUID getId()
+        {
+            return id;
+        }
+
+        /**
+         * Gets the UUID of the world this NPC belongs to.
+         *
+         * @return the non-null world UUID
+         */
+        public @NotNull UUID getWorld()
+        {
+            return world;
+        }
+
+        /**
+         * Gets the name of this NPC if it is of type {@link NpcName}.
+         *
+         * @return the NPC name, or null if the name is not an instance of {@link NpcName}
+         */
+        public @Nullable NpcName getName()
+        {
+            return name instanceof NpcName npcName ? npcName : null;
+        }
+
+        /**
+         * Updates this NPC's location based on the given {@link Location}.
+         * <p>
+         * This sets the position (x, y, z) and orientation (yaw, pitch).
+         *
+         * @param location the non-null location to copy values from
+         */
+        public void setLocation(@NotNull Location location)
+        {
+            this.world = location.getWorld().getUID();
+            this.x = location.getX();
+            this.y = location.getY();
+            this.z = location.getZ();
+            this.yaw = location.getYaw();
+            this.pitch = location.getPitch();
         }
     }
 }

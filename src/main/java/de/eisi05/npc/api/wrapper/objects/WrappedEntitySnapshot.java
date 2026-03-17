@@ -126,33 +126,35 @@ public class WrappedEntitySnapshot implements Serializable
      * @return A wrapped entity instance
      * @throws RuntimeException If the entity could not be created
      */
-    @SuppressWarnings("unchecked")
     public @NotNull net.minecraft.world.entity.Entity create(@NotNull World world, @NotNull NPC npc)
     {
+        String methodName = Var.obfuscated ? "a" : "loadEntityRecursive";
+
         net.minecraft.world.entity.Entity entity;
+        CompoundTag data = getData();
         if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_2))
         {
-            getData().putString("id", type.toLowerCase());
+            data.putString("id", type.toLowerCase());
 
-            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, "loadEntityRecursive",
-                    getData(), ((CraftWorld) world).getHandle(), Function.identity()).get();
+            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, methodName,
+                    data, ((CraftWorld) world).getHandle(), Function.identity()).get();
         }
         else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
         {
-            getData().putString("id", type.toLowerCase());
+            data.putString("id", type.toLowerCase());
 
-            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, "loadEntityRecursive",
-                    getData(), ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD, Function.identity()).get();
+            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, methodName,
+                    data, ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD, Function.identity()).get();
         }
         else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_11))
-            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, "loadEntityRecursive",
-                    CraftEntityType.bukkitToMinecraft(getType()), getData(), ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD,
+            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, methodName,
+                    CraftEntityType.bukkitToMinecraft(getType()), data, ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD,
                     Function.identity()).get();
         else
-            entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(CraftEntityType.bukkitToMinecraft(getType()), getData(),
+            entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(CraftEntityType.bukkitToMinecraft(getType()), data,
                     ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD, EntityProcessor.NOP);
 
-        npc.data = getData().toString();
+        npc.data = data.toString();
         return entityFunction == null ? entity : ((CraftEntity) entityFunction.apply(Var.unsafeCast(entity.getBukkitEntity()))).getHandle();
     }
 }

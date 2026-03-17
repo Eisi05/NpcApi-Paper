@@ -49,13 +49,28 @@ public class Reflections
         return getClass(path).flatMap(objectClass -> getInstance((Class<T>) objectClass, args));
     }
 
-    public static <T> @NotNull Optional<T> getInstanceFirstConstructor(@NotNull Class<T> clazz, @Nullable Object... args)
+    public static <T> @NotNull Optional<T> tryFindConstructor(@NotNull Class<T> clazz, @Nullable Object... args)
     {
         try
         {
-            Constructor<?> ctor = clazz.getDeclaredConstructors()[0];
-            ctor.setAccessible(true);
-            return Optional.of((T) ctor.newInstance(args));
+            Exception exception = null;
+            for(Constructor<?> ctor : clazz.getDeclaredConstructors())
+            {
+                try
+                {
+                    ctor.setAccessible(true);
+                    return Optional.of((T) ctor.newInstance(args));
+                }
+                catch(Exception e)
+                {
+                    exception = e;
+                }
+            }
+
+            if(exception != null)
+                throw exception;
+
+            return Optional.empty();
         }
         catch(Exception e)
         {
