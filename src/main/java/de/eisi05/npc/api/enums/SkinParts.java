@@ -6,8 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.Serializable;
 
 /**
- * Represents the different customizable skin parts of an NPC,
- * each associated with a unique byte value and an icon material.
+ * Represents the different customizable skin parts of an NPC, each associated with a unique byte value and an icon material.
  */
 public enum SkinParts implements Serializable
 {

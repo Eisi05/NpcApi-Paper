@@ -8,35 +8,38 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Called when an NPC is about to begin walking along a specified {@link Path}.
  * <p>
- * This event is fired before the walking actually starts, allowing listeners to
- * modify walking parameters such as speed or whether the NPC's real location
- * should be updated. The event can also be cancelled to prevent the NPC from
- * starting to walk.
+ * This event is fired before the walking actually starts, allowing listeners to modify walking parameters such as speed or whether the NPC's real location
+ * should be updated. The event can also be canceled to prevent the NPC from starting to walk.
  */
 public class NpcStartWalkingEvent extends NpcWalkingEvent implements Cancellable
 {
-    /** The path the NPC will follow. */
+    /**
+     * The path the NPC will follow.
+     */
     private final Path path;
 
-    /** The walking speed the NPC will use. */
+    /**
+     * The walking speed the NPC will use.
+     */
     private double walkSpeed;
 
     /**
-     * Whether the NPC's actual (server-side) location should be updated.
-     * If false, only the visual movement may be applied.
+     * Whether the NPC's actual (server-side) location should be updated. If false, only the visual movement may be applied.
      */
     private boolean changeRealLocation;
 
-    /** Whether this event has been cancelled. */
+    /**
+     * Whether this event has been canceled.
+     */
     private boolean cancelled = false;
 
     /**
      * Creates a new {@code NpcStartWalkingEvent}.
      *
-     * @param npc                 the NPC that is about to start walking
-     * @param path                the path the NPC will follow
-     * @param walkSpeed           the speed at which the NPC will walk
-     * @param changeRealLocation  whether the NPC's real location should change during walking
+     * @param npc                the NPC that is about to start walking
+     * @param path               the path the NPC will follow
+     * @param walkSpeed          the speed at which the NPC will walk
+     * @param changeRealLocation whether the NPC's real location should change during walking
      */
     public NpcStartWalkingEvent(@NotNull NPC npc, @NotNull Path path, double walkSpeed, boolean changeRealLocation)
     {
@@ -52,7 +55,8 @@ public class NpcStartWalkingEvent extends NpcWalkingEvent implements Cancellable
      *
      * @return the walking path
      */
-    public @NotNull Path getPath() {
+    public @NotNull Path getPath()
+    {
         return path;
     }
 
@@ -61,7 +65,8 @@ public class NpcStartWalkingEvent extends NpcWalkingEvent implements Cancellable
      *
      * @return the walking speed
      */
-    public double getWalkSpeed() {
+    public double getWalkSpeed()
+    {
         return walkSpeed;
     }
 
@@ -70,7 +75,8 @@ public class NpcStartWalkingEvent extends NpcWalkingEvent implements Cancellable
      *
      * @param walkSpeed the new walking speed
      */
-    public void setWalkSpeed(double walkSpeed) {
+    public void setWalkSpeed(double walkSpeed)
+    {
         this.walkSpeed = walkSpeed;
     }
 
@@ -79,7 +85,8 @@ public class NpcStartWalkingEvent extends NpcWalkingEvent implements Cancellable
      *
      * @return true if the real location changes, false otherwise
      */
-    public boolean isChangeRealLocation() {
+    public boolean isChangeRealLocation()
+    {
         return changeRealLocation;
     }
 
@@ -88,19 +95,26 @@ public class NpcStartWalkingEvent extends NpcWalkingEvent implements Cancellable
      *
      * @param changeRealLocation true to update the real location
      */
-    public void setChangeRealLocation(boolean changeRealLocation) {
+    public void setChangeRealLocation(boolean changeRealLocation)
+    {
         this.changeRealLocation = changeRealLocation;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
-    public boolean isCancelled() {
+    public boolean isCancelled()
+    {
         return cancelled;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
-    public void setCancelled(boolean cancel) {
+    public void setCancelled(boolean cancel)
+    {
         this.cancelled = cancel;
     }
 }

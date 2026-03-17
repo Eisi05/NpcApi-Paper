@@ -8,6 +8,8 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 
+import java.util.ArrayList;
+
 public class WorldLoadListener implements Listener
 {
     @EventHandler
@@ -22,7 +24,7 @@ public class WorldLoadListener implements Listener
         int chunkX = event.getChunk().getX();
         int chunkZ = event.getChunk().getZ();
 
-        NpcManager.getList()
+        new ArrayList<>(NpcManager.getList())
                 .stream()
                 .filter(npc -> npc.getLocation().getWorld().getUID().equals(event.getChunk().getWorld().getUID()))
                 .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
@@ -35,7 +37,7 @@ public class WorldLoadListener implements Listener
         int chunkX = event.getChunk().getX();
         int chunkZ = event.getChunk().getZ();
 
-        NpcManager.getList()
+        new ArrayList<>(NpcManager.getList())
                 .stream()
                 .filter(npc -> npc.getLocation().getWorld().getUID().equals(event.getChunk().getWorld().getUID()))
                 .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))

@@ -118,7 +118,6 @@ public final class NpcApi
 
         NpcManager.loadExceptions.clear();
         npcApi = null;
-        plugin = null;
     }
 
     /**
