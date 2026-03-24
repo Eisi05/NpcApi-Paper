@@ -84,7 +84,7 @@ body:
     id: logs
     attributes:
       label: Error Logs
-      description: Paste any error logs here
+      description: Paste any error logs here. It might be helpful to run `/npc config debug true` and `/npc config reload` to see an error message in the console.
       render: text
   - type: textarea
     id: media
