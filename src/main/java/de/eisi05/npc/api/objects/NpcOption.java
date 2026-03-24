@@ -401,12 +401,11 @@ public class NpcOption<T, S extends Serializable>
                     return (Packet<?>) SetEntityDataPacket.create(npc.entity.getId(), entityData);
                 }
 
-                String teamName = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? "trans-" + player.getEntityId() : npc.getGameProfileName();
-                boolean modified = TeamManager.exists(player, teamName);
-                PlayerTeam team = (PlayerTeam) TeamManager.create(player, teamName);
+                var teamPair = getTeam(player, npc);
+                PlayerTeam team = teamPair.getFirst();
                 team.setColor(ChatFormatting.getByCode(color.getColorCode()));
 
-                var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !modified);
+                var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getSecond());
 
                 entityData.set(accessor, (byte) (flags | modifier));
 
@@ -428,13 +427,10 @@ public class NpcOption<T, S extends Serializable>
     public static final NpcOption<Boolean, Boolean> COLLISION = new NpcOption<>("collision", true,
             aBoolean -> aBoolean, aBoolean -> aBoolean, (collision, npc, player) ->
     {
-        String teamName = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? "trans-" + player.getEntityId() : npc.getGameProfileName();
-        boolean modified = TeamManager.exists(player, teamName);
-        PlayerTeam wrappedPlayerTeam = (PlayerTeam) TeamManager.create(player, teamName);
-
-        wrappedPlayerTeam.setCollisionRule(collision ? Team.CollisionRule.ALWAYS : Team.CollisionRule.NEVER);
-
-        return (Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified);
+        var teamPair = getTeam(player, npc);
+        PlayerTeam team = teamPair.getFirst();
+        team.setCollisionRule(collision ? Team.CollisionRule.ALWAYS : Team.CollisionRule.NEVER);
+        return (Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getSecond());
     });
 
     /**
@@ -597,24 +593,19 @@ public class NpcOption<T, S extends Serializable>
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.serverPlayer.getId()));
                 packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
 
-                PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
-                TeamManager.create(player, npc.getGameProfileName());
+                var teamPair = getTeam(player, npc);
+                PlayerTeam team = teamPair.getFirst();
+                team.setNameTagVisibility(Team.Visibility.NEVER);
 
-                String teamName = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? "trans-" + player.getEntityId() : npc.getGameProfileName();
-                boolean modified = TeamManager.exists(player, teamName) || (playerTeam != null && npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT);
-                PlayerTeam wrappedPlayerTeam = playerTeam != null && npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? playerTeam :
-                        (PlayerTeam) TeamManager.create(player, teamName);
-                wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.NEVER);
-
-                if(!teamName.startsWith("trans"))
-                    wrappedPlayerTeam.getPlayers().add(npc.getGameProfileName());
+                if(!team.getName().startsWith("trans"))
+                    team.getPlayers().add(npc.getGameProfileName());
                 else
                     ((PlayerTeam) TeamManager.create(player, npc.getGameProfileName())).getPlayers().remove(npc.getGameProfileName());
 
-                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified));
-                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam, npc.getGameProfileName(),
+                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getSecond()));
+                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(team, npc.getGameProfileName(),
                         ClientboundSetPlayerTeamPacket.Action.ADD));
-                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(wrappedPlayerTeam,
+                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(team,
                         npc.entity.getBukkitEntity().getUniqueId().toString(), ClientboundSetPlayerTeamPacket.Action.ADD));
 
                 packets.add(new ClientboundRotateHeadPacket(entity, (byte) ((npc.getLocation().getYaw() % 360) * 256 / 360)));
@@ -689,6 +680,16 @@ public class NpcOption<T, S extends Serializable>
         this.serializer = serializer;
         this.deserializer = deserializer;
         this.packet = packet;
+    }
+
+    private static @NotNull Pair<PlayerTeam, Boolean> getTeam(@NotNull Player player, @NotNull NPC npc)
+    {
+        boolean isTransparent = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT;
+        PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
+        String teamName = isTransparent ? "trans-" + player.getEntityId() : npc.getGameProfileName();
+        boolean modified = TeamManager.exists(player, teamName) || (playerTeam != null && isTransparent);
+        PlayerTeam wrappedPlayerTeam = playerTeam != null && isTransparent ? playerTeam : (PlayerTeam) TeamManager.create(player, teamName);
+        return new Pair<>(wrappedPlayerTeam, modified);
     }
 
     /**

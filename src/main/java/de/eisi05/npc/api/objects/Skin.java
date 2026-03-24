@@ -123,7 +123,7 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
         }
         catch(Exception e)
         {
-            skinCacheUUID.put(uuid, null);
+            skinCacheUUID.remove(uuid);
             return Optional.empty();
         }
     }
@@ -154,7 +154,7 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
         }
         catch(Exception e)
         {
-            skinCacheName.put(name, null);
+            skinCacheName.remove(name);
             return Optional.empty();
         }
     }
@@ -212,6 +212,7 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             if(NpcApi.config.debug())
                 e.printStackTrace();
 
+            skinCacheFile.remove(skinFile);
             return Optional.empty();
         }
     }
