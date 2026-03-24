@@ -15,7 +15,6 @@ import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -145,12 +144,12 @@ public class Tasks
         {
             UUID skinUuid = UUID.fromString(newPlaceholder);
             Skin.fetchSkinAsync(skinUuid).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
-                    Bukkit.getScheduler().runTask(NpcApi.plugin, () -> npc.updateSkin(player))));
+                    Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
         }
         catch(IllegalArgumentException e)
         {
             Skin.fetchSkinAsync(newPlaceholder).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
-                    Bukkit.getScheduler().runTask(NpcApi.plugin, () -> npc.updateSkin(player))));
+                    Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
         }
     }
 }
