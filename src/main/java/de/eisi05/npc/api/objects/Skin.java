@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents a player's skin, containing its name, value, and signature. This record is immutable and implements {@link Serializable} for easy persistence. The
@@ -43,9 +44,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     /**
      * A static cache to store fetched skins, mapping UUIDs to Skin objects. This helps reduce redundant API calls to Mojang's servers.
      */
-    private static final Map<String, Skin> skinCacheName = new HashMap<>();
-    private static final Map<UUID, Skin> skinCacheUUID = new HashMap<>();
-    private static final Map<File, Skin> skinCacheFile = new HashMap<>();
+    private static final Map<String, Skin> skinCacheName = new ConcurrentHashMap<>();
+    private static final Map<UUID, Skin> skinCacheUUID = new ConcurrentHashMap<>();
+    private static final Map<File, Skin> skinCacheFile = new ConcurrentHashMap<>();
 
     /**
      * Retrieves the skin data directly from a currently online Bukkit player. This method uses reflection to access the player's game profile properties.

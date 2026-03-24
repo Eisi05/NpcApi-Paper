@@ -1,5 +1,6 @@
 package de.eisi05.npc.api.objects;
 
+import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.SerializableBiFunction;
 import de.eisi05.npc.api.utils.TriFunction;
@@ -10,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.io.Serial;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents the skin data used by an NPC.
@@ -122,8 +124,13 @@ public class NpcSkin implements SkinData
     {
         return of((player, npc, s) ->
         {
-            String newPlaceholder = (String) Reflections.invokeStaticMethod("me.clip.placeholderapi.PlaceholderAPI",
-                    "setPlaceholders", player, s).get();
+            String newPlaceholder = Tasks.placeholderCache.computeIfAbsent(npc.getUUID(), k -> new ConcurrentHashMap<>()).get(player.getUniqueId());
+            if(newPlaceholder == null)
+                newPlaceholder = (String) Reflections.invokeStaticMethod("me.clip.placeholderapi.PlaceholderAPI", "setPlaceholders", player, s).get();
+
+            if(newPlaceholder == null)
+                return null;
+
             try
             {
                 UUID uuid = UUID.fromString(newPlaceholder);
