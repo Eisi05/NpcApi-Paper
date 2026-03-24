@@ -141,9 +141,6 @@ public class NpcOption<T, S extends Serializable>
                     return null;
 
                 Skin skin = skinData.getSkin(player, npc);
-                if(skin == null)
-                    return null;
-
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
                 if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
                 {
@@ -151,13 +148,11 @@ public class NpcOption<T, S extends Serializable>
                             .get()).get("textures").iterator();
 
                     Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
-                    if((skin == null && npcProperty == null) ||
-                            (npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get())))
+                    if(skin != null && npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get()))
                         return null;
 
-                    var textures = new Property("textures", skin.value(), skin.signature());
-
-                    PropertyMap propertyMap = new PropertyMap(Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", textures)));
+                    PropertyMap propertyMap = new PropertyMap(
+                            Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", new Property("textures", skin.value(), skin.signature()))));
                     GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
 
                     Location location = npc.getLocation();
@@ -175,15 +170,12 @@ public class NpcOption<T, S extends Serializable>
                 }
 
                 PropertyMap properties = (PropertyMap) Reflections.invokeMethod(npcServerPlayer.getGameProfile(), "getProperties").get();
-
                 properties.removeAll("textures");
 
                 if(skin == null)
                     return null;
 
-                var textures = new Property("textures", skin.value(), skin.signature());
-
-                properties.put("textures", textures);
+                properties.put("textures", new Property("textures", skin.value(), skin.signature()));
                 return null;
             }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9));
 
@@ -606,7 +598,7 @@ public class NpcOption<T, S extends Serializable>
                 packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
 
                 PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
-                TeamManager.create(player,  npc.getGameProfileName());
+                TeamManager.create(player, npc.getGameProfileName());
 
                 String teamName = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT ? "trans-" + player.getEntityId() : npc.getGameProfileName();
                 boolean modified = TeamManager.exists(player, teamName) || (playerTeam != null && npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT);
