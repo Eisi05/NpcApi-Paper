@@ -27,10 +27,6 @@ See the in-repo wiki pages under:
 ## Installation
 Choose your preferred installation method based on your project needs:
 
-> [!WARNING] 
-> Version 2.0.0-beta is currently not stable, use at your own risk! 
-> Last stable version is **1.21.x-21**.
-
 ### Method 1: Plugin Dependency (Recommended)
 
 This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?loader=paper#download) to be installed as a separate plugin on the server.
@@ -47,7 +43,7 @@ This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?lo
 <dependency>
     <groupId>com.github.Eisi05</groupId>
     <artifactId>NpcApi-Paper</artifactId>
-    <version>1.21.x-21</version>
+    <version>2.1.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -63,7 +59,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    compileOnly 'com.github.Eisi05:NpcApi-Paper:1.21.x-21'
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:2.1.0'
 }
 ```
 
@@ -102,7 +98,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>1.21.x-21</version>
+	    <version>2.1.0</version>
 	</dependency>
 </dependencies>
 ```
@@ -119,7 +115,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:1.21.x-21'
+    implementation 'com.github.Eisi05:NpcApi-Paper:2.1.0'
 }
 ```
 
