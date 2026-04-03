@@ -110,18 +110,34 @@ public class PacketReader
             });
         }
 
+        int currentTick = Bukkit.getCurrentTick();
+        if(!Versions.isCurrentVersionSmallerThan(Versions.V26_1) && packet.getClass().getSimpleName().equals("ServerboundAttackPacket"))
+        {
+            NPC npc = NpcManager.fromId((int) Reflections.invokeMethod(packet, "entityId").get()).orElse(null);
+            if(npc == null)
+                return;
+
+            Bukkit.getScheduler().scheduleSyncDelayedTask(NpcApi.plugin,
+                    () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, ClickActionType.LEFT)), 0);
+            cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
+            return;
+        }
+
         if(!(packet instanceof ServerboundInteractPacket interactPacket))
             return;
 
-        int id = interactPacket.getEntityId();
+        int id = !Versions.isCurrentVersionSmallerThan(Versions.V26_1) ? (int) Reflections.invokeMethod(interactPacket, "entityId").get() :
+                interactPacket.getEntityId();
 
         NPC npc = NpcManager.fromId(id).orElse(null);
         if(npc == null)
             return;
 
-        int currentTick = Bukkit.getCurrentTick();
-        if(interactPacket.isAttack())
+        if(Versions.isCurrentVersionSmallerThan(Versions.V26_1) && interactPacket.isAttack())
         {
+            if(interactPacket.isUsingSecondaryAction())
+                return;
+
             Bukkit.getScheduler().scheduleSyncDelayedTask(NpcApi.plugin,
                     () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, ClickActionType.LEFT)), 0);
 
@@ -129,12 +145,18 @@ public class PacketReader
             return;
         }
 
-        var action = Reflections.getField(interactPacket, Var.obfuscated ? "c" : "action");
+        InteractionHand hand;
+        if(Versions.isCurrentVersionSmallerThan(Versions.V26_1))
+        {
+            var action = Reflections.getField(interactPacket, Var.obfuscated ? "c" : "action");
 
-        if(action.get().getClass().getDeclaredFields().length == 2)
-            return;
+            if(action.get().getClass().getDeclaredFields().length == 2)
+                return;
 
-        InteractionHand hand = (InteractionHand) action.thanGetField(Var.obfuscated ? "a" : "hand").get();
+            hand = (InteractionHand) action.thanGetField(Var.obfuscated ? "a" : "hand").get();
+        }
+        else
+            hand = (InteractionHand) Reflections.invokeMethod(interactPacket, "hand").get();
 
         if(hand == InteractionHand.MAIN_HAND)
         {

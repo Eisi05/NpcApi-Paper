@@ -2,12 +2,12 @@ plugins {
     id 'java'
     id 'maven-publish'
     id("xyz.jpenilla.run-paper") version "2.3.1"
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.18"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.19"
     id 'com.gradleup.shadow' version '8.3.3'
 }
 
 group = "de.eisi05"
-version = "2.0.4-beta"
+version = "2.1.0"
 
 base {
     archivesName = "NpcApi-Paper"
@@ -58,7 +58,7 @@ publishing {
     }
     repositories {
         maven {
-            url = uri("file://${buildDir}/repo") // or your actual repo
+            url = layout.buildDirectory.dir("repo")
         }
     }
 }
