@@ -57,7 +57,7 @@ public record MovementRecording(@NotNull ArrayList<MovementData> movements, long
      */
     public void saveToFile(@NotNull File file) throws IOException
     {
-        new ObjectSaver(file).write(this);
+        new ObjectSaver(file).write(this, false);
     }
 
     /**
