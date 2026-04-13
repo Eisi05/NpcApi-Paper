@@ -215,13 +215,10 @@ public class NpcOption<T, S extends Serializable>
                 if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
                     commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
-                else if(Versions.isCurrentVersionSmallerThan(Versions.V26_1))
+                else
                     commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
                             new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
-                else
-                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
-                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null, new HashSet<>()).orElseThrow();
 
                 npcServerPlayer.connection = new ServerGamePacketListenerImpl(((CraftServer) Bukkit.getServer()).getServer(),
                         new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);

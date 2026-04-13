@@ -6,9 +6,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Arrays;
 
 /**
- * The {@link Versions} enum represents the supported Minecraft server versions
- * and provides utility methods for working with version-specific paths and comparisons.
- * It helps in adapting the plugin's functionality to different server environments.
+ * The {@link Versions} enum represents the supported Minecraft server versions and provides utility methods for working with version-specific paths and
+ * comparisons. It helps in adapting the plugin's functionality to different server environments.
  */
 public enum Versions
 {
@@ -106,8 +105,7 @@ public enum Versions
     private static Versions VERSION;
 
     /**
-     * The NMS (Net Minecraft Server) path component corresponding to this version.
-     * For example, "v1_17_R1" for Minecraft 1.17.
+     * The NMS (Net Minecraft Server) path component corresponding to this version. For example, "v1_17_R1" for Minecraft 1.17.
      */
     private final String path;
 
@@ -122,8 +120,7 @@ public enum Versions
     }
 
     /**
-     * Determines and returns the current Minecraft server version based on the Bukkit server's package name.
-     * The determined version is cached for later calls.
+     * Determines and returns the current Minecraft server version based on the Bukkit server's package name. The determined version is cached for later calls.
      *
      * @return The {@link Versions} enum entry corresponding to the current server version. Must not be {@code null}.
      */
@@ -153,15 +150,14 @@ public enum Versions
             case "1.21.7", "1.21.8" -> V1_21_7;
             case "1.21.9", "1.21.10" -> V1_21_9;
             case "1.21.11" -> V1_21_11;
-            case "26.1", "26.1.1" -> V26_1;
+            case String s when s.startsWith("26.1") -> V26_1;
             default -> Versions.NONE;
         };
     }
 
     /**
-     * Returns an array of {@link Versions} enum entries that fall inclusively between
-     * two specified versions (based on their ordinal values).
-     * The {@code NONE} version is excluded from the result.
+     * Returns an array of {@link Versions} enum entries that fall inclusively between two specified versions (based on their ordinal values). The {@code NONE}
+     * version is excluded from the result.
      *
      * @param versions1 The starting version (inclusive). Must not be {@code null}.
      * @param versions2 The ending version (inclusive). Must not be {@code null}.
@@ -176,8 +172,7 @@ public enum Versions
     }
 
     /**
-     * Checks if the current server version is numerically smaller than a specified version.
-     * This comparison is based on the ordinal value of the enum entries.
+     * Checks if the current server version is numerically smaller than a specified version. This comparison is based on the ordinal value of the enum entries.
      *
      * @param versions The version to compare against. Must not be {@code null}.
      * @return {@code true} if the current version is smaller, {@code false} otherwise.
@@ -198,8 +193,7 @@ public enum Versions
     }
 
     /**
-     * Returns the name of the version, with underscores replaced by dots for better readability.
-     * For example, {@code V1_17} becomes "V1.17".
+     * Returns the name of the version, with underscores replaced by dots for better readability. For example, {@code V1_17} becomes "V1.17".
      *
      * @return The formatted name of the version as a {@link String}. Must not be {@code null}.
      */
