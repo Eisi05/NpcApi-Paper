@@ -80,7 +80,7 @@ public class PathfindingUtils
             else if(!segment.isEmpty())
                 segment.set(0, segment.getFirst().subtract(0, 1, 0));
 
-            fullPathPoints.addAll(segment);
+            fullPathPoints.addAll(segment.stream().map(location -> location.clone().add(0, 1, 0)).toList());
 
             if(progressListener != null)
                 progressListener.accept(i + 1, waypoints.size() - 1);
