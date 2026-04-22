@@ -684,7 +684,7 @@ public class NpcOption<T, S extends Serializable>
 
     private static @NotNull Pair<PlayerTeam, Boolean> getTeam(@NotNull Player player, @NotNull NPC npc)
     {
-        boolean isTransparent = npc.getOption(VISIBILITY) == NpcVisibility.TRANSPARENT;
+        boolean isTransparent = npc.getOption(VISIBILITY, player) == NpcVisibility.TRANSPARENT;
         PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
         String teamName = isTransparent ? "trans-" + player.getEntityId() : npc.getGameProfileName();
         boolean modified = TeamManager.exists(player, teamName) || (playerTeam != null && isTransparent);

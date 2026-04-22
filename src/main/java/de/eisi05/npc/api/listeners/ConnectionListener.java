@@ -34,8 +34,8 @@ public class ConnectionListener implements Listener
                 for(NPC npc : new ArrayList<>(NpcManager.getList()))
                 {
                     npc.showNPCToPlayer(event.getPlayer());
-                    NpcSkin npcSkin = npc.getOption(NpcOption.SKIN);
-                    if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN))
+                    NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, event.getPlayer());
+                    if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, event.getPlayer()))
                         continue;
 
                     Tasks.updateSkin(event.getPlayer(), npc, npcSkin);

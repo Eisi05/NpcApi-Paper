@@ -584,9 +584,9 @@ public class NPC extends NpcHolder
         List<Packet<?>> packets = new ArrayList<>();
 
         Arrays.stream(NpcOption.values()).filter(NpcOption::loadBefore)
-                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
+                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption, player), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
 
-        if(!name.isStatic() && getOption(NpcOption.SHOW_TAB_LIST))
+        if(!name.isStatic() && getOption(NpcOption.SHOW_TAB_LIST, player))
             setOption(NpcOption.SHOW_TAB_LIST, false);
 
         packets.add(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(serverPlayer, true));
