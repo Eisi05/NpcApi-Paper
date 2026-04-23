@@ -171,6 +171,10 @@ public abstract class NpcHolder implements InventoryHolder
         if(playerOptions != null && playerOptions.containsKey(option))
             return (T) playerOptions.get(option);
 
+        Map<NpcOption<?, ?>, Object> globalOptions = options.get(GLOBAL_UUID);
+        if(globalOptions != null && globalOptions.containsKey(option))
+            return (T) globalOptions.get(option);
+
         return option.getDefaultValue();
     }
 
