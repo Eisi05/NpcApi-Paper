@@ -1,7 +1,13 @@
 package de.eisi05.npc.api.enums;
 
-public enum WalkingResult
+import java.io.Serial;
+import java.io.Serializable;
+
+public enum WalkingResult implements Serializable
 {
     SUCCESS,
-    CANCELLED
+    CANCELLED;
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 }

@@ -7,6 +7,7 @@ import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import com.mojang.datafixers.util.Pair;
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.NpcVisibility;
 import de.eisi05.npc.api.enums.SkinParts;
 import de.eisi05.npc.api.manager.NpcManager;
@@ -470,14 +471,17 @@ public class NpcOption<T, S extends Serializable>
                 if(npc.entity.getBukkitEntity().getType() != org.bukkit.entity.EntityType.ITEM_DISPLAY &&
                         npc.entity.getBukkitEntity().getType() != org.bukkit.entity.EntityType.BLOCK_DISPLAY)
                 {
+                    Byte handValue = data.get(EntityDataSerializers.BYTE.createAccessor(8));
+                    byte handFlag = handValue == null ? 0 : handValue;
+
                     if(pose == Pose.SPIN_ATTACK)
                     {
-                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x04);
+                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag | 0x04));
                         packet = new ClientboundMoveEntityPacket.Rot(npc.entity.getId(), (byte) (npc.getLocation().getYaw() * 256 / 360),
                                 (byte) -90, npc.entity.onGround());
                     }
                     else
-                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
+                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag & ~0x04));
                 }
 
                 if(pose == Pose.SITTING)
@@ -645,6 +649,16 @@ public class NpcOption<T, S extends Serializable>
     static final NpcOption<Boolean, Boolean> EDITABLE = new NpcOption<>("editable", false,
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (enabled, npc, player) -> null);
+
+    /**
+     * NPC option to store the goal selector for the NPC. This allows saving and restoring the NPC's AI behavior. The serialized form stores the running state,
+     * tick interval, and goal configurations. Note: Goals themselves are not fully serialized - only their class names and any serializable configuration. On
+     * deserialization, goals must be re-instantiated by the plugin.
+     */
+    static final NpcOption<ArrayList<Goal>, ArrayList<Goal>> GOALS = new NpcOption<>("goals", new ArrayList<>(),
+            goals -> goals,
+            goals -> goals,
+            (data, npc, player) -> null);
 
     /**
      * NPC option to store custom data for the NPC. This is an internal option, typically not directly set by users but controlled by

@@ -28,16 +28,15 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * A task that handles the movement of an NPC along a calculated path.
- * This class extends BukkitRunnable to handle the movement in a scheduled task,
- * providing smooth movement, physics, and door interaction capabilities.
+ * A task that handles the movement of an NPC along a calculated path. This class extends BukkitRunnable to handle the movement in a scheduled task, providing
+ * smooth movement, physics, and door interaction capabilities.
  */
 public class PathTask extends BukkitRunnable
 {
     private static final double gravity = -0.08;
     private static final double jumpVelocity = 0.5;
     private static final double terminalVelocity = -0.5;
-    private static final double stepHeight = -0.5;
+    private static final double stepHeight = 0.55;
 
     private final NPC npc;
     private final Path path;
@@ -45,11 +44,12 @@ public class PathTask extends BukkitRunnable
     private final Player[] viewers;
     private final Entity serverEntity;
     private final Consumer<WalkingResult> callback;
+    private final boolean withRotation;
 
     // Settings
     private final double speed;
     private final boolean updateRealLocation;
-
+    private final Set<Block> openedDoors = new HashSet<>();
     // State
     private boolean finished = false;
     private int index = 0;
@@ -57,8 +57,6 @@ public class PathTask extends BukkitRunnable
     private Vector previousMoveDir;
     private float previousYaw;
     private double verticalVelocity = 0.0;
-
-    private final Set<Block> openedDoors = new HashSet<>();
 
     /**
      * Private constructor used by the Builder pattern.
@@ -72,6 +70,7 @@ public class PathTask extends BukkitRunnable
         this.pathPoints = new ArrayList<>(builder.path.asLocations());
         this.viewers = builder.viewers;
         this.callback = builder.callback;
+        this.withRotation = builder.withRotation;
 
         this.speed = builder.speed;
         this.updateRealLocation = builder.updateRealLocation;
@@ -83,8 +82,7 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * The main execution method called by the Bukkit scheduler.
-     * Handles the NPC's movement along the path, including physics and door interactions.
+     * The main execution method called by the Bukkit scheduler. Handles the NPC's movement along the path, including physics and door interactions.
      */
     @Override
     public void run()
@@ -114,22 +112,39 @@ public class PathTask extends BukkitRunnable
 
         PhysicsResult physics = applyPhysics(movement, toTarget);
 
+        if(physics.skipHorizontal)
+        {
+            movement.setX(0);
+            movement.setZ(0);
+        }
+        else if(physics.horizontalSlowdown < 1.0)
+            movement.multiply(physics.horizontalSlowdown);
+
         movement.setY(physics.yChange);
 
         currentPos.add(movement);
 
-        float[] rotation = calculateSmoothRotation();
-        float yaw = rotation[0];
-        float pitch = rotation[1];
+        float yaw, pitch;
+        if(withRotation)
+        {
+            float[] rotation = calculateSmoothRotation();
+            yaw = rotation[0];
+            pitch = rotation[1];
+        }
+        else
+        {
+            yaw = npc.getLocation().getYaw();
+            pitch = npc.getLocation().getPitch();
+        }
 
         sendMovePackets(movement, yaw, pitch, physics.isGrounded);
     }
 
     /**
-     * Processes door interactions along the NPC's path.
-     * Opens doors that are in the NPC's path and within interaction range.
+     * Processes door interactions along the NPC's path. Opens doors that are in the NPC's path and within interaction range.
      */
-    private void processDoors() {
+    private void processDoors()
+    {
         World world = npc.getLocation().getWorld();
         if(world == null)
             return;
@@ -137,7 +152,8 @@ public class PathTask extends BukkitRunnable
         checkAndOpenDoor(currentPos.toLocation(world).getBlock());
         checkAndOpenDoor(currentPos.toLocation(world).getBlock().getRelative(BlockFace.UP));
 
-        if (index < pathPoints.size()) {
+        if(index < pathPoints.size())
+        {
             Location next = pathPoints.get(index);
             if(currentPos.distanceSquared(next.toVector()) < 4.0)
             {
@@ -168,8 +184,7 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Cleans up opened doors that are no longer near the NPC.
-     * Closes doors that the NPC has moved away from.
+     * Cleans up opened doors that are no longer near the NPC. Closes doors that the NPC has moved away from.
      */
     private void cleanupDoors()
     {
@@ -202,8 +217,7 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Forces all doors opened by this path task to close.
-     * Used when the path is completed or cancelled.
+     * Forces all doors opened by this path task to close. Used when the path is completed or cancelled.
      */
     private void forceCloseAllDoors()
     {
@@ -220,8 +234,7 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Handles the completion of the path.
-     * Performs final cleanup and calls the completion callback.
+     * Handles the completion of the path. Performs final cleanup and calls the completion callback.
      *
      * @return true if the path was successfully finished, false otherwise
      */
@@ -295,7 +308,7 @@ public class PathTask extends BukkitRunnable
     /**
      * Calculates the horizontal movement vector for the NPC.
      *
-     * @param toTarget The vector to the target waypoint
+     * @param toTarget    The vector to the target waypoint
      * @param targetPoint The absolute target point
      * @return A vector representing the horizontal movement
      */
@@ -331,7 +344,7 @@ public class PathTask extends BukkitRunnable
     {
         World world = npc.getLocation().getWorld();
         if(world == null)
-            return new PhysicsResult(0, false);
+            return new PhysicsResult(0, false, false, 1.0);
 
         double groundY = getGroundY(world, currentPos);
         boolean onGround = currentPos.getY() <= groundY + 1e-5;
@@ -339,14 +352,42 @@ public class PathTask extends BukkitRunnable
 
         if(onGround)
         {
+            if(toTarget.getY() < 0 && Math.abs(toTarget.getY()) <= stepHeight)
+            {
+                Vector testPos = currentPos.clone().add(movement);
+                testPos.setY(currentPos.getY() + toTarget.getY());
+                if(isPositionValid(world, testPos))
+                {
+                    yChange = toTarget.getY();
+                    verticalVelocity = 0;
+                    double slowdown = 0.5;
+                    return new PhysicsResult(yChange, true, false, slowdown);
+                }
+            }
+
             if(toTarget.getY() > 0 && toTarget.getY() <= stepHeight && movement.lengthSquared() > 1e-6)
             {
+                Vector testPos = currentPos.clone().add(movement);
+                testPos.setY(currentPos.getY() + Math.min(toTarget.getY(), stepHeight));
+                if(!isPositionValid(world, testPos))
+                {
+                    yChange = Math.min(toTarget.getY(), stepHeight);
+                    verticalVelocity = 0;
+                    return new PhysicsResult(yChange, true, true, 1.0);
+                }
                 yChange = Math.min(toTarget.getY(), stepHeight);
                 verticalVelocity = 0;
-                return new PhysicsResult(yChange, true);
+                return new PhysicsResult(yChange, true, false, 1.0);
             }
             else if(toTarget.getY() > 0.5)
             {
+                Vector testPos = currentPos.clone().add(movement);
+                testPos.setY(currentPos.getY() + jumpVelocity);
+                if(!isPositionValid(world, testPos))
+                {
+                    verticalVelocity = jumpVelocity;
+                    return new PhysicsResult(jumpVelocity, false, true, 1.0);
+                }
                 verticalVelocity = jumpVelocity;
                 onGround = false;
             }
@@ -355,7 +396,7 @@ public class PathTask extends BukkitRunnable
                 verticalVelocity = 0;
                 if(Math.abs(currentPos.getY() - groundY) > 1e-6)
                     currentPos.setY(groundY);
-                return new PhysicsResult(0, true);
+                return new PhysicsResult(0, true, false, 1.0);
             }
         }
 
@@ -366,7 +407,15 @@ public class PathTask extends BukkitRunnable
                 verticalVelocity = terminalVelocity;
             yChange = verticalVelocity;
 
-            if(currentPos.getY() + yChange <= groundY)
+            Vector testPos = currentPos.clone().add(movement);
+            testPos.setY(currentPos.getY() + yChange);
+            if(!isPositionValid(world, testPos) && currentPos.getY() + yChange <= groundY + 0.1)
+            {
+                yChange = groundY - currentPos.getY();
+                verticalVelocity = 0;
+                onGround = true;
+            }
+            else if(currentPos.getY() + yChange <= groundY)
             {
                 yChange = groundY - currentPos.getY();
                 verticalVelocity = 0;
@@ -374,14 +423,65 @@ public class PathTask extends BukkitRunnable
             }
         }
 
-        return new PhysicsResult(yChange, onGround);
+        return new PhysicsResult(yChange, onGround, false, 1.0);
+    }
+
+    /**
+     * Checks if a position is valid (not inside a solid block).
+     *
+     * @param world The world to check in
+     * @param pos   The position to check
+     * @return true if the position is valid, false otherwise
+     */
+    private boolean isPositionValid(@NotNull World world, @NotNull Vector pos)
+    {
+        double entityWidth = 0.6;
+        double entityHeight = 1.8;
+
+        double minX = pos.getX() - entityWidth / 2;
+        double maxX = pos.getX() + entityWidth / 2;
+        double minY = pos.getY();
+        double maxY = pos.getY() + entityHeight;
+        double minZ = pos.getZ() - entityWidth / 2;
+        double maxZ = pos.getZ() + entityWidth / 2;
+
+        int minBlockX = (int) Math.floor(minX);
+        int maxBlockX = (int) Math.floor(maxX);
+        int minBlockY = (int) Math.floor(minY);
+        int maxBlockY = (int) Math.floor(maxY);
+        int minBlockZ = (int) Math.floor(minZ);
+        int maxBlockZ = (int) Math.floor(maxZ);
+
+        for(int x = minBlockX; x <= maxBlockX; x++)
+        {
+            for(int y = minBlockY; y <= maxBlockY; y++)
+            {
+                for(int z = minBlockZ; z <= maxBlockZ; z++)
+                {
+                    Block block = world.getBlockAt(x, y, z);
+                    if(block.getBlockData() instanceof Openable)
+                        continue;
+
+                    if(block.getType().isSolid() && !block.isPassable())
+                    {
+                        BoundingBox blockBox = block.getBoundingBox();
+                        Vector min = new Vector(minX, minY, minZ);
+                        Vector max = new Vector(maxX, maxY, maxZ);
+                        if(blockBox.overlaps(min, max))
+                            return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
      * Calculates the Y-coordinate of the ground at a given position.
      *
      * @param world The world to check in
-     * @param pos The position to check
+     * @param pos   The position to check
      * @return The Y-coordinate of the ground
      */
     private double getGroundY(@NotNull World world, @NotNull Vector pos)
@@ -432,7 +532,7 @@ public class PathTask extends BukkitRunnable
 
         Vector horizontalLook = new Vector(lookDir.getX(), 0, lookDir.getZ());
         if(horizontalLook.lengthSquared() < 1e-6)
-            horizontalLook = previousMoveDir.clone();
+            horizontalLook.copy(previousMoveDir.clone());
 
         float targetYaw = (float) (Math.toDegrees(Math.atan2(horizontalLook.getZ(), horizontalLook.getX())) - 90);
         targetYaw = normalizeAngle(targetYaw);
@@ -442,7 +542,7 @@ public class PathTask extends BukkitRunnable
 
         float yaw = previousYaw + diff;
         previousYaw = yaw;
-        previousMoveDir = horizontalLook;
+        previousMoveDir.copy(horizontalLook);
 
         Vector targetVec = pathPoints.get(Math.min(index + 1, pathPoints.size() - 1)).toVector().subtract(currentPos);
         double hLen = Math.sqrt(targetVec.getX() * targetVec.getX() + targetVec.getZ() * targetVec.getZ());
@@ -470,8 +570,8 @@ public class PathTask extends BukkitRunnable
      * Sends movement and rotation packets to update the NPC's position for viewers.
      *
      * @param movement The movement vector
-     * @param yaw The yaw rotation
-     * @param pitch The pitch rotation
+     * @param yaw      The yaw rotation
+     * @param pitch    The pitch rotation
      * @param onGround Whether the NPC is on the ground
      */
     private void sendMovePackets(Vector movement, float yaw, float pitch, boolean onGround)
@@ -488,11 +588,13 @@ public class PathTask extends BukkitRunnable
                 new PositionMoveRotation(currentVec, movementVec, yaw, pitch), Set.of(), onGround);
 
         npc.sendNpcMovePackets(teleport, head, viewers);
+
+        if(updateRealLocation)
+            npc.setLocation(currentPos.toLocation(npc.getLocation().getWorld()));
     }
 
     /**
-     * Cancels the path task and cleans up resources.
-     * Calls the callback with CANCELLED status if not already finished.
+     * Cancels the path task and cleans up resources. Calls the callback with CANCELLED status if not already finished.
      *
      * @throws IllegalStateException if the task was already cancelled
      */
@@ -536,16 +638,17 @@ public class PathTask extends BukkitRunnable
     /**
      * A record representing the result of physics calculations.
      *
-     * @param yChange The vertical movement to apply
-     * @param isGrounded Whether the NPC is on the ground
+     * @param yChange            The vertical movement to apply
+     * @param isGrounded         Whether the NPC is on the ground
+     * @param skipHorizontal     Whether to skip horizontal movement this tick
+     * @param horizontalSlowdown Factor to slow down horizontal movement (1.0 = normal, <1.0 = slower)
      */
-    private record PhysicsResult(double yChange, boolean isGrounded) {}
+    private record PhysicsResult(double yChange, boolean isGrounded, boolean skipHorizontal, double horizontalSlowdown) {}
 
     // --- Builder Class ---
 
     /**
-     * Builder class for creating PathTask instances with a fluent API.
-     * Allows for optional configuration of the path task.
+     * Builder class for creating PathTask instances with a fluent API. Allows for optional configuration of the path task.
      */
     public static class Builder
     {
@@ -556,11 +659,12 @@ public class PathTask extends BukkitRunnable
         private Consumer<WalkingResult> callback = null;
         private double speed = 1.0;
         private boolean updateRealLocation = false;
+        private boolean withRotation = true;
 
         /**
          * Creates a new Builder for a PathTask.
          *
-         * @param npc The NPC that will follow the path
+         * @param npc  The NPC that will follow the path
          * @param path The path for the NPC to follow
          */
         public Builder(@NotNull NPC npc, @NotNull Path path)
@@ -614,6 +718,18 @@ public class PathTask extends BukkitRunnable
         public @NotNull Builder callback(@Nullable Consumer<WalkingResult> callback)
         {
             this.callback = callback;
+            return this;
+        }
+
+        /**
+         * Sets whether to include rotation packets in the movement.
+         *
+         * @param withRotation true to include rotation packets, false otherwise
+         * @return This builder instance for method chaining
+         */
+        public @NotNull Builder withRotation(boolean withRotation)
+        {
+            this.withRotation = withRotation;
             return this;
         }
 

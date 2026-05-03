@@ -3,6 +3,7 @@ package de.eisi05.npc.api.objects;
 import com.mojang.authlib.GameProfile;
 import com.mojang.datafixers.util.Either;
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.ai.GoalSelector;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcHideEvent;
 import de.eisi05.npc.api.events.NpcPostShowEvent;
@@ -85,6 +86,7 @@ public class NPC extends NpcHolder
     private Location location;
     private NpcClickAction clickEvent;
     private Instant createdAt = Instant.now();
+    private GoalSelector goalSelector;
 
     /**
      * Creates an NPC at the specified location with a random UUID and default name. The default name is an empty component.
@@ -152,6 +154,8 @@ public class NPC extends NpcHolder
         serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name.getName()));
 
         NpcManager.addNPC(this);
+        startGoals();
+        serverPlayer.getAdvancements().stopListening();
     }
 
     /**
@@ -347,6 +351,7 @@ public class NPC extends NpcHolder
     public void setLocation(@NotNull Location location)
     {
         this.location = location;
+        markChange();
 
         if(serverPlayer == null)
             return;
@@ -652,6 +657,7 @@ public class NPC extends NpcHolder
         if(serverPlayer == null)
             return;
 
+        stopGoals();
         hideNpcFromAllPlayers();
         NpcManager.removeNPC(this);
 
@@ -687,6 +693,50 @@ public class NPC extends NpcHolder
 
         sendNpcMovePackets(null, head, viewers.toArray(new Player[0]));
         sendNpcBodyPackets(body, viewers.toArray(new Player[0]));
+    }
+
+    /**
+     * Makes the NPC look at a specific player. This calculates the required yaw and pitch and sends update packets to the viewing player.
+     *
+     * @param targetEntity the entity the NPC should look at. Must not be null.
+     * @param viewer       the player to send the packets to. Must not be null.
+     * @param force        If true, the NPC's location will be updated; otherwise only packets are sent.
+     */
+    public void lookAtEntity(@NotNull org.bukkit.entity.Entity targetEntity, @NotNull Player viewer, boolean force)
+    {
+        if(entity == null)
+            return;
+
+        Location npcLoc = this.location;
+        Location targetLoc = targetEntity.getLocation();
+
+        if(npcLoc.getWorld() != targetLoc.getWorld())
+            return;
+
+        double dx = targetLoc.getX() - npcLoc.getX();
+
+        double eyeHeight = (entity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() :
+                entity.getBukkitEntity().getHeight()) - (getOption(NpcOption.POSE, viewer) == Pose.SITTING ? 0.625 : 0);
+
+        double dy = (targetLoc.getY() + (targetEntity instanceof LivingEntity le ? le.getEyeHeight() : targetEntity.getHeight())) -
+                (npcLoc.getY() + (eyeHeight * getOption(NpcOption.SCALE, viewer)));
+        double dz = targetLoc.getZ() - npcLoc.getZ();
+
+        double distanceXZ = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float pitch = (float) Math.toDegrees(-Math.atan2(dy, distanceXZ));
+
+        Location newLoc = new Location(npcLoc.getWorld(), npcLoc.getX(), npcLoc.getY(), npcLoc.getZ(), yaw, pitch);
+        if(force)
+            setLocation(newLoc);
+
+        byte yawByte = (byte) (yaw * 256 / 360);
+        byte pitchByte = (byte) (pitch * 256 / 360);
+
+        ServerGamePacketListenerImpl connection = ((CraftPlayer) viewer).getHandle().connection;
+
+        connection.send(new ClientboundRotateHeadPacket(entity, yawByte));
+        connection.send(new ClientboundMoveEntityPacket.Rot(entity.getId(), yawByte, pitchByte, serverPlayer.onGround()));
     }
 
     /**
@@ -736,7 +786,7 @@ public class NPC extends NpcHolder
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
                                       @Nullable Consumer<WalkingResult> onEnd)
     {
-        return walkTo(path, walkSpeed, changeRealLocation, onEnd, null);
+        return walkTo(path, walkSpeed, changeRealLocation, onEnd, true, null);
     }
 
     /**
@@ -747,11 +797,29 @@ public class NPC extends NpcHolder
      * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
      * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
      * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
+     * @param withRotation       If true, includes rotation packets in the movement; otherwise only position packets are sent.
+     * @return The {@link BukkitTask} representing the movement task.
+     */
+    public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
+                                      @Nullable Consumer<WalkingResult> onEnd, boolean withRotation)
+    {
+        return walkTo(path, walkSpeed, changeRealLocation, onEnd, withRotation, null);
+    }
+
+    /**
+     * Moves the NPC along a precomputed {@link de.eisi05.npc.api.pathfinding.Path}, simulating walking, jumping, and gravity. The NPC's position and rotation
+     * are updated each tick and sent to the specified player(s).
+     *
+     * @param path               The {@link de.eisi05.npc.api.pathfinding.Path} containing the ordered waypoints the NPC should follow.
+     * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
+     * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
+     * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
+     * @param withRotation       If true, includes rotation packets in the movement; otherwise only position packets are sent.
      * @param viewers            The players who should see the NPC move. If null, updates all viewers in the `viewers` set.
      * @return The {@link BukkitTask} representing the movement task.
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
-                                      boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, @Nullable List<Player> viewers)
+                                      boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, boolean withRotation, @Nullable List<Player> viewers)
     {
         viewers = viewers == null || viewers.isEmpty() ? this.viewers.stream().map(Bukkit::getPlayer).filter(Objects::nonNull).toList() : viewers;
 
@@ -772,7 +840,9 @@ public class NPC extends NpcHolder
                 .speed(event.getWalkSpeed())
                 .viewers(viewers.toArray(new Player[0]))
                 .updateRealLocation(event.isChangeRealLocation())
-                .callback(onEnd).build();
+                .callback(onEnd)
+                .withRotation(withRotation)
+                .build();
 
         for(Player player : viewers)
             pathTasks.put(player.getUniqueId(), pathTask);
@@ -923,6 +993,46 @@ public class NPC extends NpcHolder
             if(teleport2 != null)
                 ((CraftPlayer) viewer).getHandle().connection.send(teleport2);
         }
+    }
+
+    /**
+     * Gets the goal selector for this NPC. Creates a new one if it doesn't exist.
+     *
+     * @return The goal selector for this NPC
+     */
+    @Override
+    protected @NotNull GoalSelector getGoalSelector()
+    {
+        if(goalSelector == null)
+            goalSelector = new GoalSelector(this);
+        return goalSelector;
+    }
+
+    /**
+     * Starts the goal system for this NPC. The goal selector will begin evaluating and executing goals.
+     */
+    public void startGoals()
+    {
+        if(!isGoalSystemRunning())
+            getGoalSelector().start();
+    }
+
+    /**
+     * Stops the goal system for this NPC. The goal selector will stop evaluating and executing goals.
+     */
+    public void stopGoals()
+    {
+        getGoalSelector().stop();
+    }
+
+    /**
+     * Checks whether the goal system is currently running for this NPC.
+     *
+     * @return true if the goal system is running, false otherwise
+     */
+    public boolean isGoalSystemRunning()
+    {
+        return goalSelector != null && goalSelector.isRunning();
     }
 
     public CustomNameTag getNameTag()

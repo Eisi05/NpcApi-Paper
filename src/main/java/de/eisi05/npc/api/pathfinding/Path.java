@@ -170,7 +170,7 @@ public class Path implements ConfigurationSerializable
             return name;
         }
 
-        private static class SerializableLocation implements Serializable
+        public static class SerializableLocation implements Serializable
         {
             @Serial
             private static final long serialVersionUID = 1L;

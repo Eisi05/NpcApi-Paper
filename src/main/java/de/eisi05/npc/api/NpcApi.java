@@ -5,6 +5,7 @@ import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcConfig;
+import de.eisi05.npc.api.objects.NpcHolder;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.Metrics;
@@ -20,38 +21,36 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
 /**
- * The main entry point and singleton class for the NPC API.
- * This class handles the initialization, configuration, and shutdown
- * of the NPC functionality within a Bukkit plugin.
+ * The main entry point and singleton class for the NPC API. This class handles the initialization, configuration, and shutdown of the NPC functionality within
+ * a Bukkit plugin.
  */
 public final class NpcApi
 {
     private static final List<Listener> listeners = List.of(new ChangeWorldListener(), new ConnectionListener(), new NpcInteractListener(),
-            new WorldLoadListener(), new ServerReadyListener());
+            new WorldLoadListener(), new ServerReadyListener(), new ProjectileHitListener());
     /**
-     * A static reference to the Bukkit plugin instance that is using this API.
-     * This is set during the API's initialization.
+     * A static reference to the Bukkit plugin instance that is using this API. This is set during the API's initialization.
      */
     public static Plugin plugin;
     public static Function<Player, Component> DISABLED_MESSAGE_PROVIDER = player ->
             Component.text("DISABLED").color(NamedTextColor.RED);
 
     /**
-     * The configuration object for the NPC API, containing various settings
-     * like the look-at timer.
+     * The configuration object for the NPC API, containing various settings like the look-at timer.
      */
     public static NpcConfig config;
 
     private static NpcApi npcApi;
 
     /**
-     * Private constructor to enforce the singleton pattern.
-     * Initializes the API by registering listeners, loading existing NPCs,
-     * injecting packet readers, and starting recurring tasks.
+     * Private constructor to enforce the singleton pattern. Initializes the API by registering listeners, loading existing NPCs, injecting packet readers, and
+     * starting recurring tasks.
      *
      * @param plugin The {@link JavaPlugin} instance using this API. Must not be {@code null}.
      * @param config The {@link NpcConfig} object for the API. Must not be {@code null}.
@@ -73,8 +72,8 @@ public final class NpcApi
     }
 
     /**
-     * Creates or retrieves the singleton instance of the {@code NpcApi} with a default configuration.
-     * If the API instance does not exist or the provided plugin is null, a new instance is created.
+     * Creates or retrieves the singleton instance of the {@code NpcApi} with a default configuration. If the API instance does not exist or the provided plugin
+     * is null, a new instance is created.
      *
      * @param plugin The {@link JavaPlugin} instance using this API. Must not be {@code null}.
      * @return The singleton {@link NpcApi} instance. Must not be {@code null}.
@@ -85,8 +84,8 @@ public final class NpcApi
     }
 
     /**
-     * Creates or retrieves the singleton instance of the {@code NpcApi} with a custom configuration.
-     * If the API instance does not exist or the provided plugin is null, a new instance is created.
+     * Creates or retrieves the singleton instance of the {@code NpcApi} with a custom configuration. If the API instance does not exist or the provided plugin
+     * is null, a new instance is created.
      *
      * @param plugin The {@link JavaPlugin} instance using this API. Must not be {@code null}.
      * @param config The {@link NpcConfig} object to use for the API. Must not be {@code null}.
@@ -101,12 +100,22 @@ public final class NpcApi
     }
 
     /**
-     * Disables the NPC API, performing the necessary cleanup.
-     * This includes hiding all active NPCs from players, clearing the NPC manager,
-     * and uninjecting packet readers. It also nullifies the static references.
+     * Disables the NPC API, performing the necessary cleanup. This includes hiding all active NPCs from players, clearing the NPC manager, and uninjecting
+     * packet readers. It also nullifies the static references.
      */
     public static void disable()
     {
+        List<NpcHolder> npcsToSave = new ArrayList<>(NpcManager.getList());
+        npcsToSave.stream().filter(NpcHolder::hasUnsavedChanges).parallel().forEach(npc ->
+        {
+            try
+            {
+                npc.save();
+            }
+            catch(IOException e)
+            {
+            }
+        });
         NpcManager.getList().forEach(NPC::hideNpcFromAllPlayers);
         NpcManager.clear();
         PacketReader.uninjectAll();
