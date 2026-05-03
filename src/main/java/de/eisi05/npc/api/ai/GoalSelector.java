@@ -227,12 +227,17 @@ public class GoalSelector
         if(removalQueue.isEmpty())
             return;
 
-        removalQueue.removeIf(goal -> goal != currentGoal);
-
-        if(currentGoal != null && removalQueue.contains(currentGoal) && !currentGoal.canContinue(npc))
+        List<Goal> copy = new ArrayList<>(removalQueue);
+        for(Goal goal : copy)
         {
-            removalQueue.remove(currentGoal);
-            npc.removeGoal(currentGoal);
+            if(goal != null && removalQueue.contains(goal) && goal.canBeRemovedNow(npc))
+            {
+                removalQueue.remove(goal);
+                npc.removeGoal(goal);
+
+                if(goal == currentGoal)
+                    currentGoal = null;
+            }
         }
     }
 
