@@ -19,11 +19,11 @@ import java.util.concurrent.ThreadLocalRandom;
 public class GoalSelector
 {
     private final NPC npc;
+    private final Set<Goal> removalQueue = new HashSet<>();
     private Goal currentGoal;
     private BukkitTask task;
     private boolean running;
     private long tickInterval;
-    private final Set<Goal> removalQueue = new HashSet<>();
 
     /**
      * Creates a new GoalSelector for the specified NPC.
@@ -77,8 +77,8 @@ public class GoalSelector
     }
 
     /**
-     * Queues a goal for removal. If the goal is currently running, it will be removed after it finishes.
-     * If the goal is not running, it will be removed immediately from the NPC's goal list.
+     * Queues a goal for removal. If the goal is currently running and cannot be removed immediately, it will be removed after it finishes. If the goal can be
+     * removed immediately or is not running, it will be removed right away from the NPC's goal list.
      *
      * @param goal The goal to queue for removal
      * @return true if the goal was queued for removal or removed immediately, false otherwise
@@ -87,11 +87,31 @@ public class GoalSelector
     {
         if(currentGoal == goal)
         {
-            removalQueue.add(goal);
-            return true;
+            if(goal.canBeRemovedNow(npc))
+                return npc.removeGoal(goal);
+            else
+            {
+                removalQueue.add(goal);
+                return true;
+            }
         }
         else
             return npc.removeGoal(goal);
+    }
+
+
+    /**
+     * Checks if a goal is queued for removal.
+     * <p>
+     * Goals that are currently running cannot be removed immediately and are instead queued for removal once they finish naturally. This method allows checking
+     * whether a specific goal is in that removal queue.
+     *
+     * @param goal The goal to check
+     * @return true if the goal is queued for removal, false otherwise
+     */
+    public boolean isGoalQueuedForRemoval(@NotNull Goal goal)
+    {
+        return removalQueue.contains(goal);
     }
 
     /**

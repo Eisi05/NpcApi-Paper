@@ -19,9 +19,8 @@ import java.io.IOException;
 import java.util.*;
 
 /**
- * Abstract class representing an entity that can hold NPC-related data
- * and has a concept of unsaved changes.
- * It implements {@link InventoryHolder} but onlay as placeholder.
+ * Abstract class representing an entity that can hold NPC-related data and has a concept of unsaved changes. It implements {@link InventoryHolder} but onlay as
+ * placeholder.
  */
 public abstract class NpcHolder implements InventoryHolder
 {
@@ -31,8 +30,7 @@ public abstract class NpcHolder implements InventoryHolder
     protected NpcName name;
 
     /**
-     * Flag indicating whether there are unsaved changes to this holder.
-     * Defaults to {@code false}.
+     * Flag indicating whether there are unsaved changes to this holder. Defaults to {@code false}.
      */
     private boolean unsavedChanges = false;
 
@@ -48,8 +46,7 @@ public abstract class NpcHolder implements InventoryHolder
     }
 
     /**
-     * Marks that there are unsaved changes to this NPC holder.
-     * This should be called whenever a modifiable property of the holder is changed.
+     * Marks that there are unsaved changes to this NPC holder. This should be called whenever a modifiable property of the holder is changed.
      */
     public void markChange()
     {
@@ -57,9 +54,8 @@ public abstract class NpcHolder implements InventoryHolder
     }
 
     /**
-     * Saves the current state of the NPC holder.
-     * This method is intended to persist any changes. After successful execution,
-     * the {@code unsavedChanges} flag is reset to {@code false}.
+     * Saves the current state of the NPC holder. This method is intended to persist any changes. After successful execution, the {@code unsavedChanges} flag is
+     * reset to {@code false}.
      *
      * @throws IOException if an error occurs during the saving process.
      */
@@ -300,8 +296,7 @@ public abstract class NpcHolder implements InventoryHolder
     }
 
     /**
-     * Removes a goal from this NPC's goal selector. If the goal is currently running,
-     * it will be queued for removal and removed once it finishes naturally.
+     * Removes a goal from this NPC's goal selector. If the goal is currently running, it will be queued for removal and removed once it finishes naturally.
      *
      * @param goal The goal to remove
      * @return true if the goal was removed or queued for removal, false otherwise
@@ -320,12 +315,21 @@ public abstract class NpcHolder implements InventoryHolder
 
     /**
      * Gets the list of goals associated with this NPC.
+     * <p>
+     * This method returns all active goals for this NPC, excluding any goals that are currently queued for removal. Goals that are in the removal queue will
+     * not appear in the returned list even if they are still running.
      *
-     * @return A list of goals, or an empty list if no goals are set
+     * @return A list of active goals, or an empty list if no goals are set
      */
     public @NotNull List<Goal> getGoals()
     {
-        return getOption(NpcOption.GOALS);
+        return getOption(NpcOption.GOALS).stream().filter(goal ->
+        {
+            GoalSelector goalSelector = getGoalSelector();
+            if(goalSelector == null)
+                return true;
+            return !goalSelector.isGoalQueuedForRemoval(goal);
+        }).toList();
     }
 
     /**

@@ -22,12 +22,10 @@ import java.util.UUID;
  */
 public class FollowEntityGoal extends Goal
 {
-    @Serial
-    private static final long serialVersionUID = 1L;
-
     public static final double DEFAULT_FOLLOW_DISTANCE = 10.0;
     public static final double DEFAULT_STOP_DISTANCE = 1.5;
-
+    @Serial
+    private static final long serialVersionUID = 1L;
     private double followDistance;
     private double stopDistance;
     private double speed;
@@ -334,6 +332,23 @@ public class FollowEntityGoal extends Goal
 
         double distance = npcLoc.distance(targetLoc);
         return distance <= followDistance * 2 && distance > stopDistance;
+    }
+
+    @Override
+    protected boolean canBeRemovedNow(@NotNull NPC npc)
+    {
+        if(super.canBeRemovedNow(npc))
+            return true;
+
+        if(currentWalkGoal != null && currentWalkGoal.canContinue(npc))
+        {
+            Location npcLoc = npc.getLocation();
+            Location below = npcLoc.clone().subtract(0, 0.1, 0);
+
+            if(below.getBlock().getType().isAir())
+                return false;
+        }
+        return true;
     }
 
     /**

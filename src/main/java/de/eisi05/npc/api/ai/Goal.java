@@ -103,6 +103,20 @@ public abstract class Goal implements Serializable
     }
 
     /**
+     * Checks whether this goal can be removed immediately without being queued.
+     * <p>
+     * If this returns true, the goal can be removed instantly from the goal selector. If this returns false, the goal will be queued for removal and will only
+     * be removed once this method returns true or the goal naturally completes.
+     *
+     * @param npc The NPC to check for
+     * @return true if the goal can be removed immediately, false if it should be queued
+     */
+    protected boolean canBeRemovedNow(@NotNull NPC npc)
+    {
+        return !canContinue(npc);
+    }
+
+    /**
      * Priority levels for goal selection. Higher priority goals are more likely to be selected. ALWAYS priority goals are always preferred over other goals.
      * Other priorities use weighted random selection where higher weight = higher chance of being selected.
      */

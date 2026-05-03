@@ -30,13 +30,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public class WalkToLocationGoal extends Goal
 {
-    static final int RECALCULATION_COOLDOWN = 20;
-
-    @Serial
-    private static final long serialVersionUID = 1L;
-
     public static final int DEFAULT_MAX_ITERATIONS = 5000;
     public static final double DEFAULT_SPEED = 0.25;
+    static final int RECALCULATION_COOLDOWN = 20;
+    @Serial
+    private static final long serialVersionUID = 1L;
     private static final int PATH_CHECK_AHEAD = 5;
     private static final long PATHABILITY_CHECK_INTERVAL_MS = 5000;
 
@@ -264,6 +262,23 @@ public class WalkToLocationGoal extends Goal
     public boolean canContinue(@NotNull NPC npc)
     {
         return isWalking && currentPath != null && targetLocation != null && npc.getLocation().distance(targetLocation) > 1.0;
+    }
+
+    @Override
+    protected boolean canBeRemovedNow(@NotNull NPC npc)
+    {
+        if(super.canBeRemovedNow(npc))
+            return true;
+
+        if(isWalking)
+        {
+            Location npcLoc = npc.getLocation();
+            Location below = npcLoc.clone().subtract(0, 0.1, 0);
+
+            if(below.getBlock().getType().isAir())
+                return false;
+        }
+        return true;
     }
 
     /**
