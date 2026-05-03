@@ -108,6 +108,9 @@ public final class NpcApi
         List<NpcHolder> npcsToSave = new ArrayList<>(NpcManager.getList());
         npcsToSave.stream().filter(NpcHolder::hasUnsavedChanges).parallel().forEach(npc ->
         {
+            if(npc instanceof NPC npc1 && !npc1.isSaved())
+                return;
+
             try
             {
                 npc.save();
