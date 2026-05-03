@@ -77,28 +77,27 @@ public class GoalSelector
     }
 
     /**
-     * Queues a goal for removal. If the goal is currently running and cannot be removed immediately, it will be removed after it finishes. If the goal can be
-     * removed immediately or is not running, it will be removed right away from the NPC's goal list.
+     * Queues a goal for removal. If the goal is currently running, it will be removed immediately if it can be removed now, otherwise it will be queued for
+     * removal and removed after it finishes naturally. If the goal is not currently running, it will be removed immediately from the NPC's goal list.
      *
      * @param goal The goal to queue for removal
-     * @return true if the goal was queued for removal or removed immediately, false otherwise
+     * @return true if the goal was removed immediately or is not currently running, false if the goal was queued for removal
      */
     public boolean queueGoalForRemoval(@NotNull Goal goal)
     {
         if(currentGoal == goal)
         {
             if(goal.canBeRemovedNow(npc))
-                return npc.removeGoal(goal);
+                return true;
             else
             {
                 removalQueue.add(goal);
-                return true;
+                return false;
             }
         }
         else
-            return npc.removeGoal(goal);
+            return true;
     }
-
 
     /**
      * Checks if a goal is queued for removal.
@@ -270,7 +269,7 @@ public class GoalSelector
             if(usableGoals.isEmpty())
                 selectedGoal = null;
             else if(usableGoals.size() == 1)
-                selectedGoal = usableGoals.get(0);
+                selectedGoal = usableGoals.getFirst();
             else
             {
                 int totalWeight = usableGoals.stream()
@@ -296,7 +295,7 @@ public class GoalSelector
                     }
 
                     if(selectedGoal == null)
-                        selectedGoal = usableGoals.get(usableGoals.size() - 1);
+                        selectedGoal = usableGoals.getLast();
                 }
             }
         }
