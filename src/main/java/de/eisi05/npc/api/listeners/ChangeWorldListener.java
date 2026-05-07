@@ -12,12 +12,19 @@ public class ChangeWorldListener implements Listener
     @EventHandler
     public void onChange(PlayerChangedWorldEvent event)
     {
+        if(!NpcApi.config.autoManageVisibility())
+            return;
+
         new BukkitRunnable()
         {
             @Override
             public void run()
             {
-                NpcManager.getList().forEach(npc -> npc.showNPCToPlayer(event.getPlayer()));
+                NpcManager.getList().forEach(npc ->
+                {
+                    if(npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
+                        npc.showNPCToPlayer(event.getPlayer());
+                });
             }
         }.runTaskLater(NpcApi.plugin, 10L);
     }

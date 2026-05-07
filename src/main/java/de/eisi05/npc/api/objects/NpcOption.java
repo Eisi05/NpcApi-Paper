@@ -10,6 +10,7 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.NpcVisibility;
 import de.eisi05.npc.api.enums.SkinParts;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.*;
@@ -470,14 +471,16 @@ public class NpcOption<T, S extends Serializable>
                 if(npc.entity.getBukkitEntity().getType() != org.bukkit.entity.EntityType.ITEM_DISPLAY &&
                         npc.entity.getBukkitEntity().getType() != org.bukkit.entity.EntityType.BLOCK_DISPLAY)
                 {
+                    Byte handValue = data.get(EntityDataSerializers.BYTE.createAccessor(8));
+                    byte handFlag = handValue == null ? 0 : handValue;
                     if(pose == Pose.SPIN_ATTACK)
                     {
-                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x04);
+                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag | 0x04));
                         packet = new ClientboundMoveEntityPacket.Rot(npc.entity.getId(), (byte) (npc.getLocation().getYaw() * 256 / 360),
                                 (byte) -90, npc.entity.onGround());
                     }
                     else
-                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) 0x01);
+                        data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag & ~0x04));
                 }
 
                 if(pose == Pose.SITTING)
@@ -654,6 +657,13 @@ public class NpcOption<T, S extends Serializable>
             new HashMap<>(),
             aHashMap -> aHashMap, aHashMap -> aHashMap,
             (customData, npc, player) -> null);
+
+    /**
+     * NPC option to manage visibility settings for the NPC. This controls whether the NPC should be shown to all players (including new ones) or only to specific players.
+     */
+    static final NpcOption<NpcVisibilityManager, NpcVisibilityManager> VISIBILITY_MANAGER = new NpcOption<>("visibility-manager", new NpcVisibilityManager(),
+            visibilityManager -> visibilityManager, visibilityManager -> visibilityManager,
+            (visibilityManager, npc, player) -> null);
 
     private final String path;
     private final T defaultValue;

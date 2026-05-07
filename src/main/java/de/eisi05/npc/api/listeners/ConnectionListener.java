@@ -26,6 +26,9 @@ public class ConnectionListener implements Listener
 
         TeamManager.clear(event.getPlayer().getUniqueId());
 
+        if(!NpcApi.config.autoManageVisibility())
+            return;
+
         new BukkitRunnable()
         {
             @Override
@@ -33,6 +36,9 @@ public class ConnectionListener implements Listener
             {
                 for(NPC npc : new ArrayList<>(NpcManager.getList()))
                 {
+                    if(!npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
+                        continue;
+
                     npc.showNPCToPlayer(event.getPlayer());
                     NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, event.getPlayer());
                     if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, event.getPlayer()))
@@ -54,7 +60,8 @@ public class ConnectionListener implements Listener
         for(NPC npc : NpcManager.getList())
         {
             npc.nameCache.remove(event.getPlayer().getUniqueId());
-            npc.hideNpcFromPlayer(event.getPlayer());
+            if(NpcApi.config.autoManageVisibility())
+                npc.hideNpcFromPlayer(event.getPlayer());
         }
     }
 }

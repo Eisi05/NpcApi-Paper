@@ -48,6 +48,12 @@ public class NpcConfig
     private boolean checkValidPath = true;
 
     /**
+     * If true, the API will automatically manage NPC visibility for players across various events. This includes showing NPCs when players join, change worlds,
+     * or load chunks, and hiding NPCs when players quit.
+     */
+    private boolean autoManageVisibility = true;
+
+    /**
      * Sets the duration an NPC will look at a player after an interaction.
      *
      * @param time The time in ticks. For example, 20 ticks = 1 second.
@@ -133,6 +139,18 @@ public class NpcConfig
     }
 
     /**
+     * Sets whether the API should automatically manage NPC visibility for players.
+     *
+     * @param autoManageVisibility True to enable automatic visibility management, false to disable it.
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig autoManageVisibility(boolean autoManageVisibility)
+    {
+        this.autoManageVisibility = autoManageVisibility;
+        return this;
+    }
+
+    /**
      * Gets the configured duration an NPC will look at a player.
      *
      * @return The time in ticks.
@@ -200,5 +218,15 @@ public class NpcConfig
     public boolean checkValidPath()
     {
         return checkValidPath;
+    }
+
+    /**
+     * Checks whether the API automatically manages NPC visibility for players.
+     *
+     * @return True if automatic visibility management is enabled; false otherwise.
+     */
+    public boolean autoManageVisibility()
+    {
+        return autoManageVisibility;
     }
 }
