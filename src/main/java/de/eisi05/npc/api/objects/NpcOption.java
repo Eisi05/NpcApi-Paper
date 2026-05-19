@@ -41,6 +41,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.craftbukkit.CraftServer;
@@ -403,10 +404,10 @@ public class NpcOption<T, S extends Serializable>
                 }
 
                 var teamPair = getTeam(player, npc);
-                PlayerTeam team = teamPair.getFirst();
+                PlayerTeam team = teamPair.getKey();
                 team.setColor(ChatFormatting.getByCode(color.getColorCode()));
 
-                var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getSecond());
+                var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
 
                 entityData.set(accessor, (byte) (flags | modifier));
 
@@ -429,9 +430,9 @@ public class NpcOption<T, S extends Serializable>
             aBoolean -> aBoolean, aBoolean -> aBoolean, (collision, npc, player) ->
     {
         var teamPair = getTeam(player, npc);
-        PlayerTeam team = teamPair.getFirst();
+        PlayerTeam team = teamPair.getKey();
         team.setCollisionRule(collision ? Team.CollisionRule.ALWAYS : Team.CollisionRule.NEVER);
-        return (Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getSecond());
+        return (Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
     });
 
     /**
@@ -598,7 +599,7 @@ public class NpcOption<T, S extends Serializable>
                 packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
 
                 var teamPair = getTeam(player, npc);
-                PlayerTeam team = teamPair.getFirst();
+                PlayerTeam team = teamPair.getKey();
                 team.setNameTagVisibility(Team.Visibility.NEVER);
 
                 if(!team.getName().startsWith("trans"))
@@ -606,7 +607,7 @@ public class NpcOption<T, S extends Serializable>
                 else
                     ((PlayerTeam) TeamManager.create(player, npc.getGameProfileName())).getPlayers().remove(npc.getGameProfileName());
 
-                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getSecond()));
+                packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue()));
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(team, npc.getGameProfileName(),
                         ClientboundSetPlayerTeamPacket.Action.ADD));
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(team,
@@ -696,14 +697,14 @@ public class NpcOption<T, S extends Serializable>
         this.packet = packet;
     }
 
-    private static @NotNull Pair<PlayerTeam, Boolean> getTeam(@NotNull Player player, @NotNull NPC npc)
+    private static @NotNull org.apache.commons.lang3.tuple.Pair<PlayerTeam, Boolean> getTeam(@NotNull Player player, @NotNull NPC npc)
     {
         boolean isTransparent = npc.getOption(VISIBILITY, player) == NpcVisibility.TRANSPARENT;
         PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
         String teamName = isTransparent ? "trans-" + player.getEntityId() : npc.getGameProfileName();
         boolean modified = TeamManager.exists(player, teamName) || (playerTeam != null && isTransparent);
         PlayerTeam wrappedPlayerTeam = playerTeam != null && isTransparent ? playerTeam : (PlayerTeam) TeamManager.create(player, teamName);
-        return new Pair<>(wrappedPlayerTeam, modified);
+        return new ImmutablePair<>(wrappedPlayerTeam, modified);
     }
 
     /**
