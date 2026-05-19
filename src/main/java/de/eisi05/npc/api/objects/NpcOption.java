@@ -5,7 +5,6 @@ import com.google.common.collect.Multimaps;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
-import com.mojang.datafixers.util.Pair;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.NpcVisibility;
@@ -42,6 +41,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.craftbukkit.CraftServer;
@@ -283,10 +283,10 @@ public class NpcOption<T, S extends Serializable>
                 if(map.isEmpty())
                     return null;
 
-                List<Pair<net.minecraft.world.entity.EquipmentSlot, net.minecraft.world.item.ItemStack>> list = new ArrayList<>();
+                List<com.mojang.datafixers.util.Pair<net.minecraft.world.entity.EquipmentSlot, net.minecraft.world.item.ItemStack>> list = new ArrayList<>();
 
                 map.forEach((slot, item) -> list.add(
-                        new Pair<>(net.minecraft.world.entity.EquipmentSlot.values()[slot.ordinal()], CraftItemStack.asNMSCopy(item))));
+                        new com.mojang.datafixers.util.Pair<>(net.minecraft.world.entity.EquipmentSlot.values()[slot.ordinal()], CraftItemStack.asNMSCopy(item))));
 
                 return new ClientboundSetEquipmentPacket(npc.entity.getId(), list);
             });
@@ -474,7 +474,6 @@ public class NpcOption<T, S extends Serializable>
                 {
                     Byte handValue = data.get(EntityDataSerializers.BYTE.createAccessor(8));
                     byte handFlag = handValue == null ? 0 : handValue;
-
                     if(pose == Pose.SPIN_ATTACK)
                     {
                         data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag | 0x04));
@@ -670,6 +669,13 @@ public class NpcOption<T, S extends Serializable>
             aHashMap -> aHashMap, aHashMap -> aHashMap,
             (customData, npc, player) -> null);
 
+    /**
+     * NPC option to manage visibility settings for the NPC. This controls whether the NPC should be shown to all players (including new ones) or only to specific players.
+     */
+    static final NpcOption<NpcVisibilityManager, NpcVisibilityManager> VISIBILITY_MANAGER = new NpcOption<>("visibility-manager", new NpcVisibilityManager(),
+            visibilityManager -> visibilityManager, visibilityManager -> visibilityManager,
+            (visibilityManager, npc, player) -> null);
+
     private final String path;
     private final T defaultValue;
     private final Function<T, S> serializer;
@@ -697,7 +703,7 @@ public class NpcOption<T, S extends Serializable>
         this.packet = packet;
     }
 
-    private static @NotNull org.apache.commons.lang3.tuple.Pair<PlayerTeam, Boolean> getTeam(@NotNull Player player, @NotNull NPC npc)
+    private static @NotNull Pair<PlayerTeam, Boolean> getTeam(@NotNull Player player, @NotNull NPC npc)
     {
         boolean isTransparent = npc.getOption(VISIBILITY, player) == NpcVisibility.TRANSPARENT;
         PlayerTeam playerTeam = ((CraftScoreboard) player.getScoreboard()).getHandle().getPlayersTeam(player.getScoreboardEntryName());
