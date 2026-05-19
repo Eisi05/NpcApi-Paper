@@ -10,6 +10,7 @@ import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.NpcVisibility;
 import de.eisi05.npc.api.enums.SkinParts;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.*;
