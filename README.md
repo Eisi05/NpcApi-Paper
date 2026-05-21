@@ -43,7 +43,7 @@ This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?lo
 <dependency>
     <groupId>com.github.Eisi05</groupId>
     <artifactId>NpcApi-Paper</artifactId>
-    <version>2.1.0</version>
+    <version>2.1.4</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -59,7 +59,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    compileOnly 'com.github.Eisi05:NpcApi-Paper:2.1.0'
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:2.1.4'
 }
 ```
 
@@ -98,7 +98,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>2.1.0</version>
+	    <version>2.1.4</version>
 	</dependency>
 </dependencies>
 ```
@@ -115,7 +115,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:2.1.0'
+    implementation 'com.github.Eisi05:NpcApi-Paper:2.1.4'
 }
 ```
 
@@ -234,5 +234,5 @@ NPC npc = NpcManager.fromUUID(npcUuid);
 ## Requirements
 
 - Java 21+
-- Paper 1.21 - 1.21.10
+- Paper 1.21 - 26.1.2
 - Minecraft server with NPC support
