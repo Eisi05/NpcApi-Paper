@@ -286,7 +286,8 @@ public class NpcOption<T, S extends Serializable>
                 List<com.mojang.datafixers.util.Pair<net.minecraft.world.entity.EquipmentSlot, net.minecraft.world.item.ItemStack>> list = new ArrayList<>();
 
                 map.forEach((slot, item) -> list.add(
-                        new com.mojang.datafixers.util.Pair<>(net.minecraft.world.entity.EquipmentSlot.values()[slot.ordinal()], CraftItemStack.asNMSCopy(item))));
+                        new com.mojang.datafixers.util.Pair<>(net.minecraft.world.entity.EquipmentSlot.values()[slot.ordinal()],
+                                CraftItemStack.asNMSCopy(item))));
 
                 return new ClientboundSetEquipmentPacket(npc.entity.getId(), list);
             });
@@ -612,8 +613,13 @@ public class NpcOption<T, S extends Serializable>
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(team,
                         npc.entity.getBukkitEntity().getUniqueId().toString(), ClientboundSetPlayerTeamPacket.Action.ADD));
 
-                packets.add(new ClientboundRotateHeadPacket(entity, (byte) ((npc.getLocation().getYaw() % 360) * 256 / 360)));
-                packets.add(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) npc.getLocation().getYaw(), (byte) npc.getLocation().getPitch(),
+                float yaw = npc.getLocation().getYaw();
+                float pitch = npc.getLocation().getPitch();
+                if(npc.getOption(NpcOption.POSE, player) == org.bukkit.entity.Pose.SLEEPING)
+                    yaw = 180.0F - yaw + 90.0F;
+
+                packets.add(new ClientboundRotateHeadPacket(entity, (byte) ((yaw % 360) * 256 / 360)));
+                packets.add(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (byte) ((yaw % 360) * 256 / 360), (byte) (pitch * 256 / 360),
                         npc.serverPlayer.onGround));
 
                 SynchedEntityData data = entity.getEntityData();
@@ -633,7 +639,7 @@ public class NpcOption<T, S extends Serializable>
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(((Display.TextDisplay) npc.getNameTag().getDisplay()).getId(),
                                     (SynchedEntityData) npc.getNameTag().applyData(npc.isEnabled() ? npc.name.getName(player) :
                                             NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
-                                                    .appendNewline().append(npc.name.getName(player)))));
+                                            .appendNewline().append(npc.name.getName(player)))));
 
                     entity.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
                     packets.add(new ClientboundSetPassengersPacket(entity));
@@ -660,7 +666,8 @@ public class NpcOption<T, S extends Serializable>
             (customData, npc, player) -> null);
 
     /**
-     * NPC option to manage visibility settings for the NPC. This controls whether the NPC should be shown to all players (including new ones) or only to specific players.
+     * NPC option to manage visibility settings for the NPC. This controls whether the NPC should be shown to all players (including new ones) or only to
+     * specific players.
      */
     static final NpcOption<NpcVisibilityManager, NpcVisibilityManager> VISIBILITY_MANAGER = new NpcOption<>("visibility-manager", new NpcVisibilityManager(),
             visibilityManager -> visibilityManager, visibilityManager -> visibilityManager,
