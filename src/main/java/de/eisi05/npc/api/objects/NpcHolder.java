@@ -20,9 +20,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Abstract class representing an entity that can hold NPC-related data
- * and has a concept of unsaved changes.
- * It implements {@link InventoryHolder} but onlay as placeholder.
+ * Abstract class representing an entity that can hold NPC-related data and has a concept of unsaved changes. It implements {@link InventoryHolder} but onlay as
+ * placeholder.
  */
 public abstract class NpcHolder implements InventoryHolder
 {
@@ -32,8 +31,7 @@ public abstract class NpcHolder implements InventoryHolder
     protected NpcName name;
 
     /**
-     * Flag indicating whether there are unsaved changes to this holder.
-     * Defaults to {@code false}.
+     * Flag indicating whether there are unsaved changes to this holder. Defaults to {@code false}.
      */
     private boolean unsavedChanges = false;
 
@@ -49,8 +47,7 @@ public abstract class NpcHolder implements InventoryHolder
     }
 
     /**
-     * Marks that there are unsaved changes to this NPC holder.
-     * This should be called whenever a modifiable property of the holder is changed.
+     * Marks that there are unsaved changes to this NPC holder. This should be called whenever a modifiable property of the holder is changed.
      */
     public void markChange()
     {
@@ -58,9 +55,8 @@ public abstract class NpcHolder implements InventoryHolder
     }
 
     /**
-     * Saves the current state of the NPC holder.
-     * This method is intended to persist any changes. After successful execution,
-     * the {@code unsavedChanges} flag is reset to {@code false}.
+     * Saves the current state of the NPC holder. This method is intended to persist any changes. After successful execution, the {@code unsavedChanges} flag is
+     * reset to {@code false}.
      *
      * @throws IOException if an error occurs during the saving process.
      */
@@ -152,6 +148,20 @@ public abstract class NpcHolder implements InventoryHolder
                 option.getPacket(value, npc, player).ifPresent(packetWrapper -> ((CraftPlayer) player).getHandle().connection.send((Packet<?>) packetWrapper));
             });
         }
+    }
+
+    /**
+     * Sets an option value for this NPC holder for a specific player.
+     *
+     * @param <T>    the type of the option value
+     * @param option the option to set
+     * @param value  the value to set for the option, or {@code null} to remove the option
+     * @param player the player to associate with this option setting
+     */
+    <T> void setOption(@NotNull NpcOption<T, ?> option, @Nullable T value, @NotNull Player player)
+    {
+        player.getPersistentDataContainer().set(getKey(player), PersistentDataType.STRING, player.getUniqueId().toString());
+        setOption(option, value, player.getUniqueId());
     }
 
     /**
