@@ -44,20 +44,21 @@ public class NpcVisibilityManager implements Serializable
      * Adds a player to the list of specific players who should see this NPC. This has no effect if showToAllPlayers is true.
      *
      * @param playerUuid the UUID of the player to add
+     * @return true if the player was added, false if the player was already in the list
      */
-    public void addSpecificPlayer(@NotNull UUID playerUuid)
+    public boolean addSpecificPlayer(@NotNull UUID playerUuid)
     {
-        specificPlayers.add(playerUuid);
+        return specificPlayers.add(playerUuid);
     }
 
     /**
      * Removes a player from the list of specific players who should see this NPC.
      *
-     * @param playerUuid the UUID of the player to remove
+     * @return true if the player was removed, false if the player was not in the list
      */
-    public void removeSpecificPlayer(@NotNull UUID playerUuid)
+    public boolean removeSpecificPlayer(@NotNull UUID playerUuid)
     {
-        specificPlayers.remove(playerUuid);
+        return specificPlayers.remove(playerUuid);
     }
 
     /**

@@ -325,9 +325,14 @@ public class NPC extends NpcHolder
     public void reload()
     {
         final List<UUID> viewers = new ArrayList<>(this.viewers);
+        NpcVisibilityManager visibilityManager = getVisibilityManager();
+        boolean shouldShowToAll = visibilityManager.shouldShowToAllPlayers();
+        Set<UUID> specificPlayers = visibilityManager.getSpecificPlayers();
         hideNpcFromAllPlayers();
         TeamManager.clear(getGameProfileName());
         viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
+        visibilityManager.setShowToAllPlayers(shouldShowToAll);
+        specificPlayers.forEach(visibilityManager::addSpecificPlayer);
     }
 
     /**
@@ -557,7 +562,11 @@ public class NPC extends NpcHolder
      */
     public void showNpcToAllPlayers()
     {
-        getVisibilityManager().setShowToAllPlayers(true);
+        if(!getVisibilityManager().shouldShowToAllPlayers())
+        {
+            getVisibilityManager().setShowToAllPlayers(true);
+            markChange();
+        }
         Bukkit.getOnlinePlayers().forEach(this::showNPCToPlayer);
     }
 
@@ -572,8 +581,11 @@ public class NPC extends NpcHolder
         if(!getOption(NpcOption.ENABLED, GLOBAL_UUID) && !player.isPermissionSet("npc.admin") && !player.isOp())
             return;
 
-        if (!getVisibilityManager().shouldShowToAllPlayers())
-            getVisibilityManager().addSpecificPlayer(player.getUniqueId());
+        if(!getVisibilityManager().shouldShowToAllPlayers())
+        {
+            if(getVisibilityManager().addSpecificPlayer(player.getUniqueId()))
+                markChange();
+        }
 
         if(!player.getWorld().getUID().equals(serverPlayer.getBukkitEntity().getWorld().getUID()))
         {
@@ -628,8 +640,13 @@ public class NPC extends NpcHolder
      */
     public void hideNpcFromAllPlayers()
     {
-        getVisibilityManager().setShowToAllPlayers(false);
-        getVisibilityManager().clearSpecificPlayers();
+        if(getVisibilityManager().shouldShowToAllPlayers())
+        {
+            getVisibilityManager().setShowToAllPlayers(false);
+            getVisibilityManager().clearSpecificPlayers();
+            markChange();
+        }
+
         Bukkit.getOnlinePlayers().forEach(this::hideNpcFromPlayer);
     }
 
@@ -644,8 +661,11 @@ public class NPC extends NpcHolder
         if(!viewers.contains(player.getUniqueId()))
             return;
 
-        if (!getVisibilityManager().shouldShowToAllPlayers())
-            getVisibilityManager().removeSpecificPlayer(player.getUniqueId());
+        if(!getVisibilityManager().shouldShowToAllPlayers())
+        {
+            if(getVisibilityManager().removeSpecificPlayer(player.getUniqueId()))
+                markChange();
+        }
 
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
         connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
