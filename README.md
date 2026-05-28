@@ -23,6 +23,7 @@ See the in-repo wiki pages under:
 - Save and load NPCs persistently
 - Show/hide NPCs for specific players
 - Comprehensive NPC management system
+- Let NPCs walk around
 
 ## Installation
 Choose your preferred installation method based on your project needs:
