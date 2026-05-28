@@ -1,6 +1,8 @@
 package de.eisi05.npc.api.objects;
 
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.ai.Goal;
+import de.eisi05.npc.api.ai.GoalSelector;
 import net.kyori.adventure.text.Component;
 import net.minecraft.network.protocol.Packet;
 import org.bukkit.Bukkit;
@@ -14,10 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Abstract class representing an entity that can hold NPC-related data and has a concept of unsaved changes. It implements {@link InventoryHolder} but onlay as
@@ -85,6 +84,13 @@ public abstract class NpcHolder implements InventoryHolder
      * @param name The name of this NPC holder
      */
     public abstract void setName(@NotNull NpcName name);
+
+    /**
+     * Gets the goal selector for this NPC holder.
+     *
+     * @return The goal selector for this NPC holder, or {@code null}
+     */
+    protected abstract @Nullable GoalSelector getGoalSelector();
 
     /**
      * Sets an option value for this NPC holder with the global UUID.
@@ -289,6 +295,56 @@ public abstract class NpcHolder implements InventoryHolder
     public @NotNull Map<UUID, Map<NpcOption<?, ?>, Object>> getOptions()
     {
         return options;
+    }
+
+    /**
+     * Adds a goal to this NPC's goal selector.
+     *
+     * @param goal The goal to add
+     */
+    public void addGoal(@NotNull Goal goal)
+    {
+        ArrayList<Goal> goals = getOption(NpcOption.GOALS);
+        goals.add(goal);
+        setOption(NpcOption.GOALS, goals);
+    }
+
+    /**
+     * Removes a goal from this NPC. If the goal is currently running, it will be queued for removal and removed once it finishes naturally. If the goal is not
+     * currently running, it will be immediately removed from the NPC's goal list.
+     *
+     * @param goal The goal to remove
+     * @return true if the goal was removed or queued for removal, false if the goal was not found
+     */
+    public boolean removeGoal(@NotNull Goal goal)
+    {
+        GoalSelector selector = getGoalSelector();
+        if(selector != null && !selector.queueGoalForRemoval(goal))
+            return true;
+
+        ArrayList<Goal> goals = getOption(NpcOption.GOALS);
+        boolean removed = goals.remove(goal);
+        setOption(NpcOption.GOALS, goals);
+        return removed;
+    }
+
+    /**
+     * Gets the list of goals associated with this NPC.
+     * <p>
+     * This method returns all active goals for this NPC, excluding any goals that are currently queued for removal. Goals that are in the removal queue will
+     * not appear in the returned list even if they are still running.
+     *
+     * @return A list of active goals, or an empty list if no goals are set
+     */
+    public @NotNull List<Goal> getGoals()
+    {
+        return getOption(NpcOption.GOALS).stream().filter(goal ->
+        {
+            GoalSelector goalSelector = getGoalSelector();
+            if(goalSelector == null)
+                return true;
+            return !goalSelector.isGoalQueuedForRemoval(goal);
+        }).toList();
     }
 
     /**

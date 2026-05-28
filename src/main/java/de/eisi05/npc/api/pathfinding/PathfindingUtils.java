@@ -1,5 +1,7 @@
 package de.eisi05.npc.api.pathfinding;
 
+import de.eisi05.npc.api.NpcApi;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,7 +42,7 @@ public class PathfindingUtils
             {
                 throw new RuntimeException(e);
             }
-        });
+        }, runnable -> Bukkit.getScheduler().runTaskAsynchronously(NpcApi.plugin, runnable));
     }
 
     /**

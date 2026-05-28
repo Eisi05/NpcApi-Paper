@@ -6,6 +6,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.NpcVisibility;
 import de.eisi05.npc.api.enums.SkinParts;
 import de.eisi05.npc.api.manager.NpcManager;
@@ -655,6 +656,16 @@ public class NpcOption<T, S extends Serializable>
     static final NpcOption<Boolean, Boolean> EDITABLE = new NpcOption<>("editable", false,
             aBoolean -> aBoolean, aBoolean -> aBoolean,
             (enabled, npc, player) -> null);
+
+    /**
+     * NPC option to store the goal selector for the NPC. This allows saving and restoring the NPC's AI behavior. The serialized form stores the running state,
+     * tick interval, and goal configurations. Note: Goals themselves are not fully serialized - only their class names and any serializable configuration. On
+     * deserialization, goals must be re-instantiated by the plugin.
+     */
+    static final NpcOption<ArrayList<Goal>, ArrayList<Goal>> GOALS = new NpcOption<>("goals", new ArrayList<>(),
+            goals -> goals,
+            goals -> goals,
+            (data, npc, player) -> null);
 
     /**
      * NPC option to store custom data for the NPC. This is an internal option, typically not directly set by users but controlled by

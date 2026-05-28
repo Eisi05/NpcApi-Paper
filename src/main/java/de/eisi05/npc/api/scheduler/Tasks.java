@@ -14,9 +14,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Tasks
 {
     public static final Map<UUID, Map<UUID, String>> placeholderCache = new ConcurrentHashMap<>();
+    private static final List<CompletableFuture<?>> activeFutures = new ArrayList<>();
     private static BukkitTask lookAtTask;
     private static BukkitTask placeholderTask;
 
@@ -48,6 +48,13 @@ public class Tasks
 
         if(placeholderTask != null && !placeholderTask.isCancelled())
             placeholderTask.cancel();
+
+        synchronized(activeFutures)
+        {
+            for(CompletableFuture<?> future : activeFutures)
+                future.cancel(true);
+            activeFutures.clear();
+        }
     }
 
     /**
@@ -151,5 +158,25 @@ public class Tasks
             Skin.fetchSkinAsync(newPlaceholder).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
                     Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
         }
+    }
+
+    /**
+     * Tracks a CompletableFuture for cancellation on plugin disable.
+     *
+     * @param future the future to track
+     */
+    public static void trackFuture(@NotNull CompletableFuture<?> future)
+    {
+        synchronized(activeFutures)
+        {
+            activeFutures.add(future);
+        }
+        future.whenComplete((result, error) ->
+        {
+            synchronized(activeFutures)
+            {
+                activeFutures.remove(future);
+            }
+        });
     }
 }

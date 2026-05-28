@@ -7,9 +7,11 @@ import com.google.gson.JsonParser;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Versions;
 import net.minecraft.server.level.ServerPlayer;
+import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -225,7 +227,10 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      */
     public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull UUID uuid)
     {
-        return CompletableFuture.supplyAsync(() -> fetchSkin(uuid));
+        CompletableFuture<Optional<Skin>> future = CompletableFuture.supplyAsync(() -> fetchSkin(uuid),
+                runnable -> Bukkit.getScheduler().runTaskAsynchronously(NpcApi.plugin, runnable));
+        Tasks.trackFuture(future);
+        return future;
     }
 
     /**
@@ -236,7 +241,10 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      */
     public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull String name)
     {
-        return CompletableFuture.supplyAsync(() -> fetchSkin(name));
+        CompletableFuture<Optional<Skin>> future = CompletableFuture.supplyAsync(() -> fetchSkin(name),
+                runnable -> Bukkit.getScheduler().runTaskAsynchronously(NpcApi.plugin, runnable));
+        Tasks.trackFuture(future);
+        return future;
     }
 
     /**
@@ -247,7 +255,10 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      */
     public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull File skinFile)
     {
-        return CompletableFuture.supplyAsync(() -> fetchSkin(skinFile));
+        CompletableFuture<Optional<Skin>> future = CompletableFuture.supplyAsync(() -> fetchSkin(skinFile),
+                runnable -> Bukkit.getScheduler().runTaskAsynchronously(NpcApi.plugin, runnable));
+        Tasks.trackFuture(future);
+        return future;
     }
 
     private static byte[] combine(byte[]... arrays) throws IOException
