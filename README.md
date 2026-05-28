@@ -16,13 +16,13 @@ See the in-repo wiki pages under:
 
 ## Features
 
-- 🎭 Create custom NPCs with ease
-- 🎨 Customize NPC appearance (skins, glowing effects, etc.)
-- 👆 Handle click events and interactions
-- 🎬 Play animations and control NPC behavior
-- 💾 Save and load NPCs persistently
-- 👥 Show/hide NPCs for specific players
-- 🔍 Comprehensive NPC management system
+- Create custom NPCs with ease
+- Customize NPC appearance (skins, glowing effects, etc.)
+- Handle click events and interactions
+- Play animations and control NPC behavior
+- Save and load NPCs persistently
+- Show/hide NPCs for specific players
+- Comprehensive NPC management system
 
 ## Installation
 Choose your preferred installation method based on your project needs:
