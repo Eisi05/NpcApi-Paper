@@ -68,6 +68,20 @@ public class WanderGoal extends Goal
     }
 
     /**
+     * Creates a copy of this goal.
+     *
+     * @param goal the goal to copy
+     */
+    private WanderGoal(@NotNull WanderGoal goal)
+    {
+        super(goal.getPriority());
+        this.radius = goal.radius;
+        this.minDelay = goal.minDelay;
+        this.maxDelay = goal.maxDelay;
+        this.speed = goal.speed;
+    }
+
+    /**
      * Gets the radius for this goal.
      *
      * @return the radius
@@ -239,6 +253,12 @@ public class WanderGoal extends Goal
     public boolean canBeInterrupted(@NotNull NPC npc)
     {
         return delayTicks == 1;
+    }
+
+    @Override
+    public @NotNull Goal copy()
+    {
+        return new WanderGoal(this);
     }
 
     /**

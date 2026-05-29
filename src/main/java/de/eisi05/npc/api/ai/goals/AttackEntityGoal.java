@@ -96,6 +96,19 @@ public class AttackEntityGoal extends Goal
     }
 
     /**
+     * Creates a copy of this goal.
+     *
+     * @param goal the goal to copy
+     */
+    private AttackEntityGoal(@NotNull AttackEntityGoal goal)
+    {
+        super(goal.getPriority());
+        this.targetFilter = goal.targetFilter;
+        this.customAttackRange = goal.customAttackRange;
+        this.speed = goal.speed;
+    }
+
+    /**
      * Gets the target filter for this goal.
      *
      * @return the target filter
@@ -369,6 +382,12 @@ public class AttackEntityGoal extends Goal
                 return false;
         }
         return true;
+    }
+
+    @Override
+    public @NotNull Goal copy()
+    {
+        return new AttackEntityGoal(this);
     }
 
     /**

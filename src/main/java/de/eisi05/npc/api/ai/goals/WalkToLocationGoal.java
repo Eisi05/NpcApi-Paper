@@ -71,6 +71,22 @@ public class WalkToLocationGoal extends Goal
     }
 
     /**
+     * Creates a copy of this goal.
+     *
+     * @param goal the goal to copy
+     */
+    private WalkToLocationGoal(@NotNull WalkToLocationGoal goal)
+    {
+        super(goal.getPriority());
+        this.serializableLocation = goal.serializableLocation;
+        this.speed = goal.speed;
+        this.maxIterations = goal.maxIterations;
+        this.allowDiagonal = goal.allowDiagonal;
+        this.completionCallback = goal.completionCallback;
+        this.withRotation = goal.withRotation;
+    }
+
+    /**
      * Gets the speed for this goal.
      *
      * @return the speed
@@ -279,6 +295,12 @@ public class WalkToLocationGoal extends Goal
                 return false;
         }
         return true;
+    }
+
+    @Override
+    public @NotNull Goal copy()
+    {
+        return new WalkToLocationGoal(this);
     }
 
     /**

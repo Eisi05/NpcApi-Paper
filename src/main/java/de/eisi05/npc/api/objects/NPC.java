@@ -183,7 +183,16 @@ public class NPC extends NpcHolder
      */
     public @NotNull NPC copy(@NotNull Location newLocation)
     {
-        return new NPC(newLocation, name.copy(), new HashMap<>(options), clickEvent == null ? null : clickEvent.copy());
+        Map<UUID, Map<NpcOption<?, ?>, Object>> newOptions = new HashMap<>();
+        options.forEach((uuid, innerMap) ->
+        {
+            Map<NpcOption<?, ?>, Object> newInnerMap = new HashMap<>();
+            innerMap.forEach((npcOption, o) ->
+                    newInnerMap.put(npcOption, npcOption.copy(Var.unsafeCast(o))));
+            newOptions.put(uuid, newInnerMap);
+        });
+
+        return new NPC(newLocation, name.copy(), newOptions, clickEvent == null ? null : clickEvent.copy());
     }
 
     /**

@@ -29,6 +29,17 @@ public class WaitGoal extends Goal
     }
 
     /**
+     * Creates a copy of this goal.
+     *
+     * @param goal the goal to copy
+     */
+    private WaitGoal(@NotNull WaitGoal goal)
+    {
+        super(goal.getPriority());
+        this.durationTicks = goal.durationTicks;
+    }
+
+    /**
      * Gets the duration in ticks.
      *
      * @return The duration in ticks
@@ -103,6 +114,12 @@ public class WaitGoal extends Goal
     public boolean canContinue(@NotNull NPC npc)
     {
         return ticksRemaining > 0;
+    }
+
+    @Override
+    public @NotNull Goal copy()
+    {
+        return new WaitGoal(this);
     }
 
     /**

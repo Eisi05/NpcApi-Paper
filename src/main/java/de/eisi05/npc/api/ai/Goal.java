@@ -117,6 +117,13 @@ public abstract class Goal implements Serializable
     }
 
     /**
+     * Creates a copy of this goal.
+     *
+     * @return A copy of this goal
+     */
+    public abstract @NotNull Goal copy();
+
+    /**
      * Priority levels for goal selection. Higher priority goals are more likely to be selected. ALWAYS priority goals are always preferred over other goals.
      * Other priorities use weighted random selection where higher weight = higher chance of being selected.
      */

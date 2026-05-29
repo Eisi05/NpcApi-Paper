@@ -61,6 +61,18 @@ public class LookAroundGoal extends Goal
     }
 
     /**
+     * Creates a copy of this goal.
+     *
+     * @param goal the goal to copy
+     */
+    private LookAroundGoal(@NotNull LookAroundGoal goal)
+    {
+        super(goal.getPriority());
+        this.minDuration = goal.minDuration;
+        this.maxDuration = goal.maxDuration;
+    }
+
+    /**
      * Gets the maximum duration for this goal.
      *
      * @return the maximum duration
@@ -195,6 +207,12 @@ public class LookAroundGoal extends Goal
     public boolean canContinue(@NotNull NPC npc)
     {
         return isLooking;
+    }
+
+    @Override
+    public @NotNull Goal copy()
+    {
+        return new LookAroundGoal(this);
     }
 
     /**
