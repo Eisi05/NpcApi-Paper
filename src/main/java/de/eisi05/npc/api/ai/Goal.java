@@ -1,7 +1,9 @@
 package de.eisi05.npc.api.ai;
 
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.utils.SerializablePredicate;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -15,6 +17,7 @@ public abstract class Goal implements Serializable
     @Serial
     private final static long serialVersionUID = 1L;
     private Priority priority;
+    private SerializablePredicate<NPC> condition;
 
     /**
      * Creates a new goal with the specified priority.
@@ -28,6 +31,26 @@ public abstract class Goal implements Serializable
 
     private Goal()
     {
+    }
+
+    /**
+     * Gets the condition for this goal. The condition is checked before the goal is executed.
+     *
+     * @return The condition for this goal
+     */
+    public @Nullable SerializablePredicate<NPC> getCondition()
+    {
+        return condition;
+    }
+
+    /**
+     * Sets the condition for this goal. The condition is checked before the goal is executed.
+     *
+     * @param condition The condition to set
+     */
+    public void setCondition(@Nullable SerializablePredicate<NPC> condition)
+    {
+        this.condition = condition;
     }
 
     /**
@@ -56,7 +79,10 @@ public abstract class Goal implements Serializable
      * @param npc The NPC to check for
      * @return true if this goal can be used, false otherwise
      */
-    protected abstract boolean canUse(@NotNull NPC npc);
+    protected boolean canUse(@NotNull NPC npc)
+    {
+        return condition == null || condition.test(npc);
+    }
 
     /**
      * Called when this goal starts executing. Use this to initialize any state needed for the goal.

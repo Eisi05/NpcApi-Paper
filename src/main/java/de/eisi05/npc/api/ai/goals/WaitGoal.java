@@ -68,7 +68,7 @@ public class WaitGoal extends Goal
     @Override
     public boolean canUse(@NotNull NPC npc)
     {
-        return ticksRemaining > 0 || durationTicks > 0;
+        return (ticksRemaining > 0 || durationTicks > 0) && super.canUse(npc);
     }
 
     /**
@@ -113,7 +113,7 @@ public class WaitGoal extends Goal
     @Override
     public boolean canContinue(@NotNull NPC npc)
     {
-        return ticksRemaining > 0;
+        return ticksRemaining > 0 && super.canContinue(npc);
     }
 
     @Override
