@@ -40,6 +40,7 @@ public class ConnectionListener implements Listener
                         continue;
 
                     npc.showNPCToPlayer(event.getPlayer());
+                    npc.addWalkingViewer(event.getPlayer());
                     NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, event.getPlayer());
                     if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, event.getPlayer()))
                         continue;
@@ -60,6 +61,7 @@ public class ConnectionListener implements Listener
         for(NPC npc : NpcManager.getList())
         {
             npc.nameCache.remove(event.getPlayer().getUniqueId());
+            npc.removeWalkingViewer(event.getPlayer());
             if(NpcApi.config.autoManageVisibility())
                 npc.hideNpcFromPlayer(event.getPlayer());
         }
