@@ -1054,11 +1054,21 @@ public class NPC extends NpcHolder
             if(!canShowWalkingTo(player, task.getCurrentLocation()))
                 continue;
 
-            removeWalkingViewer(player);
+            PathTask currentTask = pathTasks.get(player.getUniqueId());
 
-            showNPCToPlayer(player);
+            if(currentTask == task && task.hasViewer(player))
+                return;
+
+            if(currentTask != null && currentTask != task)
+                removeWalkingViewer(player);
+
+            boolean newlyAdded = !task.hasViewer(player);
 
             pathTasks.put(player.getUniqueId(), task);
+
+            if(newlyAdded)
+                showNPCToPlayer(player);
+
             task.addViewer(player);
             return;
         }
@@ -1115,13 +1125,8 @@ public class NPC extends NpcHolder
             for(Player player : Bukkit.getOnlinePlayers())
             {
                 if(canShowWalkingTo(player, task.getCurrentLocation()))
-                {
-                    showNPCToPlayer(player);
-
-                    pathTasks.put(player.getUniqueId(), task);
-                    task.addViewer(player);
-                }
-                else
+                    addWalkingViewer(player);
+                else if(pathTasks.get(player.getUniqueId()) == task)
                     removeWalkingViewer(player);
             }
         }

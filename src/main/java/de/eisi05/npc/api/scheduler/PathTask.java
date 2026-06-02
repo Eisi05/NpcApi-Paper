@@ -617,14 +617,29 @@ public class PathTask extends BukkitRunnable
      * Adds a viewer to this path task and immediately syncs the NPC's current walking position.
      *
      * @param player the player to add
+     * @return true if the player was newly added; false if the player was already a viewer
      */
-    public void addViewer(@NotNull Player player)
+    public boolean addViewer(@NotNull Player player)
     {
         if(finished)
-            return;
+            return false;
 
-        if(viewerIds.add(player.getUniqueId()))
-            sendCurrentPosition(player);
+        if(!viewerIds.add(player.getUniqueId()))
+            return false;
+
+        sendCurrentPosition(player);
+        return true;
+    }
+
+    /**
+     * Checks whether the specified player is already attached to this path task.
+     *
+     * @param player the player to check
+     * @return true if the player is already a viewer of this walking task; false otherwise
+     */
+    public boolean hasViewer(@NotNull Player player)
+    {
+        return viewerIds.contains(player.getUniqueId());
     }
 
     /**
