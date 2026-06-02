@@ -219,7 +219,7 @@ public class Var
         boolean isFire = false;
         try
         {
-            isFire = Versions.isCurrentVersionSmallerThan(Versions.V1_21_2) ? (boolean) Reflections.invokeMethod(entity, "isVisualFire").get() :
+            isFire = Versions.isCurrentVersionSmallerThan(Versions.V1_21_4) ? (boolean) Reflections.invokeMethod(entity, "isVisualFire").get() :
                     entity.getVisualFire().toBooleanOrElse(false);
         }
         catch(Exception e)

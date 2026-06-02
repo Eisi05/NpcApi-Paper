@@ -5,11 +5,11 @@ import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.utils.Var;
+import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -18,12 +18,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.HandlerList;
-import org.bukkit.event.Listener;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
@@ -61,7 +55,7 @@ public class PathTask extends BukkitRunnable
     private boolean finished = false;
     private int index = 0;
     private Vector currentPos;
-    private Vector previousMoveDir;
+    private final Vector previousMoveDir;
     private float previousPitch;
     private float previousYaw;
     private double verticalVelocity = 0.0;
@@ -313,8 +307,8 @@ public class PathTask extends BukkitRunnable
                 (byte) (loc.getPitch() * 256 / 360), true);
 
         Vec3 vec = new Vec3(loc.toVector().getX(), loc.toVector().getY(), loc.toVector().getZ());
-        ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverEntity.getId(),
-                new PositionMoveRotation(vec, vec, loc.getYaw(), loc.getPitch()), Set.of(), true);
+        ClientboundTeleportEntityPacket teleport = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverEntity, vec, Vec3.ZERO,
+                loc.getYaw(), loc.getPitch(), Set.of(), true);
 
         npc.sendNpcMovePackets(teleport, head, getViewers());
         npc.sendNpcBodyPackets(body, getViewers());
@@ -712,17 +706,8 @@ public class PathTask extends BukkitRunnable
 
         Vec3 currentVec = new Vec3(currentPos.getX(), currentPos.getY(), currentPos.getZ());
 
-        ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(
-                serverEntity.getId(),
-                new PositionMoveRotation(
-                        currentVec,
-                        Vec3.ZERO,
-                        previousYaw,
-                        previousPitch
-                ),
-                Set.of(),
-                true
-        );
+        ClientboundTeleportEntityPacket teleport = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverEntity, currentVec, Vec3.ZERO,
+                previousYaw, previousPitch, Set.of(), true);
 
         npc.sendNpcMovePackets(teleport, head, player);
     }
@@ -748,8 +733,8 @@ public class PathTask extends BukkitRunnable
         Vec3 currentVec = new Vec3(currentPos.getX(), currentPos.getY(), currentPos.getZ());
         Vec3 movementVec = new Vec3(movement.getX(), movement.getY(), movement.getZ());
 
-        ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(serverEntity.getId(),
-                new PositionMoveRotation(currentVec, movementVec, yaw, pitch), Set.of(), onGround);
+        ClientboundTeleportEntityPacket teleport = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverEntity, currentVec, movementVec,
+                yaw, pitch, Set.of(), onGround);
 
         npc.sendNpcMovePackets(teleport, head, getViewers());
 

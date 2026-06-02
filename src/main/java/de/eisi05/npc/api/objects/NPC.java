@@ -21,6 +21,7 @@ import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
+import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
@@ -39,7 +40,6 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import org.bukkit.Bukkit;
@@ -983,8 +983,7 @@ public class NPC extends NpcHolder
     /**
      * Cancels this NPC's walking task for the specified viewer if one is active.
      * <p>
-     * For automatically managed walking tasks, this only removes the viewer from the task and does
-     * not cancel the shared walking task for other viewers.
+     * For automatically managed walking tasks, this only removes the viewer from the task and does not cancel the shared walking task for other viewers.
      * <p>
      * For manually created viewer-specific walking tasks, the task itself is cancelled.
      *
@@ -1007,8 +1006,7 @@ public class NPC extends NpcHolder
     /**
      * Cancels all active walking tasks for this NPC.
      * <p>
-     * If the NPC is currently walking, each unique path task is cancelled and cleared.
-     * If no walking task is active, this method has no effect.
+     * If the NPC is currently walking, each unique path task is cancelled and cleared. If no walking task is active, this method has no effect.
      */
     public void cancelWalking()
     {
@@ -1030,7 +1028,7 @@ public class NPC extends NpcHolder
      *     <li>the player is within {@link NpcConfig#walkingViewerDistance()} blocks, unless disabled.</li>
      * </ul>
      *
-     * @param player the player to check
+     * @param player          the player to check
      * @param currentLocation the NPC's current walking location
      * @return true if the player should receive walking packets; false otherwise
      */
@@ -1058,8 +1056,7 @@ public class NPC extends NpcHolder
     /**
      * Adds a player to this NPC's active automatically managed walking task, if possible.
      * <p>
-     * This method does not start or cancel any walking task. It only attaches the player to an
-     * already running task that allows automatic viewer management.
+     * This method does not start or cancel any walking task. It only attaches the player to an already running task that allows automatic viewer management.
      *
      * @param player the player to add as a walking viewer
      */
@@ -1105,8 +1102,7 @@ public class NPC extends NpcHolder
     /**
      * Removes a player from all active walking tasks for this NPC.
      * <p>
-     * This does not cancel the walking task itself. It only stops sending movement packets
-     * to the specified player.
+     * This does not cancel the walking task itself. It only stops sending movement packets to the specified player.
      *
      * @param player the player to remove
      */
@@ -1131,8 +1127,8 @@ public class NPC extends NpcHolder
     /**
      * Re-checks all online players for active automatically managed walking tasks.
      * <p>
-     * Eligible players are added to the walking task. Players who are no longer eligible,
-     * for example because they changed worlds or moved too far away, are removed.
+     * Eligible players are added to the walking task. Players who are no longer eligible, for example because they changed worlds or moved too far away, are
+     * removed.
      */
     public void refreshWalkingViewers()
     {
@@ -1267,9 +1263,8 @@ public class NPC extends NpcHolder
             pitch = 0F;
         }
 
-        ClientboundTeleportEntityPacket teleport1 = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
-                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
-                        location.getPitch()), Set.of(), true);
+        ClientboundTeleportEntityPacket teleport1 = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverPlayer,
+                new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(), location.getPitch(), Set.of(), true);
 
         byte renderYawByte = (byte) (renderYaw * 256 / 360);
         ClientboundBundlePacket rotPacket;
@@ -1285,9 +1280,9 @@ public class NPC extends NpcHolder
                             new ClientboundRotateHeadPacket(entity, renderYawByte)));
         }
 
-        ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null : new ClientboundTeleportEntityPacket(entity.getId(),
-                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
-                        location.getPitch()), Set.of(), true);
+        ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null :
+                (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(entity, new Vec3(location.getX(), location.getY(), location.getZ()),
+                        new Vec3(0, 0, 0), location.getYaw(), location.getPitch(), Set.of(), true);
 
         for(UUID uuid : viewers)
         {
@@ -1330,9 +1325,8 @@ public class NPC extends NpcHolder
             pitch = 0F;
         }
 
-        ClientboundTeleportEntityPacket teleport1 = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
-                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
-                        location.getPitch()), Set.of(), true);
+        ClientboundTeleportEntityPacket teleport1 = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverPlayer,
+                new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(), location.getPitch(), Set.of(), true);
 
         byte renderYawByte = (byte) (renderYaw * 256 / 360);
         ClientboundBundlePacket rotPacket;
@@ -1348,9 +1342,9 @@ public class NPC extends NpcHolder
                             new ClientboundRotateHeadPacket(entity, renderYawByte)));
         }
 
-        ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null : new ClientboundTeleportEntityPacket(entity.getId(),
-                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
-                        location.getPitch()), Set.of(), true);
+        ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null :
+                (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(entity, new Vec3(location.getX(), location.getY(), location.getZ()),
+                        new Vec3(0, 0, 0), location.getYaw(), location.getPitch(), Set.of(), true);
 
         var connection = ((CraftPlayer) player).getHandle().connection;
         connection.send(teleport1);

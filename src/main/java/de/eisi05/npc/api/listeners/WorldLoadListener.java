@@ -2,7 +2,6 @@ package de.eisi05.npc.api.listeners;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
-import de.eisi05.npc.api.objects.NPC;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

@@ -2,10 +2,10 @@ package de.eisi05.npc.api.movement;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -237,10 +237,10 @@ public class MovementReplayer
 
                 if(distance > 10) // Teleport threshold
                 {
-                    ClientboundTeleportEntityPacket teleport1 = new ClientboundTeleportEntityPacket(((Entity) npc.getEntity()).getId(),
-                            new PositionMoveRotation(
-                                    new Vec3(targetLocation.toVector().getX(), targetLocation.toVector().getY(), targetLocation.toVector().getZ()),
-                                    new Vec3(0, 0, 0), targetLocation.getYaw(), targetLocation.getPitch()), Set.of(), true);
+                    ClientboundTeleportEntityPacket teleport1 = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create((Entity) npc.getEntity(),
+                            new Vec3(targetLocation.toVector().getX(), targetLocation.toVector().getY(), targetLocation.toVector().getZ()), new Vec3(0, 0, 0),
+                            targetLocation.getYaw(), targetLocation.getPitch(), Set.of(), true);
+
                     npc.sendNpcMovePackets(teleport1, head, viewers);
                 }
                 else
@@ -249,8 +249,8 @@ public class MovementReplayer
                     Vector movementVec = movement.toLocation(world).toVector();
                     Vec3 currentVec3 = new Vec3(currentVec.getX(), currentVec.getY(), currentVec.getZ());
                     Vec3 movementVec3 = new Vec3(movementVec.getX(), movementVec.getY(), movementVec.getZ());
-                    ClientboundTeleportEntityPacket teleport = new ClientboundTeleportEntityPacket(((Entity) npc.getEntity()).getId(),
-                            new PositionMoveRotation(currentVec3, movementVec3, targetLocation.getYaw(), targetLocation.getPitch()), Set.of(), true);
+                    ClientboundTeleportEntityPacket teleport = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create((Entity) npc.getEntity(),
+                            currentVec3, movementVec3, targetLocation.getYaw(), targetLocation.getPitch(), Set.of(), true);
 
                     npc.sendNpcMovePackets(teleport, head, viewers);
                 }
@@ -260,8 +260,9 @@ public class MovementReplayer
                 // First movement - teleport to position
                 Vector currentVec = targetLocation.toVector();
                 Vec3 currentVec3 = new Vec3(currentVec.getX(), currentVec.getY(), currentVec.getZ());
-                ClientboundTeleportEntityPacket teleport1 = new ClientboundTeleportEntityPacket(((Entity) npc.getEntity()).getId(),
-                        new PositionMoveRotation(currentVec3, new Vec3(0, 0, 0), targetLocation.getYaw(), targetLocation.getPitch()), Set.of(), true);
+                ClientboundTeleportEntityPacket teleport1 = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create((Entity) npc.getEntity(),
+                        currentVec3, new Vec3(0, 0, 0), targetLocation.getYaw(), targetLocation.getPitch(), Set.of(), true);
+
                 npc.sendNpcMovePackets(teleport1, head, viewers);
             }
 
