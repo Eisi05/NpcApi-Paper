@@ -489,11 +489,31 @@ public class NpcOption<T, S extends Serializable>
                         data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag & ~0x04));
                 }
 
+                if(pose == Pose.SLEEPING)
+                {
+                    new BukkitRunnable()
+                    {
+                        int counter = 255;
+                        final Location startLocation = npc.getLocation();
+                        final float startYaw = startLocation.getYaw();
+
+                        @Override
+                        public void run()
+                        {
+                            startLocation.setYaw((startYaw + counter) % 360);
+                            npc.updateLocationForPlayer(startLocation, player);
+                            if(counter == 360)
+                                cancel();
+
+                            counter += 35;
+                        }
+                    }.runTaskTimer(NpcApi.plugin, 10, 5);
+                }
+
                 if(pose == Pose.SITTING)
                 {
                     Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.entity.level());
-                    textDisplay.absSnapTo(npc.entity.getBukkitEntity().getLocation().getX(), npc.entity.getBukkitEntity().getLocation().getY(),
-                            npc.entity.getBukkitEntity().getLocation().getZ());
+                    textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
                     npc.toDeleteEntities.put("sit", textDisplay.getId());
 
                     Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(
@@ -527,6 +547,7 @@ public class NpcOption<T, S extends Serializable>
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
                 }
             });
+
     /**
      * NPC option to set the scale (size) of the NPC. A value of 1.0 is normal size. Requires Minecraft 1.20.6 or newer.
      */

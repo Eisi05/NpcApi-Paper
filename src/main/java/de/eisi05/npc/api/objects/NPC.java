@@ -337,15 +337,26 @@ public class NPC extends NpcHolder
      */
     public void reload()
     {
+        boolean hasUnsavedChanges = hasUnsavedChanges();
         final List<UUID> viewers = new ArrayList<>(this.viewers);
         NpcVisibilityManager visibilityManager = getVisibilityManager();
         boolean shouldShowToAll = visibilityManager.shouldShowToAllPlayers();
         Set<UUID> specificPlayers = visibilityManager.getSpecificPlayers();
         hideNpcFromAllPlayers();
         TeamManager.clear(getGameProfileName());
-        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
         visibilityManager.setShowToAllPlayers(shouldShowToAll);
         specificPlayers.forEach(visibilityManager::addSpecificPlayer);
+        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
+        if(!hasUnsavedChanges)
+        {
+            try
+            {
+                super.save();
+            }
+            catch(IOException e)
+            {
+            }
+        }
     }
 
     /**
@@ -513,7 +524,7 @@ public class NPC extends NpcHolder
                 ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
                         (SynchedEntityData) nameTag.applyData(
                                 isEnabled() ? name.getName(player) : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
-                                        .appendNewline().append(name.getName(player))))));
+                                                                     .appendNewline().append(name.getName(player))))));
     }
 
     /**
@@ -572,7 +583,8 @@ public class NPC extends NpcHolder
     }
 
     /**
-     * Makes the NPC visible to all currently online players and marks it to be shown to future players who join. This respects the NPC's enabled state and player permissions.
+     * Makes the NPC visible to all currently online players and marks it to be shown to future players who join. This respects the NPC's enabled state and
+     * player permissions.
      */
     public void showNpcToAllPlayers()
     {
@@ -586,7 +598,8 @@ public class NPC extends NpcHolder
 
     /**
      * Makes the NPC visible to a specific player. If the NPC is disabled and the player is not an operator, the NPC will not be shown. This method handles
-     * sending all necessary packets to display the NPC correctly. If the NPC is not marked to show to all players, the player will be added to the specific players list.
+     * sending all necessary packets to display the NPC correctly. If the NPC is not marked to show to all players, the player will be added to the specific
+     * players list.
      *
      * @param player the player to show the NPC to. Must not be null.
      */
@@ -620,7 +633,7 @@ public class NPC extends NpcHolder
 
         wrappedServerPlayer.listName = team == null ? wrappedServerPlayer.getName() : CraftChatMessage.fromJSON(
                 JSONComponentSerializer.json().serialize(team.prefix().append(player.name().color(team.hasColor() ? team.color() : NamedTextColor.WHITE))
-                        .append(team.suffix())));
+                                                         .append(team.suffix())));
 
         List<Packet<?>> packets = new ArrayList<>();
 
@@ -649,8 +662,8 @@ public class NPC extends NpcHolder
     }
 
     /**
-     * Hides the NPC from all currently online players and resets visibility settings.
-     * This will clear the "show to all players" flag and remove all specific players from the list.
+     * Hides the NPC from all currently online players and resets visibility settings. This will clear the "show to all players" flag and remove all specific
+     * players from the list.
      */
     public void hideNpcFromAllPlayers()
     {
@@ -665,8 +678,8 @@ public class NPC extends NpcHolder
     }
 
     /**
-     * Hides the NPC from a specific player. This method sends packets to remove the NPC and its associated entities from the player's view.
-     * If the NPC is not set to show to all players, the player will also be removed from the specific players list.
+     * Hides the NPC from a specific player. This method sends packets to remove the NPC and its associated entities from the player's view. If the NPC is not
+     * set to show to all players, the player will also be removed from the specific players list.
      *
      * @param player the player to hide the NPC from. Must not be null.
      */
@@ -797,7 +810,7 @@ public class NPC extends NpcHolder
      */
     public void lookAtPlayer(@NotNull Player viewer)
     {
-        Location npcLoc = entity.getBukkitEntity().getLocation();
+        Location npcLoc = this.location;
         Location playerLoc = viewer.getLocation();
 
         if(npcLoc.getWorld() != playerLoc.getWorld())
@@ -1025,13 +1038,16 @@ public class NPC extends NpcHolder
         Set<UUID> excluded = excludedPlayers == null ? Collections.emptySet() :
                 Arrays.stream(excludedPlayers).filter(Objects::nonNull).map(Player::getUniqueId).collect(Collectors.toSet());
 
-        float baseYaw = location.getYaw();
+        float baseYaw = location.getYaw() + 360F;
         float pitch = location.getPitch();
 
         float renderYaw = baseYaw;
 
-        if (getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SLEEPING)
+        if(getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SLEEPING)
+        {
             renderYaw = 180.0F - baseYaw + 90.0F;
+            pitch = 0F;
+        }
 
         ClientboundTeleportEntityPacket teleport1 = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
                 new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
@@ -1039,16 +1055,16 @@ public class NPC extends NpcHolder
 
         byte renderYawByte = (byte) (renderYaw * 256 / 360);
         ClientboundBundlePacket rotPacket;
-        if (getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SLEEPING)
+        if(getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SLEEPING)
             rotPacket = new ClientboundBundlePacket(
-                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), renderYawByte, (byte) (pitch * 256 / 360), entity.onGround()),
-                    new ClientboundRotateHeadPacket(entity, renderYawByte)));
+                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (renderYawByte - 35), (byte) (pitch * 256 / 360), entity.onGround()),
+                            new ClientboundRotateHeadPacket(entity, renderYawByte)));
         else
         {
             byte yawByte = (byte) (baseYaw * 256 / 360);
             rotPacket = new ClientboundBundlePacket(
-                List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), yawByte, (byte) (pitch * 256 / 360), entity.onGround()),
-                        new ClientboundRotateHeadPacket(entity, renderYawByte)));
+                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (yawByte + 35), (byte) (pitch * 256 / 360), entity.onGround()),
+                            new ClientboundRotateHeadPacket(entity, renderYawByte)));
         }
 
         ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null : new ClientboundTeleportEntityPacket(entity.getId(),
@@ -1072,6 +1088,60 @@ public class NPC extends NpcHolder
             if(rotPacket != null)
                 ((CraftPlayer) viewer).getHandle().connection.send(rotPacket);
         }
+    }
+
+    /**
+     * Updates this NPC's location and rotation for a specific player by sending the appropriate teleport and rotation packets.
+     * <p>
+     * Sleeping NPCs require special handling because the client renders their orientation differently from standing entities. In that case, a modified yaw is
+     * used and the pitch is forced to {@code 0}.
+     *
+     * @param location the location to display the NPC at
+     * @param player   the player to send the location update to
+     */
+    public void updateLocationForPlayer(@NotNull Location location, @NotNull Player player)
+    {
+        float baseYaw = location.getYaw() + 360F;
+        float pitch = location.getPitch();
+
+        float renderYaw = baseYaw;
+
+        if(getOption(NpcOption.POSE, player) == org.bukkit.entity.Pose.SLEEPING)
+        {
+            renderYaw = 180.0F - baseYaw + 90.0F;
+            pitch = 0F;
+        }
+
+        ClientboundTeleportEntityPacket teleport1 = new ClientboundTeleportEntityPacket(serverPlayer.getId(),
+                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
+                        location.getPitch()), Set.of(), true);
+
+        byte renderYawByte = (byte) (renderYaw * 256 / 360);
+        ClientboundBundlePacket rotPacket;
+        if(getOption(NpcOption.POSE, player) == org.bukkit.entity.Pose.SLEEPING)
+            rotPacket = new ClientboundBundlePacket(
+                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (renderYawByte - 35), (byte) (pitch * 256 / 360), entity.onGround()),
+                            new ClientboundRotateHeadPacket(entity, renderYawByte)));
+        else
+        {
+            byte yawByte = (byte) (baseYaw * 256 / 360);
+            rotPacket = new ClientboundBundlePacket(
+                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (yawByte + 35), (byte) (pitch * 256 / 360), entity.onGround()),
+                            new ClientboundRotateHeadPacket(entity, renderYawByte)));
+        }
+
+        ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null : new ClientboundTeleportEntityPacket(entity.getId(),
+                new PositionMoveRotation(new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), location.getYaw(),
+                        location.getPitch()), Set.of(), true);
+
+        var connection = ((CraftPlayer) player).getHandle().connection;
+        connection.send(teleport1);
+
+        if(teleport2 != null)
+            connection.send(teleport2);
+
+        if(rotPacket != null)
+            connection.send(rotPacket);
     }
 
     /**
