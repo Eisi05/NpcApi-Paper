@@ -121,7 +121,7 @@ public class LookAroundGoal extends Goal
     @Override
     public boolean canUse(@NotNull NPC npc)
     {
-        return minDuration >= 0 && maxDuration >= 0;
+        return minDuration >= 0 && maxDuration >= 0 && super.canUse(npc);
     }
 
     /**
@@ -206,7 +206,7 @@ public class LookAroundGoal extends Goal
     @Override
     public boolean canContinue(@NotNull NPC npc)
     {
-        return isLooking;
+        return isLooking && super.canContinue(npc);
     }
 
     @Override

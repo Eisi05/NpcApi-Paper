@@ -170,7 +170,7 @@ public class WanderGoal extends Goal
     @Override
     public boolean canUse(@NotNull NPC npc)
     {
-        return radius >= 0 && minDelay >= 0 && maxDelay >= 0 && speed >= 0;
+        return radius >= 0 && minDelay >= 0 && maxDelay >= 0 && speed >= 0 && super.canUse(npc);
     }
 
     /**
@@ -240,7 +240,7 @@ public class WanderGoal extends Goal
     @Override
     public boolean canContinue(@NotNull NPC npc)
     {
-        return targetLocation != null;
+        return targetLocation != null && super.canContinue(npc);
     }
 
     /**

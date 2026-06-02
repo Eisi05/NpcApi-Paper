@@ -804,6 +804,21 @@ public class NPC extends NpcHolder
     }
 
     /**
+     * Returns the eye height of the NPC for a specific viewer.
+     *
+     * @param viewer The player to get the eye height for. If null, the default eye height is returned.
+     * @return The eye height of the NPC.
+     */
+    public double getEyeHeight(@Nullable Player viewer)
+    {
+        Pose pose = viewer == null ? getOption(NpcOption.POSE) : getOption(NpcOption.POSE, viewer);
+        double scale = viewer == null ? getOption(NpcOption.SCALE) : getOption(NpcOption.SCALE, viewer);
+        double eyeHeight = (entity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() :
+                entity.getBukkitEntity().getHeight()) - (pose == Pose.SITTING ? 0.625 : 0);
+        return eyeHeight * scale;
+    }
+
+    /**
      * Makes the NPC look at a specific player. This calculates the required yaw and pitch and sends update packets to the viewing player.
      *
      * @param viewer the player the NPC should look at. Must not be null.

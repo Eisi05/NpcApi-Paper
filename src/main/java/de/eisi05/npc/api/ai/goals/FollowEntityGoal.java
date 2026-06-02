@@ -170,6 +170,9 @@ public class FollowEntityGoal extends Goal
         if(targetEntityId == null)
             return false;
 
+        if(!super.canUse(npc))
+            return false;
+
         LivingEntity potentialTarget = target;
         if(potentialTarget == null || !potentialTarget.isValid())
         {
@@ -336,6 +339,9 @@ public class FollowEntityGoal extends Goal
     public boolean canContinue(@NotNull NPC npc)
     {
         if(target == null || !target.isValid())
+            return false;
+
+        if(!super.canContinue(npc))
             return false;
 
         Location npcLoc = npc.getLocation();

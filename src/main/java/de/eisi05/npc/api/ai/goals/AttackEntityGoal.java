@@ -39,6 +39,7 @@ public class AttackEntityGoal extends Goal
     @Serial
     private static final long serialVersionUID = 1L;
 
+    private static final double WEAPONMECHANICS_ATTACK_RANGE = 25.0;
     private static final double BOW_ATTACK_RANGE = 15.0;
     private static final double MELEE_ATTACK_RANGE = 3.0;
     private static final double LINE_OF_SIGHT_RANGE = 25.0;
@@ -178,6 +179,9 @@ public class AttackEntityGoal extends Goal
     public boolean canUse(@NotNull NPC npc)
     {
         if(targetFilter == null)
+            return false;
+
+        if(!super.canUse(npc))
             return false;
 
         if(target != null && target.isValid() && canContinue(npc))
@@ -351,6 +355,9 @@ public class AttackEntityGoal extends Goal
         if(!isAttacking || target == null || !target.isValid())
             return false;
 
+        if(!super.canContinue(npc))
+            return false;
+
         Location npcLoc = npc.getLocation();
         Location targetLoc = target.getLocation();
 
@@ -451,6 +458,9 @@ public class AttackEntityGoal extends Goal
         if(mainHand == null)
             return MELEE_ATTACK_RANGE;
 
+        if(getWeaponTitle(mainHand) != null)
+            return WEAPONMECHANICS_ATTACK_RANGE;
+
         Material type = mainHand.getType();
         if(isRangedWeapon(type))
             return BOW_ATTACK_RANGE;
@@ -468,6 +478,32 @@ public class AttackEntityGoal extends Goal
 
         if(mainHand == null || !mainHand.hasItemMeta())
             return 5;
+
+        String weaponTitle = getWeaponTitle(mainHand);
+        if(weaponTitle != null)
+        {
+            try
+            {
+                me.deecaad.core.file.Configuration config = me.deecaad.weaponmechanics.WeaponMechanics.getInstance().getWeaponConfigurations();
+                if(config != null)
+                {
+                    int shotsPerSecond = config.getInt(weaponTitle + ".Shoot.Fully_Automatic_Shots_Per_Second", 0);
+                    if(shotsPerSecond > 0)
+                        return Math.max(1, 20 / shotsPerSecond);
+
+                    int burstDelay = config.getInt(weaponTitle + ".Shoot.Burst.Ticks_Between_Each_Shot", 0);
+                    if(burstDelay > 0)
+                        return burstDelay;
+
+                    int shootDelay = config.getInt(weaponTitle + ".Shoot.Delay_Between_Shots", 0);
+                    if(shootDelay > 0)
+                        return shootDelay;
+                }
+            }
+            catch(NoClassDefFoundError | Exception ignored) {}
+
+            return 10;
+        }
 
         ItemMeta meta = mainHand.getItemMeta();
         if(meta == null)
@@ -492,10 +528,62 @@ public class AttackEntityGoal extends Goal
         Map<EquipmentSlot, ItemStack> equipment = npc.getOption(NpcOption.EQUIPMENT);
         ItemStack mainHand = equipment != null ? equipment.get(EquipmentSlot.HAND) : null;
 
-        if(mainHand != null && isRangedWeapon(mainHand.getType()))
+        String weaponTitle = getWeaponTitle(mainHand);
+        if(weaponTitle != null)
+            performWeaponMechanicsAttack(npc, weaponTitle, mainHand);
+        else if(mainHand != null && isRangedWeapon(mainHand.getType()))
             performRangedAttack(npc);
         else
             performMeleeAttack(npc);
+    }
+
+    /**
+     * Utilizes WeaponMechanics API to gather weapon identification title safely.
+     */
+    private String getWeaponTitle(ItemStack item)
+    {
+        if(item == null || item.getType() == Material.AIR)
+            return null;
+
+        try
+        {
+            return me.deecaad.weaponmechanics.WeaponMechanicsAPI.getWeaponTitle(item);
+        }
+        catch(NoClassDefFoundError | Exception e)
+        {
+            return null;
+        }
+    }
+
+    /**
+     * Executes native programmatic WeaponMechanics shooting actions centered around the NPC.
+     */
+    private void performWeaponMechanicsAttack(@NotNull NPC npc, String weaponTitle, ItemStack weaponStack)
+    {
+        if(target == null || !target.isValid())
+            return;
+
+        Player npcPlayer = ((ServerPlayer) npc.getServerPlayer()).getBukkitEntity();
+        if(npcPlayer == null)
+            return;
+
+        if(target == null || !target.isValid())
+            return;
+
+        try
+        {
+            Vector direction = target.getLocation().subtract(npc.getLocation()).toVector().normalize();
+            Location location = npc.getLocation().clone().add(0, npc.getEyeHeight(null), 0);
+            location.setDirection(direction);
+
+            me.deecaad.weaponmechanics.WeaponMechanics.getInstance().getWeaponHandler().getShootHandler()
+                    .shoot(me.deecaad.weaponmechanics.WeaponMechanics.getInstance().getEntityWrapper(npcPlayer), weaponTitle, weaponStack, location,
+                            true, true, false);
+        }
+        catch(NoClassDefFoundError | Exception e)
+        {
+            target.damage(getAttackDamage(npc), npcPlayer);
+        }
     }
 
     /**
@@ -627,7 +715,7 @@ public class AttackEntityGoal extends Goal
     {
         Map<EquipmentSlot, ItemStack> equipment = npc.getOption(NpcOption.EQUIPMENT);
         ItemStack mainHand = equipment != null ? equipment.get(EquipmentSlot.HAND) : null;
-        return mainHand != null && isRangedWeapon(mainHand.getType());
+        return (mainHand != null && isRangedWeapon(mainHand.getType())) || getWeaponTitle(mainHand) != null;
     }
 
     /**
