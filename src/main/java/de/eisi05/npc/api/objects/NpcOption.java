@@ -689,7 +689,13 @@ public class NpcOption<T, S extends Serializable>
                 npcVisibilityManager.getSpecificPlayers().forEach(newManager::addSpecificPlayer);
                 return newManager;
             },
-            visibilityManager -> visibilityManager, visibilityManager -> visibilityManager,
+            visibilityManager -> visibilityManager, visibilityManager ->
+            {
+                if(visibilityManager.getSpecificPlayers().isEmpty() && !visibilityManager.shouldShowToAllPlayers())
+                    visibilityManager.setShowToAllPlayers(true);
+
+                return visibilityManager;
+            },
             (visibilityManager, npc, player) -> null);
 
     private final String path;
