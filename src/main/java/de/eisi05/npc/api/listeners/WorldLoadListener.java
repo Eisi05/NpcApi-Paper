@@ -58,10 +58,6 @@ public class WorldLoadListener implements Listener
                 .stream()
                 .filter(npc -> npc.getLocation().getWorld().getUID().equals(event.getChunk().getWorld().getUID()))
                 .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
-                .forEach(npc -> players.forEach(player ->
-                {
-                    if(npc.getVisibilityManager().shouldShowToPlayer(player.getUniqueId()))
-                        npc.showNPCToPlayer(player);
-                }));
+                .forEach(npc -> players.forEach(npc::hideNpcFromPlayer));
     }
 }
