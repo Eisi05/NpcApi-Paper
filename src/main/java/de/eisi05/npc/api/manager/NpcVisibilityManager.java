@@ -18,7 +18,7 @@ public class NpcVisibilityManager implements Serializable
     private static final long serialVersionUID = 1L;
 
     private final Set<UUID> specificPlayers = new HashSet<>();
-    private boolean showToAllPlayers = false;
+    private boolean showToAllPlayers = true;
 
     /**
      * Sets whether this NPC should be shown to all players (including new ones joining).
