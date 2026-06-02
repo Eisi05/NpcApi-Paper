@@ -54,6 +54,30 @@ public class NpcConfig
     private boolean autoManageVisibility = true;
 
     /**
+     * If true, walking NPCs automatically manage viewers while a path task is active.
+     * <p>
+     * When enabled, players who join, change worlds, respawn, or load nearby chunks can be added
+     * to the active walking task and synced to the NPC's current walking position.
+     * <p>
+     * This only applies to walking tasks created without an explicit viewer list.
+     * <p>
+     * Default: true
+     */
+    private boolean autoManageWalkingViewers = true;
+
+    /**
+     * Maximum distance in blocks at which walking NPC movement is shown to players.
+     * <p>
+     * Players farther than this distance from the NPC's current walking position will not receive
+     * walking movement packets. Players in another world are never shown walking movement.
+     * <p>
+     * Set to {@code -1} to disable the distance check.
+     * <p>
+     * Default: 64 blocks.
+     */
+    private double walkingViewerDistance = 64.0;
+
+    /**
      * Sets the duration an NPC will look at a player after an interaction.
      *
      * @param time The time in ticks. For example, 20 ticks = 1 second.
@@ -151,6 +175,38 @@ public class NpcConfig
     }
 
     /**
+     * Sets whether walking NPCs should automatically manage viewers during active path tasks.
+     * <p>
+     * This only applies when {@link #autoManageVisibility()} is enabled and the walking task was
+     * created without an explicit viewer list.
+     *
+     * @param autoManageWalkingViewers true to automatically manage walking viewers, false otherwise
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig autoManageWalkingViewers(boolean autoManageWalkingViewers)
+    {
+        this.autoManageWalkingViewers = autoManageWalkingViewers;
+        return this;
+    }
+
+    /**
+     * Sets the maximum distance in blocks at which walking NPC movement is shown to players.
+     * <p>
+     * Players farther than this distance from the NPC's current walking position will not receive
+     * walking packets. Players in another world are never shown walking movement.
+     * <p>
+     * Use {@code -1} to disable the distance check.
+     *
+     * @param walkingViewerDistance the maximum distance in blocks, or -1 to disable
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig walkingViewerDistance(double walkingViewerDistance)
+    {
+        this.walkingViewerDistance = walkingViewerDistance;
+        return this;
+    }
+
+    /**
      * Gets the configured duration an NPC will look at a player.
      *
      * @return The time in ticks.
@@ -228,5 +284,25 @@ public class NpcConfig
     public boolean autoManageVisibility()
     {
         return autoManageVisibility;
+    }
+
+    /**
+     * Checks whether walking NPCs automatically manage viewers during active path tasks.
+     *
+     * @return true if automatic walking viewer management is enabled; false otherwise
+     */
+    public boolean autoManageWalkingViewers()
+    {
+        return autoManageWalkingViewers;
+    }
+
+    /**
+     * Gets the maximum distance in blocks at which walking NPC movement is shown to players.
+     *
+     * @return the maximum walking viewer distance in blocks, or -1 if disabled
+     */
+    public double walkingViewerDistance()
+    {
+        return walkingViewerDistance;
     }
 }

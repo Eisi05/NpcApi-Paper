@@ -81,6 +81,7 @@ public class NPC extends NpcHolder
     private final CustomNameTag nameTag;
     private final Path npcPath;
     private final Map<UUID, PathTask> pathTasks = new HashMap<>();
+    private final Set<PathTask> walkingTasks = new LinkedHashSet<>();
     public transient String data;
     ServerPlayer serverPlayer;
     Entity entity;
@@ -901,9 +902,31 @@ public class NPC extends NpcHolder
      * @return The {@link BukkitTask} representing the movement task.
      */
     public @NotNull BukkitTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
-                                      boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd, boolean withRotation, @Nullable List<Player> viewers)
+                                      boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd,
+                                      boolean withRotation, @Nullable List<Player> viewers)
     {
-        viewers = viewers == null || viewers.isEmpty() ? this.viewers.stream().map(Bukkit::getPlayer).filter(Objects::nonNull).toList() : viewers;
+        boolean explicitViewers = viewers != null && !viewers.isEmpty();
+
+        boolean autoManageWalkingViewers = !explicitViewers
+                && NpcApi.config.autoManageVisibility()
+                && NpcApi.config.autoManageWalkingViewers();
+
+        if(!explicitViewers)
+        {
+            if(autoManageWalkingViewers)
+            {
+                viewers = Bukkit.getOnlinePlayers().stream()
+                        .filter(player -> canShowWalkingTo(player, getLocation()))
+                        .collect(Collectors.toList());
+            }
+            else
+            {
+                viewers = this.viewers.stream()
+                        .map(Bukkit::getPlayer)
+                        .filter(Objects::nonNull)
+                        .toList();
+            }
+        }
 
         for(Player player : viewers)
         {
@@ -924,7 +947,10 @@ public class NPC extends NpcHolder
                 .updateRealLocation(event.isChangeRealLocation())
                 .callback(onEnd)
                 .withRotation(withRotation)
+                .autoManageWalkingViewers(autoManageWalkingViewers)
                 .build();
+
+        walkingTasks.add(pathTask);
 
         for(Player player : viewers)
             pathTasks.put(player.getUniqueId(), pathTask);
@@ -933,28 +959,205 @@ public class NPC extends NpcHolder
     }
 
     /**
-     * Checks whether the NPC is currently walking.
-     * <p>
-     * The NPC is considered walking if a path task exists and has not yet finished.
+     * Checks whether this NPC has any active walking task.
      *
-     * @return true if the NPC is still walking, false otherwise
+     * @return true if this NPC is walking; false otherwise
      */
-    public boolean isWalking(@NotNull Player viewer)
+    public boolean isWalking()
     {
-        return pathTasks.containsKey(viewer.getUniqueId()) && !pathTasks.get(viewer.getUniqueId()).isFinished();
+        return walkingTasks.stream().anyMatch(task -> !task.isFinished());
     }
 
     /**
-     * Cancels the NPC's current walking task if one is active.
+     * Checks whether this NPC is currently walking for the specified viewer.
+     *
+     * @param viewer the viewer to check
+     * @return true if this NPC has an active walking task for the viewer; false otherwise
+     */
+    public boolean isWalking(@NotNull Player viewer)
+    {
+        PathTask task = pathTasks.get(viewer.getUniqueId());
+        return task != null && !task.isFinished();
+    }
+
+    /**
+     * Cancels this NPC's walking task for the specified viewer if one is active.
      * <p>
-     * If the NPC is walking, the path task is canceled and cleared. If no walking task is active, this method has no effect.
+     * For automatically managed walking tasks, this only removes the viewer from the task and does
+     * not cancel the shared walking task for other viewers.
+     * <p>
+     * For manually created viewer-specific walking tasks, the task itself is cancelled.
+     *
+     * @param viewer the viewer whose walking task should be cancelled
      */
     public void cancelWalking(@NotNull Player viewer)
     {
-        if(!pathTasks.containsKey(viewer.getUniqueId()))
+        PathTask task = pathTasks.remove(viewer.getUniqueId());
+        if(task == null)
             return;
 
-        pathTasks.remove(viewer.getUniqueId()).cancel();
+        task.removeViewer(viewer);
+
+        if(task.isAutoManageWalkingViewers())
+            return;
+
+        task.cancel();
+    }
+
+    /**
+     * Cancels all active walking tasks for this NPC.
+     * <p>
+     * If the NPC is currently walking, each unique path task is cancelled and cleared.
+     * If no walking task is active, this method has no effect.
+     */
+    public void cancelWalking()
+    {
+        for(PathTask task : new HashSet<>(walkingTasks))
+            task.cancel();
+
+        walkingTasks.clear();
+        pathTasks.clear();
+    }
+
+    /**
+     * Checks whether a player is allowed to receive packets for this NPC's current walking position.
+     * <p>
+     * A player is eligible only if:
+     * <ul>
+     *     <li>the player is online,</li>
+     *     <li>the player is in the same world as the walking NPC,</li>
+     *     <li>the player passes this NPC's visibility rules,</li>
+     *     <li>the player is within {@link NpcConfig#walkingViewerDistance()} blocks, unless disabled.</li>
+     * </ul>
+     *
+     * @param player the player to check
+     * @param currentLocation the NPC's current walking location
+     * @return true if the player should receive walking packets; false otherwise
+     */
+    public boolean canShowWalkingTo(@NotNull Player player, @NotNull Location currentLocation)
+    {
+        if(!player.isOnline())
+            return false;
+
+        if(currentLocation.getWorld() == null)
+            return false;
+
+        if(!player.getWorld().equals(currentLocation.getWorld()))
+            return false;
+
+        if(!getVisibilityManager().shouldShowToPlayer(player.getUniqueId()))
+            return false;
+
+        double distance = NpcApi.config.walkingViewerDistance();
+        if(distance >= 0 && player.getLocation().distanceSquared(currentLocation) > distance * distance)
+            return false;
+
+        return true;
+    }
+
+    /**
+     * Adds a player to this NPC's active automatically managed walking task, if possible.
+     * <p>
+     * This method does not start or cancel any walking task. It only attaches the player to an
+     * already running task that allows automatic viewer management.
+     *
+     * @param player the player to add as a walking viewer
+     */
+    public void addWalkingViewer(@NotNull Player player)
+    {
+        if(!NpcApi.config.autoManageVisibility() || !NpcApi.config.autoManageWalkingViewers())
+            return;
+
+        for(PathTask task : new ArrayList<>(walkingTasks))
+        {
+            if(task.isFinished())
+            {
+                clearWalkingTask(task);
+                continue;
+            }
+
+            if(!task.isAutoManageWalkingViewers())
+                continue;
+
+            if(!canShowWalkingTo(player, task.getCurrentLocation()))
+                continue;
+
+            PathTask currentTask = pathTasks.get(player.getUniqueId());
+
+            if(currentTask == task && task.hasViewer(player))
+                return;
+
+            if(currentTask != null && currentTask != task)
+                removeWalkingViewer(player);
+
+            boolean newlyAdded = !task.hasViewer(player);
+
+            pathTasks.put(player.getUniqueId(), task);
+
+            if(newlyAdded)
+                showNPCToPlayer(player);
+
+            task.addViewer(player);
+            return;
+        }
+    }
+
+    /**
+     * Removes a player from all active walking tasks for this NPC.
+     * <p>
+     * This does not cancel the walking task itself. It only stops sending movement packets
+     * to the specified player.
+     *
+     * @param player the player to remove
+     */
+    public void removeWalkingViewer(@NotNull Player player)
+    {
+        PathTask task = pathTasks.remove(player.getUniqueId());
+        if(task != null)
+            task.removeViewer(player);
+    }
+
+    /**
+     * Removes all references to a finished or cancelled walking task.
+     *
+     * @param task the task to clear
+     */
+    public void clearWalkingTask(@NotNull PathTask task)
+    {
+        walkingTasks.remove(task);
+        pathTasks.entrySet().removeIf(entry -> entry.getValue() == task);
+    }
+
+    /**
+     * Re-checks all online players for active automatically managed walking tasks.
+     * <p>
+     * Eligible players are added to the walking task. Players who are no longer eligible,
+     * for example because they changed worlds or moved too far away, are removed.
+     */
+    public void refreshWalkingViewers()
+    {
+        if(!NpcApi.config.autoManageVisibility() || !NpcApi.config.autoManageWalkingViewers())
+            return;
+
+        for(PathTask task : new ArrayList<>(walkingTasks))
+        {
+            if(task.isFinished())
+            {
+                clearWalkingTask(task);
+                continue;
+            }
+
+            if(!task.isAutoManageWalkingViewers())
+                continue;
+
+            for(Player player : Bukkit.getOnlinePlayers())
+            {
+                if(canShowWalkingTo(player, task.getCurrentLocation()))
+                    addWalkingViewer(player);
+                else if(pathTasks.get(player.getUniqueId()) == task)
+                    removeWalkingViewer(player);
+            }
+        }
     }
 
     /**

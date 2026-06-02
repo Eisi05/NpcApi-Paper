@@ -37,8 +37,10 @@ public class WorldLoadListener implements Listener
                 .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
                 .forEach(npc -> players.forEach(player ->
                 {
-                    if(npc.getVisibilityManager().shouldShowToPlayer(player.getUniqueId()))
+                    if(npc.getVisibilityManager().shouldShowToPlayer(player.getUniqueId())) {
                         npc.showNPCToPlayer(player);
+                        npc.addWalkingViewer(player);
+                    }
                 }));
     }
 

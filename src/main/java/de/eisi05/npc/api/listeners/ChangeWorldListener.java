@@ -23,7 +23,10 @@ public class ChangeWorldListener implements Listener
                 NpcManager.getList().forEach(npc ->
                 {
                     if(npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
+                    {
                         npc.showNPCToPlayer(event.getPlayer());
+                        npc.addWalkingViewer(event.getPlayer());
+                    }
                 });
             }
         }.runTaskLater(NpcApi.plugin, 10L);
