@@ -25,6 +25,8 @@ repositories {
 dependencies {
     paperweightDevelopmentBundle("io.papermc.paper:dev-bundle:1.21.11-R0.1-SNAPSHOT")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("com.cjcrafter:weaponmechanics:4.1.0")
+    compileOnly("com.cjcrafter:mechanicscore:4.1.0")
 }
 
 tasks {

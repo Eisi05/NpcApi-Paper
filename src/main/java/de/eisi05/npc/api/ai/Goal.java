@@ -113,7 +113,7 @@ public abstract class Goal implements Serializable
      */
     protected boolean canContinue(@NotNull NPC npc)
     {
-        return canUse(npc);
+        return condition == null || condition.test(npc);
     }
 
     /**

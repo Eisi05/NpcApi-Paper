@@ -253,7 +253,7 @@ public class NpcOption<T, S extends Serializable>
                 HashMap<EquipmentSlot, String> serializedMap = new HashMap<>();
                 map.forEach((slot, item) ->
                 {
-                    if(item == null)
+                    if(item == null || item.isEmpty())
                         return;
 
                     String serialized = ItemSerializer.itemStackToBase64(item);
@@ -269,7 +269,7 @@ public class NpcOption<T, S extends Serializable>
                 HashMap<EquipmentSlot, ItemStack> map = new HashMap<>();
                 serializedMap.forEach((slot, string) ->
                 {
-                    if(string == null)
+                    if(string == null || string.isEmpty())
                         return;
 
                     ItemStack item = ItemSerializer.itemStackFromBase64(string);
@@ -489,6 +489,7 @@ public class NpcOption<T, S extends Serializable>
                         data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag & ~0x04));
                 }
 
+                Integer oldId = npc.toDeleteEntities.remove("sit");
                 if(pose == Pose.SITTING)
                 {
                     Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.entity.level());
@@ -509,22 +510,26 @@ public class NpcOption<T, S extends Serializable>
                     ClientboundSetPassengersPacket passengerPacket = new ClientboundSetPassengersPacket(textDisplay);
                     ClientboundRotateHeadPacket rotateHeadPacket = new ClientboundRotateHeadPacket(npc.entity, (byte) (npc.getLocation().getYaw() * 256 / 360));
 
-                    return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
+                    if(oldId == null)
+                        return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
+
+                    return new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
+                                addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
                 }
                 else
                 {
-                    Integer toDelete = npc.toDeleteEntities.get("sit");
+                    List<Packet<? super ClientGamePacketListener>> packets = new ArrayList<>();
+                    if(packet instanceof ClientboundBundlePacket bundlePacket)
+                        bundlePacket.subPackets().forEach(packets::add);
+                    else if(packet != null)
+                        packets.add(packet);
 
-                    if(toDelete == null)
-                        return packet == null ? (Packet<?>) SetEntityDataPacket.create(npc.entity.getId(), data) :
-                                new ClientboundBundlePacket(
-                                        List.of((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
+                    if(oldId != null)
+                        packets.add(new ClientboundRemoveEntitiesPacket(oldId));
 
-                    npc.toDeleteEntities.remove("sit");
-                    return packet == null ? new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
-                            (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data)))
-                            : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(toDelete),
-                            (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
+                    packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data));
+
+                    return new ClientboundBundlePacket(packets);
                 }
             });
     /**
@@ -619,15 +624,6 @@ public class NpcOption<T, S extends Serializable>
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createPlayerPacket(team,
                         npc.entity.getBukkitEntity().getUniqueId().toString(), ClientboundSetPlayerTeamPacket.Action.ADD));
 
-                float yaw = npc.getLocation().getYaw();
-                float pitch = npc.getLocation().getPitch();
-                if(npc.getOption(NpcOption.POSE, player) == org.bukkit.entity.Pose.SLEEPING)
-                    yaw = 180.0F - yaw + 90.0F;
-
-                packets.add(new ClientboundRotateHeadPacket(entity, (byte) ((yaw % 360) * 256 / 360)));
-                packets.add(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (byte) ((yaw % 360) * 256 / 360), (byte) (pitch * 256 / 360),
-                        npc.serverPlayer.onGround));
-
                 SynchedEntityData data = entity.getEntityData();
 
                 data.set(EntityDataSerializers.BYTE.createAccessor(0),
@@ -668,7 +664,7 @@ public class NpcOption<T, S extends Serializable>
      * deserialization, goals must be re-instantiated by the plugin.
      */
     static final NpcOption<ArrayList<Goal>, ArrayList<Goal>> GOALS = new NpcOption<>("goals", ArrayList::new,
-            goals -> new ArrayList<>(goals.stream().map(goal -> goal.copy()).toList()),
+            goals -> new ArrayList<>(goals.stream().map(Goal::copy).toList()),
             goals -> goals, goals -> goals,
             (data, npc, player) -> null);
 
