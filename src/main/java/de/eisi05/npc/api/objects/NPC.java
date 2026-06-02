@@ -1251,7 +1251,7 @@ public class NPC extends NpcHolder
             byte yawByte = (byte) (baseYaw * 256 / 360);
             rotPacket = new ClientboundBundlePacket(
                 List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), yawByte, (byte) (pitch * 256 / 360), entity.onGround()),
-                        new ClientboundRotateHeadPacket(entity, renderYawByte)));
+                        new ClientboundRotateHeadPacket(entity, yawByte)));
         }
 
         ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null : new ClientboundTeleportEntityPacket(entity.getId(),

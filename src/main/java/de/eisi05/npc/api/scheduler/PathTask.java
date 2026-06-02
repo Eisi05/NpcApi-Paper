@@ -504,11 +504,11 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Calculates the Y-coordinate of the ground at a given position.
+     * Calculates the feet Y-coordinate of the ground at a given position.
      *
      * @param world The world to check in
      * @param pos   The position to check
-     * @return The Y-coordinate of the ground
+     * @return The Y-coordinate where the NPC's feet should be
      */
     private double getGroundY(@NotNull World world, @NotNull Vector pos)
     {
@@ -516,24 +516,53 @@ public class PathTask extends BukkitRunnable
         int bz = pos.getBlockZ();
         int startY = pos.getBlockY();
 
-        for(int y = startY; y >= startY - 3; y--)
+        for(int y = startY; y >= startY - 4; y--)
         {
             Block block = world.getBlockAt(bx, y, bz);
 
             if(block.getBlockData() instanceof Openable)
                 continue;
 
-            if(Var.isCarpet(block.getType()) && Var.isCarpet(block.getRelative(BlockFace.UP).getType()))
-                return ++y;
+            if(block.isLiquid())
+                continue;
 
-            if(!block.getType().isSolid() || block.isPassable())
+            if(Var.isCarpet(block.getType()) && Var.isCarpet(block.getRelative(BlockFace.UP).getType()))
+                return y + 1.0;
+
+            if(Var.isCarpet(block.getType()))
                 return y;
 
-            OptionalDouble maxY = block.getCollisionShape().getBoundingBoxes().stream().mapToDouble(BoundingBox::getMaxY).max();
-            OptionalDouble minY = block.getCollisionShape().getBoundingBoxes().stream().mapToDouble(BoundingBox::getMinY).min();
+            if(!block.getType().isSolid() || block.isPassable())
+                continue;
 
-            if(minY.isPresent() && maxY.isPresent())
-                return y + minY.getAsDouble() + (maxY.getAsDouble() - minY.getAsDouble());
+            Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
+            if(boxes.isEmpty())
+                return y + 1.0;
+
+            double lx = pos.getX() - bx;
+            double lz = pos.getZ() - bz;
+
+            double bestTop = -1.0;
+
+            for(BoundingBox bb : boxes)
+            {
+                if(lx >= bb.getMinX() && lx <= bb.getMaxX()
+                        && lz >= bb.getMinZ() && lz <= bb.getMaxZ())
+                {
+                    bestTop = Math.max(bestTop, bb.getMaxY());
+                }
+            }
+
+            if(bestTop < 0.0)
+            {
+                for(BoundingBox bb : boxes)
+                    bestTop = Math.max(bestTop, bb.getMaxY());
+            }
+
+            if(bestTop <= 0.0)
+                return y + 1.0;
+
+            return y + bestTop;
         }
 
         return world.getHighestBlockYAt(bx, bz);
