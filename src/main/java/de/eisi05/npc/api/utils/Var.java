@@ -44,7 +44,7 @@ public class Var
         else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
             Reflections.invokeMethod(entity, "absMoveTo", x, y, z, yaw, pitch);
         else
-            Reflections.invokeMethod(entity, "snapTo", x, y, z, yaw, pitch);
+            Reflections.invokeMethod(entity, "absSnapTo", x, y, z, yaw, pitch);
     }
 
     public static ServerLevel getServerLevel(ServerPlayer player)

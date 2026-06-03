@@ -37,6 +37,7 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Interaction;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.scores.PlayerTeam;
@@ -441,6 +442,25 @@ public class NpcOption<T, S extends Serializable>
             });
 
     /**
+     * NPC option to set the scale (size) of the NPC. A value of 1.0 is normal size. Requires Minecraft 1.20.6 or newer.
+     */
+    public static final NpcOption<Double, Double> SCALE = new NpcOption<>("scale", () -> 1.0,
+            scale -> scale, scale -> scale, scale -> scale,
+            (scale, npc, player) ->
+            {
+                if(npc.entity.getBukkitEntity().getType() == org.bukkit.entity.EntityType.ITEM_DISPLAY ||
+                        npc.entity.getBukkitEntity().getType() == org.bukkit.entity.EntityType.BLOCK_DISPLAY)
+                    return null;
+
+                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
+
+                AttributeInstance instance = npcServerPlayer.getAttribute(Attributes.SCALE);
+                instance.setBaseValue(scale);
+
+                return new ClientboundUpdateAttributesPacket(npc.entity.getId(), List.of(instance));
+            });
+
+    /**
      * NPC option to set the pose of the NPC (e.g., standing, sleeping, swimming). For a full list look at {@link Pose}.
      */
     @SuppressWarnings("unchecked")
@@ -508,17 +528,32 @@ public class NpcOption<T, S extends Serializable>
                             counter += 35;
                         }
                     }.runTaskTimer(NpcApi.plugin, 10, 5);
+
+                    ServerLevel level = Var.getServerLevel(npc.serverPlayer);
+                    Interaction interaction = new Interaction(EntityType.INTERACTION, level);
+                    Var.moveEntity(interaction, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(),
+                            npc.getLocation().getYaw(), npc.getLocation().getPitch());
+                    interaction.setHeight(1);
+                    interaction.setWidth((float) (npc.getOption(SCALE, player) * 2F));
+
+                    NpcManager.addID(interaction.getId(), npc);
+                    npc.toDeleteEntities.put("sleep", interaction.getId());
+
+                    packet = interaction.getAddEntityPacket(Var.getServerEntity(interaction, level));
                 }
 
                 Integer oldId = npc.toDeleteEntities.remove("sit");
                 if(pose == Pose.SITTING)
                 {
-                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.entity.level());
-                    textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
+                    ServerLevel level = Var.getServerLevel(npc.serverPlayer);
+
+                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, level);
+                    Var.moveEntity(textDisplay, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(),
+                            npc.getLocation().getYaw(), npc.getLocation().getPitch());
                     npc.toDeleteEntities.put("sit", textDisplay.getId());
 
                     Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(
-                            Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
+                            Var.getServerEntity(textDisplay, level));
 
                     SynchedEntityData entityData = textDisplay.getEntityData();
                     entityData.set(accessor, (byte) (flags | 0x20));
@@ -548,25 +583,6 @@ public class NpcOption<T, S extends Serializable>
                         : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
                         (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
                 }
-            });
-
-    /**
-     * NPC option to set the scale (size) of the NPC. A value of 1.0 is normal size. Requires Minecraft 1.20.6 or newer.
-     */
-    public static final NpcOption<Double, Double> SCALE = new NpcOption<>("scale", () -> 1.0,
-            scale -> scale, scale -> scale, scale -> scale,
-            (scale, npc, player) ->
-            {
-                if(npc.entity.getBukkitEntity().getType() == org.bukkit.entity.EntityType.ITEM_DISPLAY ||
-                        npc.entity.getBukkitEntity().getType() == org.bukkit.entity.EntityType.BLOCK_DISPLAY)
-                    return null;
-
-                ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
-
-                AttributeInstance instance = npcServerPlayer.getAttribute(Attributes.SCALE);
-                instance.setBaseValue(scale);
-
-                return new ClientboundUpdateAttributesPacket(npc.entity.getId(), List.of(instance));
             });
 
     /**
