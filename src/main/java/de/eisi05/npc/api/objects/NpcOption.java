@@ -494,7 +494,7 @@ public class NpcOption<T, S extends Serializable>
                     new BukkitRunnable()
                     {
                         int counter = 255;
-                        final Location startLocation = npc.getLocation();
+                        final Location startLocation = npc.getLocation().clone();
                         final float startYaw = startLocation.getYaw();
 
                         @Override
@@ -507,7 +507,18 @@ public class NpcOption<T, S extends Serializable>
 
                             counter += 35;
                         }
-                    }.runTaskTimer(NpcApi.plugin, 10, 5);
+                    }.runTaskTimer(NpcApi.plugin, 20, 5);
+                }
+                else
+                {
+                    new BukkitRunnable()
+                    {
+                        @Override
+                        public void run()
+                        {
+                            npc.updateLocationForPlayer(npc.getLocation(), player);
+                        }
+                    }.runTaskLater(NpcApi.plugin, 1);
                 }
 
                 Integer oldId = npc.toDeleteEntities.remove("sit");
@@ -612,6 +623,7 @@ public class NpcOption<T, S extends Serializable>
                         !npc.data.equals(wrappedEntitySnapshot.getData().toString()))
                 {
                     entity = wrappedEntitySnapshot.create(player.getWorld(), npc);
+                    npc.defaultBoundingBoxEntity = entity.getBoundingBox();
                     Var.moveEntity(entity, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(),
                             npc.getLocation().getPitch());
                     npc.toDeleteEntities.put("entity", entity.getId());

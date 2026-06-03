@@ -117,8 +117,7 @@ public class PacketReader
             if(npc == null)
                 return;
 
-            Bukkit.getScheduler().scheduleSyncDelayedTask(NpcApi.plugin,
-                    () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, ClickActionType.LEFT)), 0);
+            callNpc(player, npc, ClickActionType.LEFT);
             cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
             return;
         }
@@ -138,9 +137,7 @@ public class PacketReader
             if(interactPacket.isUsingSecondaryAction())
                 return;
 
-            Bukkit.getScheduler().scheduleSyncDelayedTask(NpcApi.plugin,
-                    () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, ClickActionType.LEFT)), 0);
-
+            callNpc(player, npc, ClickActionType.LEFT);
             cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
             return;
         }
@@ -160,10 +157,21 @@ public class PacketReader
 
         if(hand == InteractionHand.MAIN_HAND)
         {
-            Bukkit.getScheduler().scheduleSyncDelayedTask(NpcApi.plugin,
-                    () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, ClickActionType.RIGHT)), 0);
+            callNpc(player, npc, ClickActionType.RIGHT);
             cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
         }
+    }
+
+    /**
+     * Calls the {@link NpcInteractEvent} for the specified player and NPC.
+     *
+     * @param player The {@link Player} who interacted with the NPC. Must not be {@code null}.
+     * @param npc    The {@link NPC} that was interacted with. Must not be {@code null}.
+     * @param type   The type of interaction (left or right click). Must not be {@code null}.
+     */
+    public static void callNpc(@NotNull Player player, @NotNull NPC npc, @NotNull ClickActionType type)
+    {
+        Bukkit.getScheduler().runTask(NpcApi.plugin, () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, type)));
     }
 
     /**

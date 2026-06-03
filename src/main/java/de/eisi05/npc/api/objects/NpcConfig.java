@@ -1,5 +1,6 @@
 package de.eisi05.npc.api.objects;
 
+import de.eisi05.npc.api.utils.ApiOnly;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -51,31 +52,43 @@ public class NpcConfig
      * If true, the API will automatically manage NPC visibility for players across various events. This includes showing NPCs when players join, change worlds,
      * or load chunks, and hiding NPCs when players quit.
      */
+    @ApiOnly
     private boolean autoManageVisibility = true;
 
     /**
      * If true, walking NPCs automatically manage viewers while a path task is active.
      * <p>
-     * When enabled, players who join, change worlds, respawn, or load nearby chunks can be added
-     * to the active walking task and synced to the NPC's current walking position.
+     * When enabled, players who join, change worlds, respawn, or load nearby chunks can be added to the active walking task and synced to the NPC's current
+     * walking position.
      * <p>
      * This only applies to walking tasks created without an explicit viewer list.
      * <p>
      * Default: true
      */
+    @ApiOnly
     private boolean autoManageWalkingViewers = true;
 
     /**
      * Maximum distance in blocks at which walking NPC movement is shown to players.
      * <p>
-     * Players farther than this distance from the NPC's current walking position will not receive
-     * walking movement packets. Players in another world are never shown walking movement.
+     * Players farther than this distance from the NPC's current walking position will not receive walking movement packets. Players in another world are never
+     * shown walking movement.
      * <p>
      * Set to {@code -1} to disable the distance check.
      * <p>
      * Default: 64 blocks.
      */
     private double walkingViewerDistance = 64.0;
+
+    /**
+     * If true, precise hitbox detection is used for sleeping NPCs.
+     * <p>
+     * When enabled, the {@link de.eisi05.npc.api.listeners.NpcSleepListener} will use accurate ray intersection calculations to detect interactions with
+     * sleeping NPCs. This provides more precise click detection but may be more computationally expensive.
+     * <p>
+     * Default: false
+     */
+    private boolean preciseSleepingHitbox = false;
 
     /**
      * Sets the duration an NPC will look at a player after an interaction.
@@ -177,8 +190,7 @@ public class NpcConfig
     /**
      * Sets whether walking NPCs should automatically manage viewers during active path tasks.
      * <p>
-     * This only applies when {@link #autoManageVisibility()} is enabled and the walking task was
-     * created without an explicit viewer list.
+     * This only applies when {@link #autoManageVisibility()} is enabled and the walking task was created without an explicit viewer list.
      *
      * @param autoManageWalkingViewers true to automatically manage walking viewers, false otherwise
      * @return This {@link NpcConfig} instance for method chaining. Never null.
@@ -192,8 +204,8 @@ public class NpcConfig
     /**
      * Sets the maximum distance in blocks at which walking NPC movement is shown to players.
      * <p>
-     * Players farther than this distance from the NPC's current walking position will not receive
-     * walking packets. Players in another world are never shown walking movement.
+     * Players farther than this distance from the NPC's current walking position will not receive walking packets. Players in another world are never shown
+     * walking movement.
      * <p>
      * Use {@code -1} to disable the distance check.
      *
@@ -203,6 +215,21 @@ public class NpcConfig
     public @NotNull NpcConfig walkingViewerDistance(double walkingViewerDistance)
     {
         this.walkingViewerDistance = walkingViewerDistance;
+        return this;
+    }
+
+    /**
+     * Sets whether precise hitbox detection is used for sleeping NPCs.
+     * <p>
+     * When enabled, the {@link de.eisi05.npc.api.listeners.NpcSleepListener} will use accurate ray intersection calculations to detect interactions with
+     * sleeping NPCs.
+     *
+     * @param preciseSleepingHitbox true to enable precise hitbox detection, false otherwise
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig preciseSleepingHitbox(boolean preciseSleepingHitbox)
+    {
+        this.preciseSleepingHitbox = preciseSleepingHitbox;
         return this;
     }
 
@@ -304,5 +331,15 @@ public class NpcConfig
     public double walkingViewerDistance()
     {
         return walkingViewerDistance;
+    }
+
+    /**
+     * Checks whether precise hitbox detection is enabled for sleeping NPCs.
+     *
+     * @return true if precise hitbox detection is enabled, false otherwise
+     */
+    public boolean preciseSleepingHitbox()
+    {
+        return preciseSleepingHitbox;
     }
 }

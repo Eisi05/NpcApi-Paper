@@ -240,7 +240,7 @@ public class FollowEntityGoal extends Goal
             }
         }
 
-        Location targetLoc = target.getLocation();
+        Location targetLoc = target.getLocation().clone();
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
             updateCachedViewers(npc);
 

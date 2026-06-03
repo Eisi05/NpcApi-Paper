@@ -40,6 +40,7 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import org.bukkit.Bukkit;
@@ -83,6 +84,8 @@ public class NPC extends NpcHolder
     private final Map<UUID, PathTask> pathTasks = new HashMap<>();
     private final Set<PathTask> walkingTasks = new LinkedHashSet<>();
     public transient String data;
+    transient AABB defaultBoundingBoxPlayer;
+    transient AABB defaultBoundingBoxEntity;
     ServerPlayer serverPlayer;
     Entity entity;
     private Location location;
@@ -145,6 +148,8 @@ public class NPC extends NpcHolder
 
         serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), serverPlayer,
                 CommonListenerCookie.createInitial(profile, true));
+
+        defaultBoundingBoxPlayer = serverPlayer.getBoundingBox();
 
         for(NpcOption<?, ?> value : NpcOption.values())
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
@@ -237,6 +242,19 @@ public class NPC extends NpcHolder
     public @NotNull Object getEntity()
     {
         return entity;
+    }
+
+    /**
+     * Gets the default bounding box of this NPC.
+     *
+     * @return the {@link AABB} for this NPC. Will not be null.
+     */
+    public @NotNull Object getDefaultBoundingBox()
+    {
+        if(entity.equals(serverPlayer) || defaultBoundingBoxEntity == null)
+            return defaultBoundingBoxPlayer;
+
+        return defaultBoundingBoxEntity;
     }
 
     /**
@@ -1276,7 +1294,7 @@ public class NPC extends NpcHolder
         {
             byte yawByte = (byte) (baseYaw * 256 / 360);
             rotPacket = new ClientboundBundlePacket(
-                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (yawByte + 35), (byte) (pitch * 256 / 360), entity.onGround()),
+                    List.of(new ClientboundMoveEntityPacket.Rot(entity.getId(), (byte) (yawByte - 35), (byte) (pitch * 256 / 360), entity.onGround()),
                             new ClientboundRotateHeadPacket(entity, renderYawByte)));
         }
 
