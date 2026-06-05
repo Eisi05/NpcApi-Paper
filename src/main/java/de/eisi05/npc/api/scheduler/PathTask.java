@@ -3,6 +3,8 @@ package de.eisi05.npc.api.scheduler;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.AStarPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.utils.Var;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
@@ -39,6 +41,8 @@ public class PathTask extends BukkitRunnable
     private static final double stepHeight = 0.55;
 
     private final NPC npc;
+    private final double entityHeight;
+    private final double entityWidth;
     private final Path path;
     private final List<Location> pathPoints;
     private final Set<UUID> viewerIds = new HashSet<>();
@@ -69,6 +73,9 @@ public class PathTask extends BukkitRunnable
     private PathTask(@NotNull Builder builder)
     {
         this.npc = builder.npc;
+        double scale = npc.getOption(NpcOption.SCALE);
+        this.entityHeight = ((Entity) npc.getEntity()).getBoundingBox().getYsize() * scale;
+        this.entityWidth = ((Entity) npc.getEntity()).getBoundingBox().getXsize() * scale;
         this.path = builder.path;
         this.pathPoints = new ArrayList<>(builder.path.asLocations());
         if(builder.viewers != null)
@@ -322,7 +329,9 @@ public class PathTask extends BukkitRunnable
      */
     private boolean hasReachedWaypoint(@NotNull Vector toTarget)
     {
-        return toTarget.lengthSquared() < 0.04 && Math.abs(toTarget.getY()) < 0.2;
+        double horizontalDistSq = (toTarget.getX() * toTarget.getX()) + (toTarget.getZ() * toTarget.getZ());
+        double verticalDiff = Math.abs(toTarget.getY());
+        return horizontalDistSq <= 0.04 && verticalDiff < 0.5;
     }
 
     /**
@@ -455,46 +464,7 @@ public class PathTask extends BukkitRunnable
      */
     private boolean isPositionValid(@NotNull World world, @NotNull Vector pos)
     {
-        double entityWidth = 0.6;
-        double entityHeight = 1.8;
-
-        double minX = pos.getX() - entityWidth / 2;
-        double maxX = pos.getX() + entityWidth / 2;
-        double minY = pos.getY();
-        double maxY = pos.getY() + entityHeight;
-        double minZ = pos.getZ() - entityWidth / 2;
-        double maxZ = pos.getZ() + entityWidth / 2;
-
-        int minBlockX = (int) Math.floor(minX);
-        int maxBlockX = (int) Math.floor(maxX);
-        int minBlockY = (int) Math.floor(minY);
-        int maxBlockY = (int) Math.floor(maxY);
-        int minBlockZ = (int) Math.floor(minZ);
-        int maxBlockZ = (int) Math.floor(maxZ);
-
-        for(int x = minBlockX; x <= maxBlockX; x++)
-        {
-            for(int y = minBlockY; y <= maxBlockY; y++)
-            {
-                for(int z = minBlockZ; z <= maxBlockZ; z++)
-                {
-                    Block block = world.getBlockAt(x, y, z);
-                    if(block.getBlockData() instanceof Openable)
-                        continue;
-
-                    if(block.getType().isSolid() && !block.isPassable())
-                    {
-                        BoundingBox blockBox = block.getBoundingBox();
-                        Vector min = new Vector(minX, minY, minZ);
-                        Vector max = new Vector(maxX, maxY, maxZ);
-                        if(blockBox.overlaps(min, max))
-                            return false;
-                    }
-                }
-            }
-        }
-
-        return true;
+        return AStarPathfinder.isPositionValid(world, pos.getX(), pos.getY(), pos.getZ(), entityHeight, entityWidth);
     }
 
     /**
@@ -514,24 +484,12 @@ public class PathTask extends BukkitRunnable
         {
             Block block = world.getBlockAt(bx, y, bz);
 
-            if(block.getBlockData() instanceof Openable)
-                continue;
-
-            if(block.isLiquid())
-                continue;
-
-            if(Var.isCarpet(block.getType()) && Var.isCarpet(block.getRelative(BlockFace.UP).getType()))
-                return y + 1.0;
-
-            if(Var.isCarpet(block.getType()))
-                return y;
-
-            if(!block.getType().isSolid() || block.isPassable())
+            if(block.getBlockData() instanceof Openable || block.isLiquid())
                 continue;
 
             Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
             if(boxes.isEmpty())
-                return y + 1.0;
+                continue;
 
             double lx = pos.getX() - bx;
             double lz = pos.getZ() - bz;
@@ -540,11 +498,8 @@ public class PathTask extends BukkitRunnable
 
             for(BoundingBox bb : boxes)
             {
-                if(lx >= bb.getMinX() && lx <= bb.getMaxX()
-                        && lz >= bb.getMinZ() && lz <= bb.getMaxZ())
-                {
+                if(lx >= bb.getMinX() && lx <= bb.getMaxX() && lz >= bb.getMinZ() && lz <= bb.getMaxZ())
                     bestTop = Math.max(bestTop, bb.getMaxY());
-                }
             }
 
             if(bestTop < 0.0)
@@ -552,9 +507,6 @@ public class PathTask extends BukkitRunnable
                 for(BoundingBox bb : boxes)
                     bestTop = Math.max(bestTop, bb.getMaxY());
             }
-
-            if(bestTop <= 0.0)
-                return y + 1.0;
 
             return y + bestTop;
         }

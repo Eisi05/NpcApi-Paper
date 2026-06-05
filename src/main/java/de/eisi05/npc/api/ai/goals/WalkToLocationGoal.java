@@ -4,15 +4,15 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.pathfinding.AStarPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
-import de.eisi05.npc.api.pathfinding.PathfindingUtils;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.SerializableConsumer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.AABB;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -345,7 +345,7 @@ public class WalkToLocationGoal extends Goal
             return;
         }
 
-        CompletableFuture<Path> future = PathfindingUtils.findPathAsync(List.of(start, end), maxIterations, allowDiagonal, null);
+        CompletableFuture<Path> future = npc.findPathAsync(List.of(start, end), maxIterations, allowDiagonal, null);
         Tasks.trackFuture(future);
         future.thenAcceptAsync(path -> pathable = path != null, task -> Bukkit.getScheduler().runTask(NpcApi.plugin, task))
                 .exceptionally(e ->
@@ -375,7 +375,7 @@ public class WalkToLocationGoal extends Goal
 
         isWalking = true;
 
-        pathfindingFuture = PathfindingUtils.findPathAsync(List.of(start, end), maxIterations, allowDiagonal, null);
+        pathfindingFuture = npc.findPathAsync(List.of(start, end), maxIterations, allowDiagonal, null);
         Tasks.trackFuture(pathfindingFuture);
         pathfindingFuture.thenAcceptAsync(path ->
                 {
@@ -444,6 +444,8 @@ public class WalkToLocationGoal extends Goal
         if(npcLoc.getWorld() == null)
             return true;
 
+        AABB boundingBox = ((Entity) npc.getEntity()).getBoundingBox();
+        double scale = npc.getOption(NpcOption.SCALE);
         int checkAhead = Math.min(PATH_CHECK_AHEAD, currentPath.getWaypoints().size());
         for(int i = 0; i < checkAhead; i++)
         {
@@ -451,14 +453,8 @@ public class WalkToLocationGoal extends Goal
             if(!waypoint.getWorld().equals(npcLoc.getWorld()))
                 return true;
 
-            Block floor = waypoint.getBlock();
-            Block spaceFeet = waypoint.getBlock().getRelative(BlockFace.UP);
-            Block spaceHead = waypoint.getBlock().getRelative(BlockFace.UP).getRelative(BlockFace.UP);
-
-            if(!AStarPathfinder.isSafeFloor(floor))
-                return true;
-
-            if(AStarPathfinder.isSolid(spaceFeet) || AStarPathfinder.isSolid(spaceHead))
+            if(!AStarPathfinder.isPositionValid(npcLoc.getWorld(), waypoint.getX(), waypoint.getY(), waypoint.getZ(), boundingBox.getYsize() * scale,
+                    boundingBox.getXsize() * scale))
                 return true;
         }
 

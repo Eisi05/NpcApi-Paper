@@ -37,15 +37,77 @@ public class AStarPathfinder
 
     private final int maxIterations;
     private final boolean allowDiagonal;
+    private final double entityHeight;
+    private final double entityWidth;
     private final PriorityQueue<Node> openSet = new PriorityQueue<>();
     private final Set<Long> openSetIds = new HashSet<>();
     private final Map<Long, Node> allNodes = new HashMap<>();
     private World world;
 
-    public AStarPathfinder(int maxIterations, boolean allowDiagonal)
+    public AStarPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
         this.maxIterations = maxIterations;
         this.allowDiagonal = allowDiagonal;
+        this.entityHeight = entityHeight;
+        this.entityWidth = entityWidth;
+    }
+
+    /**
+     * Checks if a position is valid (not inside a solid block).
+     *
+     * @param world        The world to check in
+     * @param tx           The x coordinate of the position
+     * @param ty           The y coordinate of the position
+     * @param tz           The z coordinate of the position
+     * @param entityHeight The height of the entity
+     * @param entityWidth  The width of the entity
+     * @return true if the position is valid, false otherwise
+     */
+    public static boolean isPositionValid(@NotNull World world, double tx, double ty, double tz, double entityHeight, double entityWidth)
+    {
+        double radius = entityWidth / 2.0;
+        double minX = tx - radius;
+        double maxX = tx + radius;
+        double maxY = ty + entityHeight;
+        double minZ = tz - radius;
+        double maxZ = tz + radius;
+
+        BoundingBox entityBox = new BoundingBox(minX, ty, minZ, maxX, maxY, maxZ);
+
+        int minBlockX = (int) Math.floor(minX);
+        int maxBlockX = (int) Math.floor(maxX);
+        int minBlockY = (int) Math.floor(ty);
+        int maxBlockY = (int) Math.floor(maxY);
+        if(maxY > maxBlockY && maxBlockY == minBlockY)
+            maxBlockY++;
+        int minBlockZ = (int) Math.floor(minZ);
+        int maxBlockZ = (int) Math.floor(maxZ);
+
+        for(int x = minBlockX; x <= maxBlockX; x++)
+        {
+            for(int y = minBlockY; y <= maxBlockY; y++)
+            {
+                for(int z = minBlockZ; z <= maxBlockZ; z++)
+                {
+                    Block block = world.getBlockAt(x, y, z);
+                    if(block.getBlockData() instanceof Openable)
+                        continue;
+
+                    Collection<BoundingBox> blockBoxes = block.getCollisionShape().getBoundingBoxes();
+                    if(blockBoxes.isEmpty())
+                        continue;
+
+                    for(BoundingBox blockBox : blockBoxes)
+                    {
+                        BoundingBox absoluteBox = blockBox.clone().shift(x, y, z);
+                        if(entityBox.overlaps(absoluteBox))
+                            return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 
     public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end) throws PathfindingUtils.PathfindingException
@@ -152,25 +214,38 @@ public class AStarPathfinder
     /**
      * Advanced physics check. Checks whether we can move from one floor block to another.
      * <p>
-     * The {@code fy} and {@code ty} values are floor-block Y coordinates. Entity feet and head space are checked at {@code ty + 1} and {@code ty + 2}.
+     * The {@code fy} and {@code ty} values are floor-block Y coordinates. Entity feet and headspace are checked at {@code ty + 1} and {@code ty + 2}.
      */
     private boolean canWalk(int fx, int fy, int fz, int tx, int ty, int tz)
     {
         Block floor = world.getBlockAt(tx, ty, tz);
-        Block spaceFeet = world.getBlockAt(tx, ty + 1, tz);
-        Block spaceHead = world.getBlockAt(tx, ty + 2, tz);
-
         if(!isSafeFloor(floor))
             return false;
 
-        if(isSolid(spaceFeet) || isSolid(spaceHead))
+        double absoluteFeetY = feetYAt(tx, ty, tz);
+
+        if(!isPositionValid(world, tx + 0.5, absoluteFeetY, tz + 0.5, entityHeight, entityWidth))
             return false;
 
         if(fx != tx && fz != tz)
         {
-            Block checkA = world.getBlockAt(fx, ty + 1, tz);
-            Block checkB = world.getBlockAt(tx, ty + 1, fz);
-            if(isSolid(checkA) || isSolid(checkB))
+            double currentFeetY = feetYAt(fx, fy, fz);
+            double checkY = Math.max(currentFeetY, absoluteFeetY);
+
+            if(!isPositionValid(world, fx + 0.5, checkY, tz + 0.5, entityHeight, entityWidth))
+                return false;
+
+            if(!isPositionValid(world, tx + 0.5, checkY, fz + 0.5, entityHeight, entityWidth))
+                return false;
+        }
+
+        if(fy != ty)
+        {
+            double currentFeetY = feetYAt(fx, fy, fz);
+            double highestFloorY = Math.max(currentFeetY, absoluteFeetY);
+
+            if(!isPositionValid(world, tx + 0.5, highestFloorY, tz + 0.5, entityHeight, entityWidth) ||
+                    !isPositionValid(world, fx + 0.5, highestFloorY, fz + 0.5, entityHeight, entityWidth))
                 return false;
         }
 
@@ -239,33 +314,6 @@ public class AStarPathfinder
             return false;
 
         return !block.isPassable();
-    }
-
-    /**
-     * Checks if a block obstructs movement.
-     */
-    public static boolean isSolid(Block block)
-    {
-        if(block == null)
-            return false;
-
-        Material type = block.getType();
-        if(type.isAir())
-            return false;
-
-        if(Var.isCarpet(type) && Var.isCarpet(block.getRelative(BlockFace.UP).getType()))
-            return true;
-
-        if(Var.isCarpet(type))
-            return false;
-
-        if(block.isPassable())
-            return false;
-
-        if(block.getBlockData() instanceof Openable)
-            return false;
-
-        return true;
     }
 
     private @NotNull List<Location> retracePath(@NotNull Node current)

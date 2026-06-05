@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -251,10 +250,5 @@ public class Var
             flags |= (byte) 0x80;
 
         return flags;
-    }
-
-    public static boolean isCarpet(@NotNull Material material)
-    {
-        return material.name().contains("CARPET");
     }
 }
