@@ -1,12 +1,12 @@
 package de.eisi05.npc.api.scheduler;
 
+import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.pathfinding.AStarPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
-import de.eisi05.npc.api.utils.Var;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
@@ -64,6 +64,7 @@ public class PathTask extends BukkitRunnable
     private float previousYaw;
     private double verticalVelocity = 0.0;
     private int viewerRefreshTicks = 0;
+    private boolean isWaitingForChunkLoad = false;
 
     /**
      * Private constructor used by the Builder pattern.
@@ -107,6 +108,33 @@ public class PathTask extends BukkitRunnable
     @Override
     public void run()
     {
+        World world = npc.getLocation().getWorld();
+        if(world == null) return;
+
+        int currentChunkX = currentPos.getBlockX() >> 4;
+        int currentChunkZ = currentPos.getBlockZ() >> 4;
+
+        if (!world.isChunkLoaded(currentChunkX, currentChunkZ))
+        {
+            handleUnloadedChunk(world, currentChunkX, currentChunkZ);
+            return;
+        }
+
+        if (index < pathPoints.size())
+        {
+            Location next = pathPoints.get(index);
+            int nextChunkX = next.getBlockX() >> 4;
+            int nextChunkZ = next.getBlockZ() >> 4;
+
+            if (!world.isChunkLoaded(nextChunkX, nextChunkZ))
+            {
+                handleUnloadedChunk(world, nextChunkX, nextChunkZ);
+                return;
+            }
+        }
+
+        isWaitingForChunkLoad = false;
+
         if(autoManageWalkingViewers && viewerRefreshTicks++ >= 10)
         {
             viewerRefreshTicks = 0;
@@ -128,42 +156,84 @@ public class PathTask extends BukkitRunnable
             return;
         }
 
-        processDoors();
-        cleanupDoors();
+        int chunkX = currentPos.getBlockX() >> 4;
+        int chunkZ = currentPos.getBlockZ() >> 4;
+        boolean isChunkLoaded = world.isChunkLoaded(chunkX, chunkZ);
 
-        Vector movement = calculateHorizontalMovement(toTarget, target);
-
-        if(movement.lengthSquared() < 1e-6 && index < pathPoints.size() && currentPos.equals(target))
-            return;
-
-        PhysicsResult physics = applyPhysics(movement, toTarget);
-
-        if(physics.skipHorizontal)
+        if(isChunkLoaded)
         {
-            movement.setX(0);
-            movement.setZ(0);
-        }
-        else if(physics.horizontalSlowdown < 1.0)
-            movement.multiply(physics.horizontalSlowdown);
+            processDoors();
+            cleanupDoors();
 
-        movement.setY(physics.yChange);
+            Vector movement = calculateHorizontalMovement(toTarget, target);
 
-        currentPos.add(movement);
+            if(movement.lengthSquared() < 1e-6 && index < pathPoints.size() && currentPos.equals(target))
+                return;
 
-        float yaw, pitch;
-        if(withRotation)
-        {
-            float[] rotation = calculateSmoothRotation();
-            yaw = rotation[0];
-            pitch = rotation[1];
+            PhysicsResult physics = applyPhysics(movement, toTarget);
+
+            if(physics.skipHorizontal)
+            {
+                movement.setX(0);
+                movement.setZ(0);
+            }
+            else if(physics.horizontalSlowdown < 1.0)
+                movement.multiply(physics.horizontalSlowdown);
+
+            movement.setY(physics.yChange);
+
+            currentPos.add(movement);
+
+            float yaw, pitch;
+            if(withRotation)
+            {
+                float[] rotation = calculateSmoothRotation();
+                yaw = rotation[0];
+                pitch = rotation[1];
+            }
+            else
+            {
+                yaw = npc.getLocation().getYaw();
+                pitch = npc.getLocation().getPitch();
+            }
+
+            sendMovePackets(movement, yaw, pitch, physics.isGrounded);
         }
         else
         {
-            yaw = npc.getLocation().getYaw();
-            pitch = npc.getLocation().getPitch();
-        }
+            double distanceToTarget = toTarget.length();
+            double moveDist = Math.min(speed, distanceToTarget);
 
-        sendMovePackets(movement, yaw, pitch, physics.isGrounded);
+            if(distanceToTarget > 1e-6)
+            {
+                Vector movement = toTarget.normalize().multiply(moveDist);
+                currentPos.add(movement);
+            }
+            else
+                currentPos = target.clone();
+
+            if(withRotation)
+            {
+                float[] rotation = calculateSmoothRotation();
+                previousYaw = rotation[0];
+                previousPitch = rotation[1];
+            }
+
+            if(updateRealLocation)
+                npc.setLocation(currentPos.toLocation(world));
+        }
+    }
+
+    /**
+     * Handles the logic when an NPC encounters an unloaded chunk.
+     */
+    private void handleUnloadedChunk(World world, int chunkX, int chunkZ)
+    {
+        if (NpcApi.config.loadChunksOnPath() && !isWaitingForChunkLoad)
+        {
+            isWaitingForChunkLoad = true;
+            world.getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> isWaitingForChunkLoad = false);
+        }
     }
 
     /**
@@ -791,8 +861,7 @@ public class PathTask extends BukkitRunnable
         /**
          * Sets whether this path task should allow automatic walking viewer management.
          * <p>
-         * When enabled, external library listeners may add eligible players to this task while
-         * the NPC is already walking.
+         * When enabled, external library listeners may add eligible players to this task while the NPC is already walking.
          *
          * @param autoManageWalkingViewers true to allow automatic walking viewer management, false otherwise
          * @return This builder instance for method chaining

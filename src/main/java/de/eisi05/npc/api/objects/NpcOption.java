@@ -334,8 +334,8 @@ public class NpcOption<T, S extends Serializable>
 
                 boolean modified = TeamManager.exists(player, teamName) || playerTeam != null;
                 PlayerTeam wrappedPlayerTeam = playerTeam != null ? playerTeam : (PlayerTeam) TeamManager.create(player, teamName);
-                wrappedPlayerTeam.setSeeFriendlyInvisibles(true);
-                wrappedPlayerTeam.setNameTagVisibility(Team.Visibility.HIDE_FOR_OWN_TEAM);
+                if(!wrappedPlayerTeam.canSeeFriendlyInvisibles())
+                    wrappedPlayerTeam.setSeeFriendlyInvisibles(true);
 
                 var teamPacket = (Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(wrappedPlayerTeam, !modified);
 
@@ -641,7 +641,8 @@ public class NpcOption<T, S extends Serializable>
 
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
-                team.setNameTagVisibility(Team.Visibility.NEVER);
+                if(team.getNameTagVisibility() != Team.Visibility.NEVER)
+                    team.setNameTagVisibility(Team.Visibility.NEVER);
 
                 if(!team.getName().startsWith("trans"))
                     team.getPlayers().add(npc.getGameProfileName());

@@ -19,6 +19,8 @@ public class Reflections
 {
     private static final ConcurrentHashMap<MethodKey, Method> METHOD_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<FieldKey, Field> FIELD_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<ConstructorKey, Constructor<?>> CONSTRUCTOR_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Class<?>> CLASS_CACHE = new ConcurrentHashMap<>();
 
     /**
      * Loads a class by its fully qualified name.
@@ -31,7 +33,14 @@ public class Reflections
     {
         try
         {
-            return Optional.of((Class<T>) Class.forName(path));
+            Class<?> cached = CLASS_CACHE.get(path);
+            if(cached != null)
+                return Optional.of((Class<T>) cached);
+
+            Class<?> clazz = Class.forName(path);
+            CLASS_CACHE.put(path, clazz);
+
+            return Optional.of((Class<T>) clazz);
         }
         catch(ClassNotFoundException e)
         {
@@ -56,13 +65,26 @@ public class Reflections
     {
         try
         {
+            Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
+                    .map(Object::getClass)
+                    .toArray(Class<?>[]::new);
+
+            ConstructorKey key = new ConstructorKey(clazz, argTypes);
+            Constructor<?> cachedCtor = CONSTRUCTOR_CACHE.get(key);
+
+            if(cachedCtor != null)
+                return Optional.of((T) cachedCtor.newInstance(args));
+
             Exception exception = null;
             for(Constructor<?> ctor : clazz.getDeclaredConstructors())
             {
                 try
                 {
                     ctor.setAccessible(true);
-                    return Optional.of((T) ctor.newInstance(args));
+                    T instance = (T) ctor.newInstance(args);
+
+                    CONSTRUCTOR_CACHE.put(key, ctor);
+                    return Optional.of(instance);
                 }
                 catch(Exception e)
                 {
@@ -85,11 +107,20 @@ public class Reflections
     {
         try
         {
-            Class<?>[] argTypes = Arrays.stream(args)
+            Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
                     .map(Object::getClass)
-                    .toArray(Class[]::new);
-            Constructor<?> ctor = clazz.getDeclaredConstructor(argTypes);
-            ctor.setAccessible(true);
+                    .toArray(Class<?>[]::new);
+
+            ConstructorKey key = new ConstructorKey(clazz, argTypes);
+            Constructor<?> ctor = CONSTRUCTOR_CACHE.get(key);
+
+            if(ctor == null)
+            {
+                ctor = clazz.getDeclaredConstructor(argTypes);
+                ctor.setAccessible(true);
+                CONSTRUCTOR_CACHE.put(key, ctor);
+            }
+
             return Optional.of((T) ctor.newInstance(args));
         }
         catch(Exception e)
@@ -110,8 +141,8 @@ public class Reflections
     private static @NotNull Method findMethod(@NotNull Class<?> clazz, @NotNull String name, @Nullable Object[] args) throws NoSuchMethodException
     {
         Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                                                               .map(Object::getClass)
-                                                               .toArray(Class<?>[]::new);
+                .map(Object::getClass)
+                .toArray(Class<?>[]::new);
 
         MethodKey key = new MethodKey(clazz, name, argTypes);
         Method cached = METHOD_CACHE.get(key);
@@ -430,6 +461,27 @@ public class Reflections
         {
             int result = clazz.hashCode();
             result = 31 * result + fieldName.hashCode();
+            return result;
+        }
+    }
+
+    private record ConstructorKey(Class<?> clazz, Class<?>[] paramTypes)
+    {
+        @Override
+        public boolean equals(Object o)
+        {
+            if(this == o)
+                return true;
+            if(!(o instanceof ConstructorKey(Class<?> clazz1, Class<?>[] types)))
+                return false;
+            return clazz.equals(clazz1) && Arrays.equals(paramTypes, types);
+        }
+
+        @Override
+        public int hashCode()
+        {
+            int result = clazz.hashCode();
+            result = 31 * result + Arrays.hashCode(paramTypes);
             return result;
         }
     }

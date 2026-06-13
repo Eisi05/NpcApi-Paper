@@ -91,6 +91,12 @@ public class NpcConfig
     private boolean preciseSleepingHitbox = false;
 
     /**
+     * If true, the NPC will asynchronously load unloaded chunks that it is walking into.
+     * Default: false
+     */
+    private boolean loadChunksOnPath = false;
+
+    /**
      * Sets the duration an NPC will look at a player after an interaction.
      *
      * @param time The time in ticks. For example, 20 ticks = 1 second.
@@ -234,6 +240,18 @@ public class NpcConfig
     }
 
     /**
+     * Checks whether NPCs should load unloaded chunks on their path.
+     *
+     * @param loadChunksOnPath true to enable chunk loading, false otherwise
+     * @return This {@link NpcConfig} instance for method chaining. Never null.
+     */
+    public @NotNull NpcConfig loadChunksOnPath(boolean loadChunksOnPath)
+    {
+         this.loadChunksOnPath = loadChunksOnPath;
+         return this;
+    }
+
+    /**
      * Gets the configured duration an NPC will look at a player.
      *
      * @return The time in ticks.
@@ -341,5 +359,15 @@ public class NpcConfig
     public boolean preciseSleepingHitbox()
     {
         return preciseSleepingHitbox;
+    }
+
+    /**
+     * Checks whether NPCs should load unloaded chunks on their path.
+     *
+     * @return true if chunks should be loaded, false otherwise
+     */
+    public boolean loadChunksOnPath()
+    {
+        return loadChunksOnPath;
     }
 }
