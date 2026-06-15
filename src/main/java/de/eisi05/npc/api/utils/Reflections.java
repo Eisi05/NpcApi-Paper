@@ -61,13 +61,56 @@ public class Reflections
         return getClass(path).flatMap(objectClass -> getInstance((Class<T>) objectClass, args));
     }
 
+    public static <T> @NotNull Optional<T> tryFindConstructor(@NotNull Class<T> clazz, @Nullable Object... args)
+    {
+        try
+        {
+            Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
+                                                                   .map(o -> o == null ? Object.class : o.getClass())
+                                                                   .toArray(Class<?>[]::new);
+
+            ConstructorKey key = new ConstructorKey(clazz, argTypes);
+            Constructor<?> cachedCtor = CONSTRUCTOR_CACHE.get(key);
+
+            if(cachedCtor != null)
+                return Optional.of((T) cachedCtor.newInstance(args));
+
+            Exception exception = null;
+            for(Constructor<?> ctor : clazz.getDeclaredConstructors())
+            {
+                try
+                {
+                    ctor.setAccessible(true);
+                    T instance = (T) ctor.newInstance(args);
+
+                    CONSTRUCTOR_CACHE.put(key, ctor);
+                    return Optional.of(instance);
+                }
+                catch(Exception e)
+                {
+                    exception = e;
+                }
+            }
+
+            if(exception != null)
+                throw exception;
+
+            return Optional.empty();
+        }
+        catch(Exception e)
+        {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
     public static <T> @NotNull Optional<T> getInstance(@NotNull Class<T> clazz, @Nullable Object... args)
     {
         try
         {
             Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                    .map(Object::getClass)
-                    .toArray(Class<?>[]::new);
+                                                                   .map(o -> o == null ? Object.class : o.getClass())
+                                                                   .toArray(Class<?>[]::new);
 
             ConstructorKey key = new ConstructorKey(clazz, argTypes);
             Constructor<?> ctor = CONSTRUCTOR_CACHE.get(key);
@@ -109,8 +152,8 @@ public class Reflections
     private static @NotNull Method findMethod(@NotNull Class<?> clazz, @NotNull String name, @Nullable Object[] args) throws NoSuchMethodException
     {
         Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                .map(Object::getClass)
-                .toArray(Class<?>[]::new);
+                                                               .map(o -> o == null ? Object.class : o.getClass())
+                                                               .toArray(Class<?>[]::new);
 
         MethodKey key = new MethodKey(clazz, name, argTypes);
         Method cached = METHOD_CACHE.get(key);
