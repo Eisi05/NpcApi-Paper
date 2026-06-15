@@ -217,10 +217,10 @@ public class NpcOption<T, S extends Serializable>
 
                 CommonListenerCookie commonListenerCookie;
                 if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
-                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
+                    commonListenerCookie = Reflections.getInstance(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
                 else
-                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
+                    commonListenerCookie = Reflections.getInstance(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
                             new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
 

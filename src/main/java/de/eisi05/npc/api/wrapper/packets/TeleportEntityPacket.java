@@ -20,7 +20,7 @@ public class TeleportEntityPacket
             float originalYaw = entity.getYRot();
             float originalPitch = entity.getXRot();
             Var.moveEntity(entity, current.x, current.y, current.z, yaw, pitch);
-            Object instance = Reflections.tryFindConstructor(ClientboundTeleportEntityPacket.class, entity).orElse(null);
+            Object instance = Reflections.getInstance(ClientboundTeleportEntityPacket.class, entity).orElse(null);
             Var.moveEntity(entity, original.x, original.y, original.z, originalYaw, originalPitch);
             return instance;
         }

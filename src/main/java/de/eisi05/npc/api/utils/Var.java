@@ -73,7 +73,7 @@ public class Var
     {
         ServerEntity serverEntity;
         if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
+            serverEntity = Reflections.getInstance(ServerEntity.class, level, entity, 0, false,
                     new Consumer<Packet<?>>()
                     {
                         @Override
@@ -90,7 +90,7 @@ public class Var
                     },
                     Set.of()).orElseThrow();
         else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
+            serverEntity = Reflections.getInstance(ServerEntity.class, level, entity, 0, false,
                     new Consumer<Packet<?>>()
                     {
                         @Override
@@ -120,8 +120,7 @@ public class Var
                         }
                     }, Set.of()).orElseThrow();
         else
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
-                    null, Set.of()).orElseThrow();
+            serverEntity = Reflections.getInstance(ServerEntity.class, level, entity, 0, false, null, Set.of()).orElseThrow();
 
         return serverEntity;
     }

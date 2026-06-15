@@ -61,48 +61,6 @@ public class Reflections
         return getClass(path).flatMap(objectClass -> getInstance((Class<T>) objectClass, args));
     }
 
-    public static <T> @NotNull Optional<T> tryFindConstructor(@NotNull Class<T> clazz, @Nullable Object... args)
-    {
-        try
-        {
-            Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                    .map(Object::getClass)
-                    .toArray(Class<?>[]::new);
-
-            ConstructorKey key = new ConstructorKey(clazz, argTypes);
-            Constructor<?> cachedCtor = CONSTRUCTOR_CACHE.get(key);
-
-            if(cachedCtor != null)
-                return Optional.of((T) cachedCtor.newInstance(args));
-
-            Exception exception = null;
-            for(Constructor<?> ctor : clazz.getDeclaredConstructors())
-            {
-                try
-                {
-                    ctor.setAccessible(true);
-                    T instance = (T) ctor.newInstance(args);
-
-                    CONSTRUCTOR_CACHE.put(key, ctor);
-                    return Optional.of(instance);
-                }
-                catch(Exception e)
-                {
-                    exception = e;
-                }
-            }
-
-            if(exception != null)
-                throw exception;
-
-            return Optional.empty();
-        }
-        catch(Exception e)
-        {
-            return Optional.empty();
-        }
-    }
-
     public static <T> @NotNull Optional<T> getInstance(@NotNull Class<T> clazz, @Nullable Object... args)
     {
         try
@@ -116,10 +74,20 @@ public class Reflections
 
             if(ctor == null)
             {
-                ctor = clazz.getDeclaredConstructor(argTypes);
-                ctor.setAccessible(true);
-                CONSTRUCTOR_CACHE.put(key, ctor);
+                for(Constructor<?> constructor : clazz.getDeclaredConstructors())
+                {
+                    if(isCompatible(argTypes, constructor.getParameterTypes(), constructor.isVarArgs()))
+                    {
+                        ctor = constructor;
+                        ctor.setAccessible(true);
+                        CONSTRUCTOR_CACHE.put(key, ctor);
+                        break;
+                    }
+                }
             }
+
+            if(ctor == null)
+                throw new NoSuchMethodException("No compatible constructor found in class " + clazz.getName() + " for arguments " + Arrays.toString(argTypes));
 
             return Optional.of((T) ctor.newInstance(args));
         }
