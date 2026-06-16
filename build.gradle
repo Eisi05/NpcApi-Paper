@@ -29,12 +29,6 @@ dependencies {
     compileOnly("com.cjcrafter:mechanicscore:4.1.0")
 }
 
-paperweight {
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
-
 def targetJavaVersion = 21
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
