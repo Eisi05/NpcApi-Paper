@@ -409,7 +409,11 @@ public class NpcOption<T, S extends Serializable>
 
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
-                team.setColor(ChatFormatting.getByCode(color.getColorCode()));
+                if(Versions.isCurrentVersionSmallerThan(Versions.V26_2))
+                    team.setColor(ChatFormatting.getByCode(color.getColorCode()));
+                else
+                    Reflections.invokeMethod(team, "setColor", Optional.of(
+                            SetPlayerTeamPacket.getTeamColor(ChatFormatting.getByCode(color.getColorCode()))));
 
                 var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
 
@@ -524,7 +528,10 @@ public class NpcOption<T, S extends Serializable>
                 Integer oldId = npc.toDeleteEntities.remove("sit");
                 if(pose == Pose.SITTING)
                 {
-                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.entity.level());
+                    Display.TextDisplay textDisplay = new Display.TextDisplay(
+                            Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
+                                    EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
+                                npc.entity.level());
                     textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
                     npc.toDeleteEntities.put("sit", textDisplay.getId());
 
@@ -672,7 +679,7 @@ public class NpcOption<T, S extends Serializable>
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(((Display.TextDisplay) npc.getNameTag().getDisplay()).getId(),
                                     (SynchedEntityData) npc.getNameTag().applyData(npc.isEnabled() ? npc.name.getName(player) :
                                             NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
-                                            .appendNewline().append(npc.name.getName(player)))));
+                                            .appendNewline().append(npc.name.getName(player)), npc.name.getDisplayOptions())));
 
                     entity.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
                     packets.add(new ClientboundSetPassengersPacket(entity));
@@ -735,7 +742,7 @@ public class NpcOption<T, S extends Serializable>
     private final Function<S, T> deserializer;
     private final Function<T, T> copyFunction;
     private final TriFunction<T, NPC, Player, Packet<?>> packet;
-    private Versions since = Versions.V1_17;
+    private Versions since = Versions.V1_20_6;
     private boolean loadBefore = false;
 
     /**

@@ -8,8 +8,9 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Display;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.util.Vector;
-import org.joml.Vector3f;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
@@ -135,42 +136,6 @@ public class CustomNameTag
     }
 
     /**
-     * Sets the width of the nametag.
-     * Default: 0.0
-     *
-     * @param width Width value.
-     * @return This instance for chaining.
-     */
-    public CustomNameTag width(float width)
-    {
-        return set(EntityDataSerializers.FLOAT.createAccessor(20), width);
-    }
-
-    /**
-     * Sets the height of the nametag.
-     * Default: 1.0
-     *
-     * @param height Height value.
-     * @return This instance for chaining.
-     */
-    public CustomNameTag height(float height)
-    {
-        return set(EntityDataSerializers.FLOAT.createAccessor(21), height);
-    }
-
-    /**
-     * Sets a glow color override.
-     * Default: -1
-     *
-     * @param color Glow color as integer.
-     * @return This instance for chaining.
-     */
-    public CustomNameTag glowColorOverride(int color)
-    {
-        return set(EntityDataSerializers.INT.createAccessor(22), color);
-    }
-
-    /**
      * Sets the line width of the text.
      * Default: 200
      *
@@ -222,9 +187,10 @@ public class CustomNameTag
      * Applies all configured data to the given TextDisplay and component.
      *
      * @param component The text component to display.
+     * @param displayOptions The display options to apply.
      * @return The SynchedEntityData after applying values.
      */
-    Object applyData(@Nullable net.kyori.adventure.text.Component component)
+    Object applyData(@Nullable net.kyori.adventure.text.Component component, @NotNull NameDisplayOptions displayOptions)
     {
         SynchedEntityData data = display.getEntityData();
 
@@ -237,11 +203,45 @@ public class CustomNameTag
         if(nmsComponent == null)
             nmsComponent = Component.empty();
 
-        // Default values
         data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(nmsComponent));
         data.set(EntityDataSerializers.BOOLEAN.createAccessor(4), true);
-        data.set(EntityDataSerializers.VECTOR3.createAccessor(11), new Vector3f(0, 0.25f, 0));
-        data.set(EntityDataSerializers.BYTE.createAccessor(15), (byte) 3);
+
+        translation(new Vector(0, 0.25f, 0));
+        billboardConstraints(BillboardConstraints.CENTER);
+
+        float[] scale = displayOptions.getScale();
+        scale(new Vector(scale[0], scale[1], scale[2]));
+
+        int brightness = displayOptions.getBrightness();
+        brightnessOverride(brightness);
+
+        float viewRange = displayOptions.getViewRange();
+        viewRange(viewRange);
+
+        int lineWidth = displayOptions.getLineWidth();
+        lineWidth(lineWidth);
+
+        int backgroundColor = displayOptions.getBackgroundColor();
+        backgroundColor(backgroundColor);
+
+        byte textOpacity = displayOptions.getTextOpacity();
+        textOpacity(textOpacity);
+
+
+        boolean isSeeThrough = displayOptions.isSeeThrough();
+        TextDisplay.TextAlignment alignment = displayOptions.getAlignment();
+        TextDisplayFlags alignmentFlag = switch(alignment)
+        {
+            case LEFT -> TextDisplayFlags.LEFT_ALIGNMENT;
+            case CENTER -> TextDisplayFlags.CENTER_ALIGNMENT;
+            case RIGHT -> TextDisplayFlags.RIGHT_ALIGNMENT;
+        };
+
+        if(isSeeThrough)
+            flags(alignmentFlag, TextDisplayFlags.IS_SEE_THROUGH);
+        else
+            flags(alignmentFlag);
+
         data.set(EntityDataSerializers.COMPONENT.createAccessor(23), nmsComponent);
 
         // Apply custom data
@@ -272,9 +272,10 @@ public class CustomNameTag
         IS_SEE_THROUGH((byte) 0x02),
         USE_DEFAULT_BACKGROUND_COLOR((byte) 0x04),
         CENTER_ALIGNMENT((byte) 0x00),
-        LEFT_ALIGNMENT((byte) 0x01),
-        RIGHT_ALIGNMENT((byte) 0x02);
+        LEFT_ALIGNMENT((byte) 0x08),
+        RIGHT_ALIGNMENT((byte) 0x10);
 
+        private static final byte ALIGNMENT_MASK = (byte) 0x18;
         private final byte flag;
 
         TextDisplayFlags(byte flag) {this.flag = flag;}
@@ -282,8 +283,22 @@ public class CustomNameTag
         public static byte combineFlags(TextDisplayFlags... flags)
         {
             byte result = 0;
+            boolean alignmentSet = false;
+
             for(TextDisplayFlags flag : flags)
-                result |= flag.flag;
+            {
+                boolean isAlignment = (flag == CENTER_ALIGNMENT || flag == LEFT_ALIGNMENT || flag == RIGHT_ALIGNMENT);
+
+                if(isAlignment)
+                {
+                    if(alignmentSet)
+                        throw new IllegalArgumentException("You cannot clear or set multiple alignments at once!");
+                    result = (byte) ((result & ~ALIGNMENT_MASK) | flag.flag);
+                    alignmentSet = true;
+                }
+                else
+                    result |= flag.flag;
+            }
             return result;
         }
     }

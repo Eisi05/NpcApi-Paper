@@ -16,13 +16,11 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class WanderGoal extends Goal
 {
-    @Serial
-    private static final long serialVersionUID = 1L;
-
     public static final int DEFAULT_RADIUS = 10;
     public static final int DEFAULT_MIN_DELAY = 40; // 2 seconds
     public static final int DEFAULT_MAX_DELAY = 140; // 7 seconds
-
+    @Serial
+    private static final long serialVersionUID = 1L;
     private int radius;
     private int minDelay;
     private int maxDelay;
@@ -286,7 +284,8 @@ public class WanderGoal extends Goal
 
             if(y.isPresent())
             {
-                targetLocation = new Location(world, x, y.getAsInt(), z);
+                targetLocation = new Location(world, x, y.getAsInt(), z, 0, 0);
+                targetLocation.setYaw(calculateYaw(currentLoc, targetLocation));
                 currentWalkGoal = new WalkToLocationGoal.Builder(targetLocation).speed(speed).build();
                 currentWalkGoal.start(npc);
                 return;
@@ -296,5 +295,18 @@ public class WanderGoal extends Goal
         }
 
         delayTicks = maxDelay;
+    }
+
+    public float calculateYaw(@NotNull Location current, @NotNull Location target)
+    {
+        double dx = target.getX() - current.getX();
+        double dz = target.getZ() - current.getZ();
+
+        double yaw = Math.toDegrees(Math.atan2(-dx, dz));
+
+        if(yaw < 0)
+            yaw += 360;
+
+        return (float) yaw;
     }
 }

@@ -12,8 +12,7 @@ import java.io.Serial;
 import java.io.Serializable;
 
 /**
- * Represents the name of an NPC, which can be either a fixed {@link String}
- * or dynamically generated based on a {@link Player}.
+ * Represents the name of an NPC, which can be either a fixed {@link String} or dynamically generated based on a {@link Player}.
  */
 public class NpcName implements Serializable
 {
@@ -22,9 +21,9 @@ public class NpcName implements Serializable
 
     private final String nameComponentSerialized;
     private final SerializableFunction<Player, String> nameFunctionSerialized;
-
     private transient final Component nameComponent;
     private transient final SerializableFunction<Player, Component> nameFunction;
+    private NameDisplayOptions displayOptions = new NameDisplayOptions();
 
     /**
      * Creates a static NPC name.
@@ -43,8 +42,7 @@ public class NpcName implements Serializable
     /**
      * Creates a dynamic NPC name with a fallback static component.
      * <p>
-     * The {@code nameFunction} generates the name for a player, but if needed,
-     * {@code fallback} will be used as a default static name.
+     * The {@code nameFunction} generates the name for a player, but if needed, {@code fallback} will be used as a default static name.
      *
      * @param nameFunction the function producing the name for a given player
      * @param fallback     the static fallback name component
@@ -96,11 +94,35 @@ public class NpcName implements Serializable
     @Serial
     private Object readResolve() throws ObjectStreamException
     {
-        if(nameFunctionSerialized == null)
-            return new NpcName(JSONComponentSerializer.json().deserialize(nameComponentSerialized));
+        NpcName deserialized = nameFunctionSerialized == null ?
+                new NpcName(JSONComponentSerializer.json().deserialize(nameComponentSerialized)) :
+                new NpcName(player -> JSONComponentSerializer.json().deserialize(nameFunctionSerialized.apply(player)),
+                        JSONComponentSerializer.json().deserialize(nameComponentSerialized));
 
-        return new NpcName(player -> JSONComponentSerializer.json().deserialize(nameFunctionSerialized.apply(player)),
-                JSONComponentSerializer.json().deserialize(nameComponentSerialized));
+        if(this.displayOptions != null)
+            deserialized.displayOptions = this.displayOptions;
+
+        return deserialized;
+    }
+
+    /**
+     * Gets the display options for this NPC name.
+     *
+     * @return the display options
+     */
+    public @NotNull NameDisplayOptions getDisplayOptions()
+    {
+        return this.displayOptions;
+    }
+
+    /**
+     * Sets the display options for this NPC name.
+     *
+     * @param displayOptions the display options to set
+     */
+    public void setDisplayOptions(@NotNull NameDisplayOptions displayOptions)
+    {
+        this.displayOptions = displayOptions;
     }
 
     /**
@@ -144,7 +166,9 @@ public class NpcName implements Serializable
      */
     public @NotNull NpcName copy()
     {
-        return isStatic() ? new NpcName(nameComponent) : new NpcName(nameFunction, nameComponent);
+        NpcName copied = isStatic() ? new NpcName(nameComponent) : new NpcName(nameFunction, nameComponent);
+        copied.displayOptions = this.displayOptions.copy();
+        return copied;
     }
 
     @Override

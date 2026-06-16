@@ -16,46 +16,6 @@ public enum Versions
      */
     NONE(""),
     /**
-     * Minecraft 1.17 version.
-     */
-    V1_17("v1_17_R1"),
-    /**
-     * Minecraft 1.18 version.
-     */
-    V1_18("v1_18_R1"),
-    /**
-     * Minecraft 1.18.2 version.
-     */
-    V1_18_2("v1_18_R2"),
-    /**
-     * Minecraft 1.19 version.
-     */
-    V1_19("v1_19_R1"),
-    /**
-     * Minecraft 1.19.1 version.
-     */
-    V1_19_1("v1_19_R1"),
-    /**
-     * Minecraft 1.19.3 version.
-     */
-    V1_19_3("v1_19_R2"),
-    /**
-     * Minecraft 1.19.4 version.
-     */
-    V1_19_4("v1_19_R3"),
-    /**
-     * Minecraft 1.20 version.
-     */
-    V1_20("v1_20_R1"),
-    /**
-     * Minecraft 1.20.2 version.
-     */
-    V1_20_2("v1_20_R2"),
-    /**
-     * Minecraft 1.20.4 version.
-     */
-    V1_20_4("v1_20_R3"),
-    /**
      * Minecraft 1.20.6 version.
      */
     V1_20_6("v1_20_R4"),
@@ -97,7 +57,11 @@ public enum Versions
     /**
      * Minecraft 26.1 version.
      */
-    V26_1("v26_1");
+    V26_1("v26_1"),
+    /**
+     * Minecraft 26.2 version.
+     */
+    V26_2("v26_2");
 
     /**
      * Caches the determined current server version to avoid repeated lookups.
@@ -131,16 +95,6 @@ public enum Versions
 
         return VERSION = switch(Bukkit.getMinecraftVersion())
         {
-            case "1.17.1", "1.17.2" -> Versions.V1_17;
-            case "1.18", "1.18.1" -> Versions.V1_18;
-            case "1.18.2" -> Versions.V1_18_2;
-            case "1.19" -> Versions.V1_19;
-            case "1.19.1", "1.19.2" -> Versions.V1_19_1;
-            case "1.19.3" -> Versions.V1_19_3;
-            case "1.19.4", "1.19.5" -> Versions.V1_19_4;
-            case "1.20", "1.20.1" -> Versions.V1_20;
-            case "1.20.2", "1.20.3" -> Versions.V1_20_2;
-            case "1.20.4", "1.20.5" -> Versions.V1_20_4;
             case "1.20.6" -> Versions.V1_20_6;
             case "1.21", "1.21.1" -> Versions.V1_21;
             case "1.21.2", "1.21.3" -> Versions.V1_21_2;
@@ -151,6 +105,7 @@ public enum Versions
             case "1.21.9", "1.21.10" -> V1_21_9;
             case "1.21.11" -> V1_21_11;
             case String s when s.startsWith("26.1") -> V26_1;
+            case String s when s.startsWith("26.2") -> V26_2;
             default -> Versions.NONE;
         };
     }

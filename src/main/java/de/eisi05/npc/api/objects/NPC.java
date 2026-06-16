@@ -157,7 +157,11 @@ public class NPC extends NpcHolder
         for(NpcOption<?, ?> value : NpcOption.values())
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
 
-        Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, ((CraftWorld) location.getWorld()).getHandle());
+
+        Display.TextDisplay display = new Display.TextDisplay(
+                Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
+                EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
+                        ((CraftWorld) location.getWorld()).getHandle());
         Var.moveEntity(display, location.getX(), location.getY() + 2, location.getZ(), 0f, 0f);
 
         nameTag = new CustomNameTag(display);
@@ -165,7 +169,10 @@ public class NPC extends NpcHolder
 
         NpcManager.addNPC(this);
         startGoals();
-        serverPlayer.getAdvancements().stopListening();
+        if(Versions.isCurrentVersionSmallerThan(Versions.V26_2))
+            serverPlayer.getAdvancements().stopListening();
+        else
+            Reflections.invokeMethod(serverPlayer.getAdvancements(), "clearTriggers");
     }
 
     /**
@@ -547,9 +554,8 @@ public class NPC extends NpcHolder
     {
         ((CraftPlayer) player).getHandle().connection.send(
                 ((Packet<?>) SetEntityDataPacket.create(((Display.TextDisplay) nameTag.getDisplay()).getId(),
-                        (SynchedEntityData) nameTag.applyData(
-                                isEnabled() ? name.getName(player) : NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
-                                                                     .appendNewline().append(name.getName(player))))));
+                        (SynchedEntityData) nameTag.applyData(isEnabled() ? name.getName(player) :
+                                NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player).appendNewline().append(name.getName(player)), name.getDisplayOptions()))));
     }
 
     /**
@@ -677,8 +683,7 @@ public class NPC extends NpcHolder
 
         packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, wrappedServerPlayer));
 
-        if(!Versions.isCurrentVersionSmallerThan(Versions.V1_19_3))
-            packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED, wrappedServerPlayer));
+        packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED, wrappedServerPlayer));
 
         ServerGamePacketListenerImpl connection = wrappedServerPlayer.connection;
         packets.forEach(connection::send);
