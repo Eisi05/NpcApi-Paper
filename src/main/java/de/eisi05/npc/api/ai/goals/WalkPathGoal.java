@@ -47,7 +47,7 @@ public class WalkPathGoal extends Goal
         super(Priority.MEDIUM);
         this.path = builder.path;
         this.serializablePath = path != null ? path.toSerializablePath() : null;
-        this.speed = Math.max(0.1, Math.min(1.0, builder.speed));
+        this.speed = Math.clamp(builder.speed, 0.1, 1.0);
         this.completionCallback = builder.completionCallback;
         this.withRotation = builder.withRotation;
     }
@@ -104,7 +104,7 @@ public class WalkPathGoal extends Goal
      */
     public void setSpeed(double speed)
     {
-        this.speed = Math.max(0.1, Math.min(1.0, speed));
+        this.speed = Math.clamp(speed, 0.1, 1.0);
     }
 
 
@@ -146,6 +146,12 @@ public class WalkPathGoal extends Goal
     public void setWithRotation(boolean withRotation)
     {
         this.withRotation = withRotation;
+    }
+
+    @Override
+    protected @Nullable Location getLocation()
+    {
+        return path != null ? path.asLocations().getLast() : null;
     }
 
     /**
@@ -365,7 +371,7 @@ public class WalkPathGoal extends Goal
          */
         public Builder speed(double speed)
         {
-            this.speed = Math.max(0.1, Math.min(1.0, speed));
+            this.speed = Math.clamp(speed, 0.1, 1.0);
             return this;
         }
 

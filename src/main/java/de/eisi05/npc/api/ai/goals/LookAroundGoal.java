@@ -173,7 +173,7 @@ public class LookAroundGoal extends Goal
             newPitch = lerp(currentPitch, targetPitch, rotationSpeed);
         }
 
-        newPitch = Math.max(-PITCH_MIN_MAX, Math.min(PITCH_MIN_MAX, newPitch));
+        newPitch = Math.clamp(newPitch, -PITCH_MIN_MAX, PITCH_MIN_MAX);
 
         currentLoc.setYaw(newYaw);
         currentLoc.setPitch(newPitch);
@@ -277,7 +277,7 @@ public class LookAroundGoal extends Goal
         targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         targetPitch = (float) Math.toDegrees(-Math.atan2(dy, distanceXZ));
 
-        targetPitch = Math.max(-PITCH_MIN_MAX, Math.min(PITCH_MIN_MAX, targetPitch));
+        targetPitch = Math.clamp(targetPitch, -PITCH_MIN_MAX, PITCH_MIN_MAX);
     }
 
     /**

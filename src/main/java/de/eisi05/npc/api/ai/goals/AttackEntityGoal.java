@@ -93,7 +93,7 @@ public class AttackEntityGoal extends Goal
         super(Priority.ALWAYS);
         this.targetFilter = targetFilter;
         this.customAttackRange = customAttackRange;
-        this.speed = Math.max(0.1, Math.min(1.0, speed));
+        this.speed = Math.clamp(speed, 0.1, 1.0);
     }
 
     /**

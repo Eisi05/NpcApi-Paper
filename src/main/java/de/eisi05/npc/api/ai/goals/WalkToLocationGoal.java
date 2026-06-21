@@ -63,7 +63,7 @@ public class WalkToLocationGoal extends Goal
         super(Priority.MEDIUM);
         this.targetLocation = builder.targetLocation.clone();
         this.serializableLocation = new Path.SerializablePath.SerializableLocation(targetLocation);
-        this.speed = Math.max(0.1, Math.min(1.0, builder.speed));
+        this.speed = Math.clamp(builder.speed, 0.1, 1.0);
         this.maxIterations = builder.maxIterations;
         this.allowDiagonal = builder.allowDiagonal;
         this.completionCallback = builder.completionCallback;
@@ -103,7 +103,7 @@ public class WalkToLocationGoal extends Goal
      */
     public void setSpeed(double speed)
     {
-        this.speed = Math.max(0.1, Math.min(1.0, speed));
+        this.speed = Math.clamp(speed, 0.1, 1.0);
     }
 
     /**
@@ -214,6 +214,12 @@ public class WalkToLocationGoal extends Goal
             return false;
 
         return true;
+    }
+
+    @Override
+    protected @Nullable Location getLocation()
+    {
+        return targetLocation;
     }
 
     /**
@@ -540,7 +546,7 @@ public class WalkToLocationGoal extends Goal
          */
         public Builder speed(double speed)
         {
-            this.speed = Math.max(0.1, Math.min(1.0, speed));
+            this.speed = Math.clamp(speed, 0.1, 1.0);
             return this;
         }
 

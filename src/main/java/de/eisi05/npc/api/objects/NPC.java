@@ -725,7 +725,7 @@ public class NPC extends NpcHolder
         }
 
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
-        connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
+        connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), entity.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
 
         if(TeamManager.exists(player, getGameProfileName()))
         {
@@ -735,6 +735,7 @@ public class NPC extends NpcHolder
         }
 
         toDeleteEntities.values().forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
+        toDeleteEntities.clear();
 
         connection.send(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
 
@@ -1014,7 +1015,7 @@ public class NPC extends NpcHolder
                 cancelWalking(player);
         }
 
-        final double speed = Math.max(Math.min(walkSpeed, 1), 0.1);
+        final double speed = Math.clamp(walkSpeed, 0.1, 1);
 
         NpcStartWalkingEvent event = new NpcStartWalkingEvent(this, path, speed, changeRealLocation);
         Bukkit.getPluginManager().callEvent(event);

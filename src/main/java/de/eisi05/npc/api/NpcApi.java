@@ -13,6 +13,7 @@ import de.eisi05.npc.api.utils.PacketReader;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
@@ -42,6 +43,8 @@ public final class NpcApi
     public static Function<Player, Component> DISABLED_MESSAGE_PROVIDER = player ->
             Component.text("DISABLED").color(NamedTextColor.RED);
 
+    public static NamespacedKey displayKey;
+
     /**
      * The configuration object for the NPC API, containing various settings like the look-at timer.
      */
@@ -60,6 +63,7 @@ public final class NpcApi
     {
         NpcApi.plugin = plugin;
         NpcApi.config = config;
+        displayKey = new NamespacedKey(NpcApi.plugin, "display");
 
         if(config.preciseSleepingHitbox())
             listeners.add(sleepListener = new NpcSleepListener());

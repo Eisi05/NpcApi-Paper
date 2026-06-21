@@ -37,8 +37,10 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Interaction;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -51,13 +53,17 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.craftbukkit.scoreboard.CraftScoreboard;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
+import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Vector3f;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
@@ -639,11 +645,15 @@ public class NpcOption<T, S extends Serializable>
                     entity = npc.entity;
 
                 npc.entity = entity;
+                if(entity instanceof EnderDragon dragon)
+                    Arrays.stream(dragon.subEntities).forEach(part -> NpcManager.addID(part.getId(), npc));
+
                 NpcManager.addID(npc.entity.getId(), npc);
 
                 List<Packet<? super ClientGamePacketListener>> packets = new ArrayList<>();
 
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.serverPlayer.getId()));
+                packets.add(new ClientboundRemoveEntitiesPacket(npc.entity.getId()));
                 packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
 
                 var teamPair = getTeam(player, npc);
@@ -668,7 +678,57 @@ public class NpcOption<T, S extends Serializable>
                         (byte) (Var.nbtToEntityFlags(wrappedEntitySnapshot.getData()) | Var.extractFlagsFromBukkit(entity.getBukkitEntity())));
                 data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(Component.literal("NPC")));
                 data.set(EntityDataSerializers.BOOLEAN.createAccessor(3), false);
+
+                if(entity.getBukkitEntity() instanceof BlockDisplay display)
+                {
+                    Vector3f translation = display.getTransformation().getTranslation();
+                    if(!display.getPersistentDataContainer().has(NpcApi.displayKey, PersistentDataType.BOOLEAN))
+                    {
+                        display.getPersistentDataContainer().set(NpcApi.displayKey, PersistentDataType.BOOLEAN, true);
+                        data.set(EntityDataSerializers.VECTOR3.createAccessor(11),
+                                new Vector3f(translation.x - 0.5f, translation.y, translation.z - 0.5f));
+                    }
+                }
+
+                if(entity.getBukkitEntity() instanceof ItemDisplay display)
+                {
+                    Vector3f translation = display.getTransformation().getTranslation();
+                    if(!display.getPersistentDataContainer().has(NpcApi.displayKey, PersistentDataType.BOOLEAN))
+                    {
+                        display.getPersistentDataContainer().set(NpcApi.displayKey, PersistentDataType.BOOLEAN, true);
+                        data.set(EntityDataSerializers.VECTOR3.createAccessor(11), new Vector3f(translation.x, translation.y + 0.5f, translation.z));
+                    }
+                }
+
                 packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(entity.getId(), data));
+
+                List<Entity> passengers = new ArrayList<>();
+                if(entity.getBukkitEntity() instanceof org.bukkit.entity.Display display)
+                {
+                    Vector3f scale = display.getTransformation().getScale();
+
+                    Interaction interaction = new Interaction(Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
+                            EntityType.INTERACTION : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "INTERACTION"),
+                            Var.getServerLevel(npc.serverPlayer));
+                    Var.moveEntity(interaction, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch());
+                    float width = Math.max(scale.x, scale.z);
+                    float height = scale.y;
+
+                    NpcManager.addID(interaction.getId(), npc);
+                    npc.toDeleteEntities.put("interaction", interaction.getId());
+                    passengers.add(interaction);
+
+                    npc.name.getDisplayOptions().setHeight(height);
+
+                    SynchedEntityData interactionData = interaction.getEntityData();
+                    interactionData.set(EntityDataSerializers.FLOAT.createAccessor(8), width);
+                    interactionData.set(EntityDataSerializers.FLOAT.createAccessor(9), height);
+
+                    packets.add(interaction.getAddEntityPacket(Var.getServerEntity(interaction, Var.getServerLevel(npc.serverPlayer))));
+                    packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(interaction.getId(), interactionData));
+                }
+                else
+                    npc.name.getDisplayOptions().setHeight(0);
 
                 if(!npc.getOption(NpcOption.HIDE_NAMETAG, player))
                 {
@@ -681,7 +741,12 @@ public class NpcOption<T, S extends Serializable>
                                             NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
                                             .appendNewline().append(npc.name.getName(player)), npc.name.getDisplayOptions())));
 
-                    entity.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
+                    passengers.add((Display.TextDisplay) npc.getNameTag().getDisplay());
+                }
+
+                if(!passengers.isEmpty())
+                {
+                    entity.passengers = ImmutableList.copyOf(passengers);
                     packets.add(new ClientboundSetPassengersPacket(entity));
                 }
 

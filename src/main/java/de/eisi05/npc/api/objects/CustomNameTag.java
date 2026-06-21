@@ -206,7 +206,7 @@ public class CustomNameTag
         data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(nmsComponent));
         data.set(EntityDataSerializers.BOOLEAN.createAccessor(4), true);
 
-        translation(new Vector(0, 0.25f, 0));
+        translation(new Vector(0, 0.25f + displayOptions.getHeight(), 0));
         billboardConstraints(BillboardConstraints.CENTER);
 
         float[] scale = displayOptions.getScale();

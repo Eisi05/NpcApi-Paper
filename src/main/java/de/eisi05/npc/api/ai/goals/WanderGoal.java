@@ -62,7 +62,7 @@ public class WanderGoal extends Goal
         this.radius = radius;
         this.minDelay = minDelay;
         this.maxDelay = maxDelay;
-        this.speed = Math.max(0.1, Math.min(1.0, speed));
+        this.speed = Math.clamp(speed, 0.1, 1.0);
     }
 
     /**
@@ -156,7 +156,7 @@ public class WanderGoal extends Goal
      */
     public void setSpeed(double speed)
     {
-        this.speed = Math.max(0.1, Math.min(1.0, speed));
+        this.speed = Math.clamp(speed, 0.1, 1.0);
     }
 
     /**

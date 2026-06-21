@@ -61,7 +61,7 @@ public class FollowEntityGoal extends Goal
         this.targetEntityId = targetEntityId;
         this.followDistance = Math.max(stopDistance + 0.5, followDistance);
         this.stopDistance = Math.max(0.5, stopDistance);
-        this.speed = Math.max(0.1, Math.min(1.0, speed));
+        this.speed = Math.clamp(speed, 0.1, 1.0);
     }
 
     /**
