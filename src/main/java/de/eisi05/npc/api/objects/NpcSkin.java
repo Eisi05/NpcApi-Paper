@@ -2,13 +2,11 @@ package de.eisi05.npc.api.objects;
 
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.Reflections;
-import de.eisi05.npc.api.utils.SerializableBiFunction;
 import de.eisi05.npc.api.utils.TriFunction;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.io.Serial;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,7 +32,7 @@ public class NpcSkin implements SkinData
     private final Skin skin;
 
     private final String placeholder;
-    private final TriFunction<Player, NPC, String, Skin> newSkinFunction;
+    private transient final TriFunction<Player, NPC, String, Skin> newSkinFunction;
 
     /**
      * Creates a dynamic NPC skin that uses a function to determine the skin.
