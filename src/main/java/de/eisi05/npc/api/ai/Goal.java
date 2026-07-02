@@ -1,14 +1,19 @@
 package de.eisi05.npc.api.ai;
 
+import com.google.gson.*;
+import com.google.gson.annotations.JsonAdapter;
+import com.google.gson.annotations.SerializedName;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.SerializableBiPredicate;
 import de.eisi05.npc.api.utils.SerializablePredicate;
+import de.eisi05.npc.api.utils.serialize.ConditionRegistry;
 import org.bukkit.Location;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.Serial;
-import java.io.Serializable;
+import java.io.*;
+import java.lang.reflect.Type;
+import java.util.Base64;
 
 /**
  * Base abstract class for NPC AI goals. Goals represent specific behaviors that an NPC can perform, such as walking to a location, attacking an entity, or
@@ -21,8 +26,11 @@ public abstract class Goal implements Serializable
     private Priority priority;
 
     @Deprecated(since = "2.4.1")
+    @SerializedName("legacyCondition")
     private SerializablePredicate<NPC> condition;
 
+    @SerializedName("condition")
+    @JsonAdapter(GoalConditionAdapter.class)
     private SerializableBiPredicate<Location, NPC> newCondition;
 
     /**
@@ -224,6 +232,70 @@ public abstract class Goal implements Serializable
         Priority(int weight)
         {
             this.weight = weight;
+        }
+    }
+
+    private static class GoalConditionAdapter implements JsonSerializer<SerializableBiPredicate<Location, NPC>>, JsonDeserializer<SerializableBiPredicate<Location, NPC>>
+    {
+        @Override
+        public JsonElement serialize(SerializableBiPredicate<Location, NPC> src, Type typeOfSrc, JsonSerializationContext context)
+        {
+            if (src == null)
+                return JsonNull.INSTANCE;
+
+            String expression = src.toString();
+            if (expression != null && !expression.contains("$$Lambda") && !expression.contains("@"))
+            {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("expression", expression);
+                return obj;
+            }
+
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                 ObjectOutputStream oos = new ObjectOutputStream(baos))
+            {
+                oos.writeObject(src);
+                oos.flush();
+
+                JsonObject obj = new JsonObject();
+                obj.addProperty("lambda", Base64.getEncoder().encodeToString(baos.toByteArray()));
+                return obj;
+            }
+            catch (IOException e)
+            {
+                return JsonNull.INSTANCE;
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public SerializableBiPredicate<Location, NPC> deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException
+        {
+            if (json == null || json.isJsonNull())
+                return null;
+
+            if (json.isJsonPrimitive())
+                return ConditionRegistry.compileCondition(json.getAsString());
+
+            JsonObject obj = json.getAsJsonObject();
+
+            if (obj.has("expression"))
+                return ConditionRegistry.compileCondition(obj.get("expression").getAsString());
+            else if (obj.has("lambda"))
+            {
+                byte[] data = Base64.getDecoder().decode(obj.get("lambda").getAsString());
+                try (ByteArrayInputStream bais = new ByteArrayInputStream(data);
+                     ObjectInputStream ois = new ObjectInputStream(bais))
+                {
+                    return (SerializableBiPredicate<Location, NPC>) ois.readObject();
+                }
+                catch (IOException | ClassNotFoundException e)
+                {
+                    return null;
+                }
+            }
+
+            return null;
         }
     }
 }

@@ -33,11 +33,8 @@ public class NpcSkin implements SkinData
 
     private final Skin skin;
 
-    @Deprecated(since = "1.21.x-20")
-    private final SerializableBiFunction<Player, NPC, Skin> skinFunction;
-
     private final String placeholder;
-    private TriFunction<Player, NPC, String, Skin> newSkinFunction;
+    private final TriFunction<Player, NPC, String, Skin> newSkinFunction;
 
     /**
      * Creates a dynamic NPC skin that uses a function to determine the skin.
@@ -51,7 +48,6 @@ public class NpcSkin implements SkinData
         this.skin = fallback;
         this.newSkinFunction = skinFunction;
         this.placeholder = placeholder;
-        this.skinFunction = null;
     }
 
 
@@ -63,7 +59,6 @@ public class NpcSkin implements SkinData
     private NpcSkin(@NotNull Skin skin)
     {
         this.skin = skin;
-        this.skinFunction = null;
         this.newSkinFunction = null;
         this.placeholder = null;
     }
@@ -145,15 +140,6 @@ public class NpcSkin implements SkinData
             }
             return null;
         }, placeholder, fallback);
-    }
-
-    @Serial
-    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException
-    {
-        in.defaultReadObject();
-
-        if(newSkinFunction == null)
-            newSkinFunction = ((player, npc, s) -> skinFunction != null ? skinFunction.apply(player, npc) : null);
     }
 
     /**

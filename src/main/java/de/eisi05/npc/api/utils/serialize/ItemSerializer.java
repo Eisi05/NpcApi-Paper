@@ -1,4 +1,4 @@
-package de.eisi05.npc.api.utils;
+package de.eisi05.npc.api.utils.serialize;
 
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;

@@ -3,7 +3,7 @@ package de.eisi05.npc.api.manager;
 import com.mojang.datafixers.util.Either;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.utils.ObjectSaver;
+import de.eisi05.npc.api.utils.serialize.ObjectSaver;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import org.bukkit.Bukkit;
@@ -14,6 +14,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.*;
 import java.util.*;
 
@@ -124,6 +126,7 @@ public class NpcManager
 
         long failCounter = 0;
         long successCounter = 0;
+        long migrations = 0;
 
         Exception exception = null;
         for(File file1 : files)
@@ -133,7 +136,25 @@ public class NpcManager
 
             try
             {
-                NPC.SerializedNPC serializedNPC = new ObjectSaver(file1).read();
+                ObjectSaver saver = new ObjectSaver(file1);
+
+                NPC.SerializedNPC serializedNPC;
+                if(!saver.isJson())
+                {
+                    File backupFolder = new File(file, "backup");
+                    if (!backupFolder.exists())
+                        backupFolder.mkdirs();
+
+                    File backupFile = new File(backupFolder, file1.getName());
+                    Files.copy(file1.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+                    serializedNPC = saver.read();
+                    file1.delete();
+                    new ObjectSaver(file1).write(serializedNPC, false);
+                    migrations++;
+                }
+                else
+                    serializedNPC = saver.read(NPC.SerializedNPC.class);
                 Either<NPC, UUID> npcEither = serializedNPC.deserializedNPC();
 
                 if(npcEither.right().isPresent())
@@ -155,6 +176,9 @@ public class NpcManager
                 loadExceptions.put(file1.getName(), e);
             }
         }
+
+        if(migrations > 0)
+            NpcApi.plugin.getLogger().info("Successfully migrated " + migrations + " NPC's");
 
         if(successCounter == 1)
             NpcApi.plugin.getLogger().info("Successfully loaded " + successCounter + " NPC");

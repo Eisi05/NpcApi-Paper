@@ -2,6 +2,7 @@ package de.eisi05.npc.api.objects;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimaps;
+import com.google.common.reflect.TypeToken;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
@@ -14,6 +15,7 @@ import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.*;
+import de.eisi05.npc.api.utils.serialize.ItemSerializer;
 import de.eisi05.npc.api.wrapper.enums.ChatFormat;
 import de.eisi05.npc.api.wrapper.objects.WrappedEntitySnapshot;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
@@ -61,12 +63,14 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -187,7 +191,7 @@ public class NpcOption<T, S extends Serializable>
 
                 properties.put("textures", new Property("textures", skin.value(), skin.signature()));
                 return null;
-            }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9));
+            }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9)).type(NpcSkin.class);
 
     /**
      * NPC option to control whether the NPC is shown in the player tab list. If false, the NPC will be removed from the tab list for the viewing player after a
@@ -252,36 +256,28 @@ public class NpcOption<T, S extends Serializable>
      * NPC option to set the equipment worn by the NPC (armor, items in hand). The map uses {@link EquipmentSlot} as keys and {@link ItemStack} as values.
      * Serialized form uses item base64 strings.
      */
-    public static final NpcOption<Map<EquipmentSlot, ItemStack>, HashMap<EquipmentSlot, String>> EQUIPMENT = new NpcOption<>("equipment",
-            HashMap::new, HashMap::new,
-            map ->
-            {
-                HashMap<EquipmentSlot, String> serializedMap = new HashMap<>();
-                map.forEach((slot, item) ->
-                {
-                    if(item == null || item.isEmpty())
-                        return;
-
-                    String serialized = ItemSerializer.itemStackToBase64(item);
-                    if(serialized == null)
-                        return;
-
-                    serializedMap.put(slot, serialized);
-                });
-                return serializedMap;
-            },
+    public static final NpcOption<Map<EquipmentSlot, ItemStack>, HashMap<EquipmentSlot, ?>> EQUIPMENT = new NpcOption<Map<EquipmentSlot, ItemStack>, HashMap<EquipmentSlot, ?>>("equipment",
+            HashMap::new, HashMap::new, HashMap::new,
             serializedMap ->
             {
                 HashMap<EquipmentSlot, ItemStack> map = new HashMap<>();
-                serializedMap.forEach((slot, string) ->
+                serializedMap.forEach((slot, object) ->
                 {
-                    if(string == null || string.isEmpty())
+                    if(object == null)
+                        return;
+
+                    if(object instanceof ItemStack)
+                    {
+                        map.put(slot, (ItemStack) object);
+                        return;
+                    }
+
+                    if(!(object instanceof String string) || string.isEmpty())
                         return;
 
                     ItemStack item = ItemSerializer.itemStackFromBase64(string);
                     if(item == null)
                         return;
-
                     map.put(slot, item);
                 });
                 return map;
@@ -298,7 +294,7 @@ public class NpcOption<T, S extends Serializable>
                                 CraftItemStack.asNMSCopy(item))));
 
                 return new ClientboundSetEquipmentPacket(npc.entity.getId(), list);
-            });
+            }).type(new TypeToken<HashMap<EquipmentSlot, ItemStack>>(){}.getType());
     /**
      * NPC option to control which parts of the NPC's skin are visible (e.g., hat, jacket). For a full list look at {@link SkinParts}.
      */
@@ -311,7 +307,7 @@ public class NpcOption<T, S extends Serializable>
                 data.set(EntityDataSerializers.BYTE.createAccessor(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9) ? 17 : 16),
                         (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
                 return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
-            });
+            }).type(SkinParts[].class);
     /**
      * NPC option to make the NPC look at the player if they are within a certain distance. The value is the maximum distance in blocks. A value of 0 or less
      * disables this. The actual looking logic is handled by {@link Tasks}.
@@ -383,7 +379,7 @@ public class NpcOption<T, S extends Serializable>
 
                 return new ClientboundBundlePacket(
                         List.of(teamPacket, (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), entityData), addNpc, addPlayer));
-            });
+            }).type(NpcVisibility.class);
 
     /**
      * NPC option to make the NPC glow with a specific color. If null, the glowing effect is removed.
@@ -395,7 +391,7 @@ public class NpcOption<T, S extends Serializable>
      * </p>
      */
     @SuppressWarnings("unchecked")
-    public static final NpcOption<ChatFormat, ChatFormat> GLOWING = new NpcOption<>("glowing", () -> null,
+    public static final NpcOption<ChatFormat, ChatFormat> GLOWING = new NpcOption<ChatFormat, ChatFormat>("glowing", () -> null,
             color -> color, color -> color, color -> color,
             (color, npc, player) ->
             {
@@ -428,7 +424,7 @@ public class NpcOption<T, S extends Serializable>
                 return new ClientboundBundlePacket(List.of((Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) teamPacket,
                         (Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(),
                                 entityData)));
-            });
+            }).type(ChatFormat.class);
 
     /**
      * NPC option to control collision behavior between players and NPCs. When enabled, players can push and collide with NPCs. When disabled, players pass
@@ -572,7 +568,7 @@ public class NpcOption<T, S extends Serializable>
                         : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
                         (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
                 }
-            });
+            }).type(Pose.class);
 
     /**
      * NPC option to set the scale (size) of the NPC. A value of 1.0 is normal size. Requires Minecraft 1.20.6 or newer.
@@ -751,7 +747,7 @@ public class NpcOption<T, S extends Serializable>
                 }
 
                 return new ClientboundBundlePacket(packets);
-            }).loadBefore(true);
+            }).loadBefore(true).type(WrappedEntitySnapshot.class);
 
     /**
      * NPC option to control if the NPC is enabled (visible and interactable). If false, a "DISABLED" marker may be shown. This is an internal option, typically
@@ -766,10 +762,11 @@ public class NpcOption<T, S extends Serializable>
      * tick interval, and goal configurations. Note: Goals themselves are not fully serialized - only their class names and any serializable configuration. On
      * deserialization, goals must be re-instantiated by the plugin.
      */
-    static final NpcOption<ArrayList<Goal>, ArrayList<Goal>> GOALS = new NpcOption<>("goals", ArrayList::new,
+    static final NpcOption<ArrayList<Goal>, ArrayList<Goal>> GOALS = new NpcOption<ArrayList<Goal>, ArrayList<Goal>>("goals", ArrayList::new,
             goals -> new ArrayList<>(goals.stream().map(Goal::copy).toList()),
             goals -> goals, goals -> goals,
-            (data, npc, player) -> null);
+            (data, npc, player) -> null)
+            .type(new TypeToken<ArrayList<Goal>>(){}.getType());
 
     /**
      * NPC option to store custom data for the NPC. This is an internal option, typically not directly set by users but controlled by
@@ -799,7 +796,7 @@ public class NpcOption<T, S extends Serializable>
 
                 return visibilityManager;
             },
-            (visibilityManager, npc, player) -> null);
+            (visibilityManager, npc, player) -> null).type(NpcVisibilityManager.class);
 
     private final String path;
     private final Supplier<T> defaultValue;
@@ -809,6 +806,7 @@ public class NpcOption<T, S extends Serializable>
     private final TriFunction<T, NPC, Player, Packet<?>> packet;
     private Versions since = Versions.V1_20_6;
     private boolean loadBefore = false;
+    private Type type;
 
     /**
      * Private constructor to create a new NpcOption.
@@ -886,6 +884,12 @@ public class NpcOption<T, S extends Serializable>
     public @NotNull NpcOption<T, S> since(@NotNull Versions since)
     {
         this.since = since;
+        return this;
+    }
+
+    private NpcOption<T, S> type(Type type)
+    {
+        this.type = type;
         return this;
     }
 
@@ -991,7 +995,20 @@ public class NpcOption<T, S extends Serializable>
      */
     public @Nullable T deserialize(@Nullable S var1)
     {
-        return deserializer.apply(var1);
+        try
+        {
+            return deserializer.apply(var1);
+        }
+        catch(ClassCastException e)
+        {
+            return null;
+        }
+    }
+
+    @ApiStatus.Internal
+    public @Nullable Type getType()
+    {
+        return type;
     }
 
     /**

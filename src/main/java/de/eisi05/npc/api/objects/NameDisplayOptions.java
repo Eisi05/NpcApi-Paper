@@ -17,7 +17,7 @@ public class NameDisplayOptions implements Serializable
     public static final float DEFAULT_VIEW_RANGE = 1.0f;
     public static final int DEFAULT_LINE_WIDTH = 200;
     public static final int DEFAULT_BACKGROUND_COLOR = 0x40000000;
-    public static final byte DEFAULT_TEXT_OPACITY = (byte) 127;
+    public static final byte DEFAULT_TEXT_OPACITY = (byte) 255;
     public static final boolean DEFAULT_SEE_THROUGH = false;
     public static final int DEFAULT_ALIGNMENT = TextDisplay.TextAlignment.CENTER.ordinal();
     @Serial

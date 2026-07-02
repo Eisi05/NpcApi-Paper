@@ -1,6 +1,6 @@
 package de.eisi05.npc.api.movement;
 
-import de.eisi05.npc.api.utils.ObjectSaver;
+import de.eisi05.npc.api.utils.serialize.ObjectSaver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

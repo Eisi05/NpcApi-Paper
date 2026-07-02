@@ -1,5 +1,8 @@
 package de.eisi05.npc.api.wrapper.objects;
 
+import com.google.gson.*;
+import com.google.gson.annotations.JsonAdapter;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.SerializableFunction;
@@ -7,6 +10,7 @@ import de.eisi05.npc.api.utils.Var;
 import de.eisi05.npc.api.utils.Versions;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.world.entity.EntityProcessor;
 import net.minecraft.world.entity.EntitySpawnReason;
 import org.bukkit.World;
@@ -19,6 +23,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
+import java.lang.reflect.Type;
 import java.util.function.Function;
 
 /**
@@ -31,8 +36,10 @@ public class WrappedEntitySnapshot implements Serializable
     private static final long serialVersionUID = 1L;
 
     private final String type;
+
+    @JsonAdapter(SnapshotDataJsonAdapter.class)
     private final byte[] data;
-    private final SerializableFunction<? extends Entity, ? extends Entity> entityFunction;
+    private transient final SerializableFunction<? extends Entity, ? extends Entity> entityFunction;
 
     /**
      * Creates a new entity snapshot with the specified entity type and NBT data.
@@ -156,5 +163,61 @@ public class WrappedEntitySnapshot implements Serializable
 
         npc.data = data.toString();
         return entityFunction == null ? entity : ((CraftEntity) entityFunction.apply(Var.unsafeCast(entity.getBukkitEntity()))).getHandle();
+    }
+
+    private static class SnapshotDataJsonAdapter implements JsonSerializer<byte[]>, JsonDeserializer<byte[]>
+    {
+        @Override
+        public JsonElement serialize(byte[] src, Type typeOfSrc, JsonSerializationContext context)
+        {
+            if (src == null || src.length == 0)
+                return JsonNull.INSTANCE;
+
+            try
+            {
+                return new JsonPrimitive(NbtIo.readCompressed(new ByteArrayInputStream(src), net.minecraft.nbt.NbtAccounter.unlimitedHeap()).toString());
+            }
+            catch(IOException e)
+            {
+                return JsonNull.INSTANCE;
+            }
+        }
+
+        @Override
+        public byte[] deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException
+        {
+            if (json == null || json.isJsonNull())
+                return null;
+
+            if (json.isJsonPrimitive())
+            {
+                try
+                {
+                    CompoundTag data = TagParser.parseCompoundFully(json.getAsString());
+                    byte[] tempData;
+                    try
+                    {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        NbtIo.writeCompressed(data, baos);
+                        tempData = baos.toByteArray();
+                    }
+                    catch(IOException e)
+                    {
+                        tempData = null;
+                    }
+
+                    return tempData;
+                }
+                catch (CommandSyntaxException e)
+                {
+                    throw new JsonParseException("Failed to parse SNBT string back to NBT byte array", e);
+                }
+            }
+
+            if (json.isJsonArray())
+                return context.deserialize(json, byte[].class);
+
+            return null;
+        }
     }
 }
