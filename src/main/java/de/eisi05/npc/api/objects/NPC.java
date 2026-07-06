@@ -147,7 +147,7 @@ public class NPC extends NpcHolder
         this.entity = this.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
         Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
 
-        npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(uuid + ".npc");
+        npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(uuid + ".npc.json");
 
         serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), serverPlayer,
                 CommonListenerCookie.createInitial(profile, true));
@@ -1494,9 +1494,6 @@ public class NPC extends NpcHolder
      *   <li>All configured options and their values</li>
      *   <li>Creation timestamp</li>
      * </ul>
-     *
-     * <p>This class supports both legacy (pre-2.0.0) and current serialization formats
-     * through the {@link #readResolve()} method for backward compatibility.
      *
      * @see SerializedNPC#serializedNPC(NPC)
      * @see #deserializedNPC()

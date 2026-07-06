@@ -131,7 +131,7 @@ public class NpcManager
         Exception exception = null;
         for(File file1 : files)
         {
-            if(!file1.getName().endsWith(".npc"))
+            if(!file1.getName().endsWith(".npc") && !file1.getName().endsWith(".npc.json"))
                 continue;
 
             try
@@ -150,7 +150,9 @@ public class NpcManager
 
                     serializedNPC = saver.read();
                     file1.delete();
-                    new ObjectSaver(file1).write(serializedNPC, false);
+
+                    File jsonFile = new File(file, file1.getName() + ".json");
+                    new ObjectSaver(jsonFile).write(serializedNPC, false);
                     migrations++;
                 }
                 else
