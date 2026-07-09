@@ -1,36 +1,33 @@
 package de.eisi05.npc.api.objects;
 
+import de.eisi05.npc.api.NpcApi;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.TextDisplay;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Represents the layout and visual rendering options for an NPC's name display. Maps directly to Minecraft's Text Display entity metadata properties.
  */
 public class NameDisplayOptions implements Serializable
 {
-    public static final float[] DEFAULT_SCALE = new float[]{1.0f, 1.0f, 1.0f};
-    public static final int DEFAULT_BRIGHTNESS = -1;
-    public static final float DEFAULT_VIEW_RANGE = 1.0f;
-    public static final int DEFAULT_LINE_WIDTH = 200;
-    public static final int DEFAULT_BACKGROUND_COLOR = 0x40000000;
-    public static final byte DEFAULT_TEXT_OPACITY = (byte) 255;
-    public static final boolean DEFAULT_SEE_THROUGH = false;
-    public static final int DEFAULT_ALIGNMENT = TextDisplay.TextAlignment.CENTER.ordinal();
     @Serial
     private static final long serialVersionUID = 1L;
+
     private float height = 0;
-    private float[] scale = DEFAULT_SCALE.clone();
-    private int brightness = DEFAULT_BRIGHTNESS;
-    private float viewRange = DEFAULT_VIEW_RANGE;
-    private int lineWidth = DEFAULT_LINE_WIDTH;
-    private int backgroundColor = DEFAULT_BACKGROUND_COLOR;
-    private byte textOpacity = DEFAULT_TEXT_OPACITY;
-    private boolean isSeeThrough = DEFAULT_SEE_THROUGH;
-    private int alignment = DEFAULT_ALIGNMENT;
+    private float[] scale = NameDisplayDefaults.DEFAULT_SCALE.clone();
+    private int brightness = NameDisplayDefaults.DEFAULT_BRIGHTNESS;
+    private float viewRange = NameDisplayDefaults.DEFAULT_VIEW_RANGE;
+    private int lineWidth = NameDisplayDefaults.DEFAULT_LINE_WIDTH;
+    private int backgroundColor = NameDisplayDefaults.DEFAULT_BACKGROUND_COLOR;
+    private byte textOpacity = NameDisplayDefaults.DEFAULT_TEXT_OPACITY;
+    private boolean isSeeThrough = NameDisplayDefaults.DEFAULT_SEE_THROUGH;
+    private int alignment = NameDisplayDefaults.DEFAULT_ALIGNMENT;
 
     /**
      * Creates a new configuration instance initialized with standard Minecraft text display default settings.
@@ -283,5 +280,184 @@ public class NameDisplayOptions implements Serializable
                 ", isSeeThrough=" + isSeeThrough +
                 ", alignment=" + alignment +
                 '}';
+    }
+
+    public static class NameDisplayDefaults extends NameDisplayOptions
+    {
+        private static final File file;
+        private static YamlConfiguration config;
+        private static NameDisplayDefaults INSTANCE;
+
+        private static float[] DEFAULT_SCALE;
+        private static int DEFAULT_BRIGHTNESS;
+        private static float DEFAULT_VIEW_RANGE;
+        private static int DEFAULT_LINE_WIDTH;
+        private static int DEFAULT_BACKGROUND_COLOR;
+        private static byte DEFAULT_TEXT_OPACITY;
+        private static boolean DEFAULT_SEE_THROUGH;
+        private static int DEFAULT_ALIGNMENT;
+
+        static
+        {
+            file = new File(NpcApi.plugin.getDataFolder(), "config.yml");
+            reload();
+        }
+
+        private NameDisplayDefaults() {}
+
+        public static NameDisplayOptions getInstance()
+        {
+            if(INSTANCE == null)
+                INSTANCE = new NameDisplayDefaults();
+
+            return INSTANCE;
+        }
+
+        private static void save()
+        {
+            try
+            {
+                config.save(file);
+            }
+            catch(Exception e)
+            {
+            }
+        }
+
+        public static void reload()
+        {
+            config = YamlConfiguration.loadConfiguration(file);
+
+            @SuppressWarnings("unchecked")
+            List<Double> list = (List<Double>) config.get("name-display.scale", List.of(1.0f, 1.0f, 1.0f));
+            DEFAULT_SCALE = new float[]{list.get(0).floatValue(), list.get(1).floatValue(), list.get(2).floatValue()};
+            DEFAULT_BRIGHTNESS = config.getInt("name-display.brightness", -1);
+            DEFAULT_VIEW_RANGE = (float) config.getDouble("name-display.view-range", 1.0f);
+            DEFAULT_LINE_WIDTH = config.getInt("name-display.line-width", 200);
+            DEFAULT_BACKGROUND_COLOR = config.getInt("name-display.background-color", 0x40000000);
+            DEFAULT_TEXT_OPACITY = (byte) config.getInt("name-display.text-opacity", 255);
+            DEFAULT_SEE_THROUGH = config.getBoolean("name-display.see-through", false);
+            DEFAULT_ALIGNMENT = config.getInt("name-display.text-alignment", TextDisplay.TextAlignment.CENTER.ordinal());
+        }
+
+        @Override
+        public float[] getScale()
+        {
+            return DEFAULT_SCALE;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setScale(float[] defaultScale)
+        {
+            DEFAULT_SCALE = defaultScale;
+            config.set("name-display.scale", List.of(DEFAULT_SCALE[0], DEFAULT_SCALE[1], DEFAULT_SCALE[2]));
+            save();
+            return this;
+        }
+
+        @Override
+        public int getBrightness()
+        {
+            return DEFAULT_BRIGHTNESS;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setBrightness(int defaultBrightness)
+        {
+            DEFAULT_BRIGHTNESS = defaultBrightness;
+            config.set("name-display.brightness", DEFAULT_BRIGHTNESS);
+            save();
+            return this;
+        }
+
+        @Override
+        public float getViewRange()
+        {
+            return DEFAULT_VIEW_RANGE;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setViewRange(float defaultViewRange)
+        {
+            DEFAULT_VIEW_RANGE = defaultViewRange;
+            config.set("name-display.view-range", DEFAULT_VIEW_RANGE);
+            save();
+            return this;
+        }
+
+        @Override
+        public int getLineWidth()
+        {
+            return DEFAULT_LINE_WIDTH;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setLineWidth(int defaultLineWidth)
+        {
+            DEFAULT_LINE_WIDTH = defaultLineWidth;
+            config.set("name-display.line-width", DEFAULT_LINE_WIDTH);
+            save();
+            return this;
+        }
+
+        @Override
+        public int getBackgroundColor()
+        {
+            return DEFAULT_BACKGROUND_COLOR;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setBackgroundColor(int defaultBackgroundColor)
+        {
+            DEFAULT_BACKGROUND_COLOR = defaultBackgroundColor;
+            config.set("name-display.background-color", DEFAULT_BACKGROUND_COLOR);
+            save();
+            return this;
+        }
+
+        @Override
+        public byte getTextOpacity()
+        {
+            return DEFAULT_TEXT_OPACITY;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setTextOpacity(byte defaultTextOpacity)
+        {
+            DEFAULT_TEXT_OPACITY = defaultTextOpacity;
+            config.set("name-display.text-opacity", DEFAULT_TEXT_OPACITY);
+            save();
+            return this;
+        }
+
+        @Override
+        public boolean isSeeThrough()
+        {
+            return DEFAULT_SEE_THROUGH;
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setSeeThrough(boolean defaultSeeThrough)
+        {
+            DEFAULT_SEE_THROUGH = defaultSeeThrough;
+            config.set("name-display.see-through", DEFAULT_SEE_THROUGH);
+            save();
+            return this;
+        }
+
+        @Override
+        public @NotNull TextDisplay.TextAlignment getAlignment()
+        {
+            return TextDisplay.TextAlignment.values()[DEFAULT_ALIGNMENT];
+        }
+
+        @Override
+        public @NotNull NameDisplayDefaults setAlignment(TextDisplay.TextAlignment defaultAlignment)
+        {
+            DEFAULT_ALIGNMENT = defaultAlignment.ordinal();
+            config.set("name-display.text-alignment", DEFAULT_ALIGNMENT);
+            save();
+            return this;
+        }
     }
 }

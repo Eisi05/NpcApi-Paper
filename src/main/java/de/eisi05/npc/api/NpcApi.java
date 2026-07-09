@@ -4,6 +4,7 @@ import de.eisi05.npc.api.listeners.*;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.objects.NameDisplayOptions;
 import de.eisi05.npc.api.objects.NpcConfig;
 import de.eisi05.npc.api.objects.NpcHolder;
 import de.eisi05.npc.api.pathfinding.Path;
@@ -75,6 +76,9 @@ public final class NpcApi
         NpcManager.loadNPCs();
 
         Tasks.start();
+        PacketReader.injectAll();
+
+        NameDisplayOptions.NameDisplayDefaults.reload();
 
         new Metrics(plugin, 28179).addCustomChart(new Metrics.SingleLineChart("npcCount", () -> NpcManager.getList().size()));
     }
