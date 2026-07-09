@@ -49,6 +49,7 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     private static final Map<String, Skin> skinCacheName = new ConcurrentHashMap<>();
     private static final Map<UUID, Skin> skinCacheUUID = new ConcurrentHashMap<>();
     private static final Map<File, Skin> skinCacheFile = new ConcurrentHashMap<>();
+    private static final Map<String, Skin> skinCacheUrl = new ConcurrentHashMap<>();
 
     /**
      * Retrieves the skin data directly from a currently online Bukkit player. This method uses reflection to access the player's game profile properties.
@@ -131,16 +132,19 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     }
 
     /**
-     * Fetches a {@link Skin} by player name.
+     * Fetches a {@link Skin} by player name OR by a direct skin PNG URL.
      *
-     * @param name the player username.
+     * @param input the player username or a public URL pointing to a skin .png.
      * @return an {@link Optional} containing the skin if found, otherwise empty.
      */
-    public static Optional<Skin> fetchSkin(@NotNull String name)
+    public static Optional<Skin> fetchSkin(@NotNull String input)
     {
+        if (input.toLowerCase().startsWith("http://") || input.toLowerCase().startsWith("https://"))
+            return fetchSkinByUrl(input);
+
         try
         {
-            URL url = URI.create("https://api.mojang.com/users/profiles/minecraft/" + name).toURL();
+            URL url = URI.create("https://api.mojang.com/users/profiles/minecraft/" + input).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setReadTimeout(10000);
 
@@ -156,7 +160,7 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
         }
         catch(Exception e)
         {
-            skinCacheName.remove(name);
+            skinCacheName.remove(input);
             return Optional.empty();
         }
     }
@@ -220,6 +224,52 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     }
 
     /**
+     * Helper method to generate and fetch a skin via MineSkin using a public image URL.
+     */
+    private static Optional<Skin> fetchSkinByUrl(@NotNull String urlString)
+    {
+        if(skinCacheUrl.containsKey(urlString))
+            return Optional.ofNullable(skinCacheUrl.get(urlString));
+
+        try(HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build())
+        {
+            JsonObject jsonBody = new JsonObject();
+            jsonBody.addProperty("url", urlString);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.mineskin.org/generate/url"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "MinecraftNpcApi")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody.toString()))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if(response.statusCode() != 200)
+                return Optional.empty();
+
+            JsonObject obj = JsonParser.parseString(response.body()).getAsJsonObject();
+            JsonObject texture = obj.getAsJsonObject("data").getAsJsonObject("texture");
+
+            String value = texture.get("value").getAsString();
+            String signature = texture.get("signature").getAsString();
+
+            Skin skin = new Skin(null, value, signature);
+            skinCacheUrl.put(urlString, skin);
+            return Optional.of(skin);
+        }
+        catch(IOException | InterruptedException e)
+        {
+            if(NpcApi.config.debug())
+                e.printStackTrace();
+
+            skinCacheUrl.remove(urlString);
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Asynchronously fetches a skin by the player's UUID.
      *
      * @param uuid the UUID of the player
@@ -234,14 +284,14 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
     }
 
     /**
-     * Asynchronously fetches a skin by the player's name.
+     * Asynchronously fetches a skin by the player's name or a public image URL.
      *
-     * @param name the name of the player
+     * @param nameOrUrl the name of the player or direct skin url string
      * @return a CompletableFuture containing an Optional of the Skin
      */
-    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull String name)
+    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull String nameOrUrl)
     {
-        CompletableFuture<Optional<Skin>> future = CompletableFuture.supplyAsync(() -> fetchSkin(name),
+        CompletableFuture<Optional<Skin>> future = CompletableFuture.supplyAsync(() -> fetchSkin(nameOrUrl),
                 runnable -> Bukkit.getScheduler().runTaskAsynchronously(NpcApi.plugin, runnable));
         Tasks.trackFuture(future);
         return future;
