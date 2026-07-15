@@ -803,7 +803,7 @@ public class NpcOption<T, S extends Serializable>
     private final Function<T, S> serializer;
     private final Function<S, T> deserializer;
     private final Function<T, T> copyFunction;
-    private final TriFunction<T, NPC, Player, Packet<?>> packet;
+    private final TriFunction<T, NPC, Player, Object> packet;
     private Versions since = Versions.V1_20_6;
     private boolean loadBefore = false;
     private Type type;
@@ -819,7 +819,7 @@ public class NpcOption<T, S extends Serializable>
      * @param packet       The packet generation function. Must not be null.
      */
     private NpcOption(@NotNull String path, @Nullable Supplier<T> defaultValue, @NotNull Function<T, T> copyFunction, @NotNull Function<T, S> serializer, @NotNull Function<S, T> deserializer,
-                      @NotNull TriFunction<T, NPC, Player, Packet<?>> packet)
+                      @NotNull TriFunction<T, NPC, Player, Object> packet)
     {
         this.path = path;
         this.defaultValue = defaultValue;
