@@ -259,7 +259,7 @@ public class NpcName implements Serializable
                 try
                 {
 
-                    String rawComponentJson =  JSONComponentSerializer.json().serialize(src.getName());
+                    String rawComponentJson = JSONComponentSerializer.json().serialize(src.getName());
                     if(rawComponentJson != null && !rawComponentJson.isEmpty())
                         obj.add("component", JsonParser.parseString(rawComponentJson));
                 }
@@ -269,13 +269,8 @@ public class NpcName implements Serializable
                 }
             }
 
-            try
-            {
-                Object funcSerialized = src.nameFunctionSerialized;
-                if(funcSerialized != null)
-                    obj.add("nameFunctionSerialized", context.serialize(funcSerialized));
-            }
-            catch(Exception ignored) {}
+            if(src.nameFunctionKey != null)
+                obj.addProperty("nameFunctionKey", src.nameFunctionKey);
 
             if(src.getDisplayOptions() != null)
                 obj.add("displayOptions", context.serialize(src.getDisplayOptions(), NameDisplayOptions.class));
@@ -302,22 +297,45 @@ public class NpcName implements Serializable
             if(component == null)
                 component = Component.empty();
 
-            NpcName npcName = NpcName.of(component);
-            if(obj.has("nameFunctionSerialized"))
+            NpcName npcName;
+            if(obj.has("nameFunctionKey"))
             {
-                Type funcType = new TypeToken<SerializableFunction<Player, String>>() {}.getType();
-                SerializableFunction<Player, String> funcSerialized = context.deserialize(obj.get("nameFunctionSerialized"), funcType);
-
-                if(funcSerialized != null)
+                String key = obj.get("nameFunctionKey").getAsString();
+                npcName = NpcName.of(key, component);
+            }
+            else if(obj.has("nameFunctionSerialized"))
+            {
+                npcName = NpcName.of(component);
+                try
                 {
-                    npcName.nameFunctionSerialized = funcSerialized;
-                    npcName.nameFunction = player ->
+                    Type funcType = new TypeToken<SerializableFunction<Player, String>>() {}.getType();
+                    SerializableFunction<Player, String> funcSerialized = context.deserialize(obj.get("nameFunctionSerialized"), funcType);
+
+                    if(funcSerialized != null)
                     {
-                        String serializedComp = funcSerialized.apply(player);
-                        return serializedComp != null ? JSONComponentSerializer.json().deserialize(serializedComp) : null;
-                    };
+                        npcName.nameFunctionSerialized = funcSerialized;
+                        npcName.nameFunctionKey = "placeholder";
+                        npcName.nameFunction = player ->
+                        {
+                            try
+                            {
+                                String serializedComp = funcSerialized.apply(player);
+                                return serializedComp != null ? JSONComponentSerializer.json().deserialize(serializedComp) : null;
+                            }
+                            catch(Exception e)
+                            {
+                                return null;
+                            }
+                        };
+                    }
+                }
+                catch(Throwable t)
+                {
+                    npcName.nameFunctionKey = null;
                 }
             }
+            else
+                npcName = NpcName.of(component);
 
             if(obj.has("displayOptions"))
             {
