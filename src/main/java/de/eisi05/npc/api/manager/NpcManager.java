@@ -134,6 +134,8 @@ public class NpcManager
             if(!file1.getName().endsWith(".npc") && !file1.getName().endsWith(".npc.json"))
                 continue;
 
+            if(NpcApi.config.debug())
+                NpcApi.plugin.getLogger().info("Loading NPC: " + file1.getName());
             try
             {
                 ObjectSaver saver = new ObjectSaver(file1);
