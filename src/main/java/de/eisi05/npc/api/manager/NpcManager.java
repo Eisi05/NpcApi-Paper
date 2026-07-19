@@ -131,6 +131,8 @@ public class NpcManager
             if(!file1.getName().endsWith(".npc"))
                 continue;
 
+            if(NpcApi.config.debug())
+                NpcApi.plugin.getLogger().info("Loading NPC: " + file1.getName());
             try
             {
                 NPC.SerializedNPC serializedNPC = new ObjectSaver(file1).read();
