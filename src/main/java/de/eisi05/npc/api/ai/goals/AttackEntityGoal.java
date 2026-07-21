@@ -7,8 +7,9 @@ import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.utils.LocationUtils;
+import de.eisi05.npc.api.utils.RegistryPredicate;
 import de.eisi05.npc.api.utils.SerializableBiPredicate;
-import de.eisi05.npc.api.utils.serialize.ConditionRegistry;
+import de.eisi05.npc.api.utils.serialize.NpcRegistry;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
@@ -28,15 +29,24 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ObjectInputStream;
+import java.io.Serial;
 import java.lang.reflect.Type;
 import java.util.*;
 
 /**
- * A goal that makes the NPC attack nearby entities that match a predicate. The attack behavior varies based on the item in the NPC's main hand: -
- * Bow/Trident/Crossbow: Long range attacks - Sword/Axe: Short range attacks - Other: Short range attacks Only activates when a valid target is in range and
- * line of sight. Once a target is locked, the NPC continues attacking until the target becomes unreachable or invalid.
+ * A goal that makes the NPC attack nearby entities that match a predicate. The attack behavior varies based on the item in the NPC's main hand:
+ * <ul>
+ *     <li><b>WeaponMechanics guns:</b> Custom ranged attack behavior</li>
+ *     <li><b>Bow/Trident/Crossbow:</b> Long range attacks</li>
+ *     <li><b>Sword/Axe:</b> Short range melee attacks</li>
+ *     <li><b>Other:</b> Default melee attacks</li>
+ * </ul>
+ * Only activates when a valid target is in range and line of sight. Once a target is locked, the NPC continues attacking until the target becomes
+ * unreachable or invalid.
  */
 public class AttackEntityGoal extends Goal
 {
@@ -71,7 +81,7 @@ public class AttackEntityGoal extends Goal
      *
      * @param targetFilter A predicate to filter valid targets
      */
-    public AttackEntityGoal(@NotNull SerializableBiPredicate<LivingEntity, NPC> targetFilter)
+    public AttackEntityGoal(@NotNull RegistryPredicate<LivingEntity> targetFilter)
     {
         this(targetFilter, -1);
     }
@@ -82,18 +92,19 @@ public class AttackEntityGoal extends Goal
      * @param targetFilter      A predicate to filter valid targets
      * @param customAttackRange Custom attack range (-1 for default based on weapon)
      */
-    public AttackEntityGoal(@NotNull SerializableBiPredicate<LivingEntity, NPC> targetFilter, double customAttackRange)
+    public AttackEntityGoal(@NotNull RegistryPredicate<LivingEntity> targetFilter, double customAttackRange)
     {
         this(targetFilter, customAttackRange, WalkToLocationGoal.DEFAULT_SPEED);
     }
 
     /**
-     * Creates an AttackEntityGoal with a filter for valid targets and custom speed.
+     * Creates an AttackEntityGoal with a filter for valid targets, custom attack range, and custom movement speed.
      *
-     * @param targetFilter A predicate to filter valid targets
-     * @param speed        Custom movement speed (-1 for default)
+     * @param targetFilter      A predicate to filter valid targets
+     * @param customAttackRange Custom attack range (-1 for default based on weapon)
+     * @param speed             Custom movement speed (clamped between 0.1 and 1.0)
      */
-    public AttackEntityGoal(@NotNull SerializableBiPredicate<LivingEntity, NPC> targetFilter, double customAttackRange, double speed)
+    public AttackEntityGoal(@NotNull RegistryPredicate<LivingEntity> targetFilter, double customAttackRange, double speed)
     {
         super(Priority.ALWAYS);
         this.targetFilter = targetFilter;
@@ -102,7 +113,7 @@ public class AttackEntityGoal extends Goal
     }
 
     /**
-     * Creates a copy of this goal.
+     * Copy constructor for duplicating an existing AttackEntityGoal.
      *
      * @param goal the goal to copy
      */
@@ -117,19 +128,19 @@ public class AttackEntityGoal extends Goal
     /**
      * Gets the target filter for this goal.
      *
-     * @return the target filter
+     * @return the target filter as a {@link RegistryPredicate}, or {@code null} if incompatible
      */
-    public SerializableBiPredicate<LivingEntity, NPC> getTargetFilter()
+    public @Nullable RegistryPredicate<LivingEntity> getTargetFilter()
     {
-        return targetFilter;
+        return targetFilter instanceof RegistryPredicate<LivingEntity> registryPredicate ? registryPredicate : null;
     }
 
     /**
      * Sets the target filter for this goal.
      *
-     * @param targetFilter the new target filter
+     * @param targetFilter the new target filter predicate
      */
-    public void setTargetFilter(@NotNull SerializableBiPredicate<LivingEntity, NPC> targetFilter)
+    public void setTargetFilter(@Nullable RegistryPredicate<LivingEntity> targetFilter)
     {
         this.targetFilter = targetFilter;
     }
@@ -900,6 +911,9 @@ public class AttackEntityGoal extends Goal
         }
     }
 
+    /**
+     * Gson JSON adapter for serializing and deserializing entity targeting predicates.
+     */
     private static class TargetFilterAdapter
             implements JsonSerializer<SerializableBiPredicate<LivingEntity, NPC>>, JsonDeserializer<SerializableBiPredicate<LivingEntity, NPC>>
     {
@@ -909,6 +923,13 @@ public class AttackEntityGoal extends Goal
             if(src == null)
                 return JsonNull.INSTANCE;
 
+            if(src instanceof RegistryPredicate predicate)
+            {
+                JsonObject obj = new JsonObject();
+                obj.addProperty(predicate.key(), predicate.expression() != null ? predicate.expression() : "");
+                return obj;
+            }
+
             String expression = src.toString();
             if(expression != null && !expression.contains("$$Lambda") && !expression.contains("@"))
             {
@@ -917,20 +938,7 @@ public class AttackEntityGoal extends Goal
                 return obj;
             }
 
-            try(ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ObjectOutputStream oos = new ObjectOutputStream(baos))
-            {
-                oos.writeObject(src);
-                oos.flush();
-
-                JsonObject obj = new JsonObject();
-                obj.addProperty("lambda", Base64.getEncoder().encodeToString(baos.toByteArray()));
-                return obj;
-            }
-            catch(IOException e)
-            {
-                return JsonNull.INSTANCE;
-            }
+            return JsonNull.INSTANCE;
         }
 
         @SuppressWarnings("unchecked")
@@ -942,23 +950,40 @@ public class AttackEntityGoal extends Goal
                 return null;
 
             if(json.isJsonPrimitive())
-                return ConditionRegistry.compileTargetFilter(json.getAsString());
+                return NpcRegistry.compileTargetFilter(NpcRegistry.EXPRESSION_PARSER, json.getAsString());
 
             JsonObject obj = json.getAsJsonObject();
-            if(obj.has("expression"))
-                return ConditionRegistry.compileTargetFilter(obj.get("expression").getAsString());
-            else if(obj.has("lambda"))
+
+            if(obj.has("key"))
             {
-                byte[] data = Base64.getDecoder().decode(obj.get("lamda").getAsString());
-                try(ByteArrayInputStream bais = new ByteArrayInputStream(data);
-                    ObjectInputStream ois = new ObjectInputStream(bais))
+                String key = obj.get("key").getAsString();
+                String expression = obj.has("expression") ? obj.get("expression").getAsString() : null;
+                return NpcRegistry.compileTargetFilter(key, expression);
+            }
+
+            if(obj.entrySet().size() == 1)
+            {
+                var entry = obj.entrySet().iterator().next();
+                String key = entry.getKey();
+                JsonElement val = entry.getValue();
+
+                String expression = (val != null && !val.isJsonNull() && !val.getAsString().isEmpty()) ? val.getAsString() : null;
+                return NpcRegistry.compileTargetFilter(key, expression);
+            }
+
+            if(obj.has("lambda") || obj.has("lamda"))
+            {
+                String base64Str = obj.has("lambda") ? obj.get("lambda").getAsString() : obj.get("lamda").getAsString();
+                try
                 {
-                    return (SerializableBiPredicate<LivingEntity, NPC>) ois.readObject();
+                    byte[] data = Base64.getDecoder().decode(base64Str);
+                    try(ByteArrayInputStream bais = new ByteArrayInputStream(data);
+                        ObjectInputStream ois = new ObjectInputStream(bais))
+                    {
+                        return (SerializableBiPredicate<LivingEntity, NPC>) ois.readObject();
+                    }
                 }
-                catch(IOException | ClassNotFoundException e)
-                {
-                    return null;
-                }
+                catch(Exception ignored) {}
             }
 
             return null;

@@ -4,14 +4,18 @@ import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.annotations.SerializedName;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.utils.RegistryPredicate;
 import de.eisi05.npc.api.utils.SerializableBiPredicate;
 import de.eisi05.npc.api.utils.SerializablePredicate;
-import de.eisi05.npc.api.utils.serialize.ConditionRegistry;
+import de.eisi05.npc.api.utils.serialize.NpcRegistry;
 import org.bukkit.Location;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ObjectInputStream;
+import java.io.Serial;
+import java.io.Serializable;
 import java.lang.reflect.Type;
 import java.util.Base64;
 
@@ -51,31 +55,18 @@ public abstract class Goal implements Serializable
     private Object readResolve()
     {
         if(newCondition == null && condition != null)
-            newCondition = new SerializableBiPredicate<>()
-            {
-                @Override
-                public boolean test(Location location, NPC npc)
-                {
-                    return condition.test(npc);
-                }
-
-                @Override
-                public String toString()
-                {
-                    return condition.toString();
-                }
-            };
+            newCondition = new RegistryPredicate<>(NpcRegistry.EXPRESSION_PARSER, null);
         return this;
     }
 
     /**
      * Gets the condition for this goal. The condition is checked before the goal is executed.
      *
-     * @return The condition for this goal
+     * @return The registry predicate condition for this goal, or {@code null} if not set or incompatible
      */
-    public final @Nullable SerializableBiPredicate<Location, NPC> getCondition()
+    public final @Nullable RegistryPredicate<Location> getCondition()
     {
-        return newCondition;
+        return newCondition instanceof RegistryPredicate<Location> predicate ? predicate : null;
     }
 
     /**
@@ -83,10 +74,11 @@ public abstract class Goal implements Serializable
      *
      * @param condition The condition to set
      */
-    public void setCondition(@Nullable SerializableBiPredicate<Location, NPC> condition)
+    public void setCondition(@Nullable RegistryPredicate<Location> condition)
     {
         this.newCondition = condition;
     }
+
 
     /**
      * Gets the priority of this goal.
@@ -235,64 +227,77 @@ public abstract class Goal implements Serializable
         }
     }
 
-    private static class GoalConditionAdapter implements JsonSerializer<SerializableBiPredicate<Location, NPC>>, JsonDeserializer<SerializableBiPredicate<Location, NPC>>
+    /**
+     * Gson JSON adapter for serializing and deserializing location-based NPC predicates for AI goals.
+     */
+    private static class GoalConditionAdapter
+            implements JsonSerializer<SerializableBiPredicate<Location, NPC>>, JsonDeserializer<SerializableBiPredicate<Location, NPC>>
     {
         @Override
         public JsonElement serialize(SerializableBiPredicate<Location, NPC> src, Type typeOfSrc, JsonSerializationContext context)
         {
-            if (src == null)
+            if(src == null)
                 return JsonNull.INSTANCE;
 
+            if(src instanceof RegistryPredicate predicate)
+            {
+                JsonObject obj = new JsonObject();
+                obj.addProperty(predicate.key(), predicate.expression() != null ? predicate.expression() : "");
+                return obj;
+            }
+
             String expression = src.toString();
-            if (expression != null && !expression.contains("$$Lambda") && !expression.contains("@"))
+            if(expression != null && !expression.contains("$$Lambda") && !expression.contains("@"))
             {
                 JsonObject obj = new JsonObject();
                 obj.addProperty("expression", expression);
                 return obj;
             }
 
-            try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                 ObjectOutputStream oos = new ObjectOutputStream(baos))
-            {
-                oos.writeObject(src);
-                oos.flush();
-
-                JsonObject obj = new JsonObject();
-                obj.addProperty("lambda", Base64.getEncoder().encodeToString(baos.toByteArray()));
-                return obj;
-            }
-            catch (IOException e)
-            {
-                return JsonNull.INSTANCE;
-            }
+            return JsonNull.INSTANCE;
         }
 
         @SuppressWarnings("unchecked")
         @Override
         public SerializableBiPredicate<Location, NPC> deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException
         {
-            if (json == null || json.isJsonNull())
+            if(json == null || json.isJsonNull())
                 return null;
 
-            if (json.isJsonPrimitive())
-                return ConditionRegistry.compileCondition(json.getAsString());
+            if(json.isJsonPrimitive())
+                return NpcRegistry.compileCondition(NpcRegistry.EXPRESSION_PARSER, json.getAsString());
 
             JsonObject obj = json.getAsJsonObject();
 
-            if (obj.has("expression"))
-                return ConditionRegistry.compileCondition(obj.get("expression").getAsString());
-            else if (obj.has("lambda"))
+            if(obj.has("key"))
             {
-                byte[] data = Base64.getDecoder().decode(obj.get("lambda").getAsString());
-                try (ByteArrayInputStream bais = new ByteArrayInputStream(data);
-                     ObjectInputStream ois = new ObjectInputStream(bais))
+                String key = obj.get("key").getAsString();
+                String expression = obj.has("expression") && !obj.get("expression").isJsonNull() ? obj.get("expression").getAsString() : null;
+                return NpcRegistry.compileCondition(key, expression);
+            }
+
+            if(obj.entrySet().size() == 1)
+            {
+                var entry = obj.entrySet().iterator().next();
+                String key = entry.getKey();
+                JsonElement val = entry.getValue();
+
+                String expression = (val != null && !val.isJsonNull() && !val.getAsString().isEmpty()) ? val.getAsString() : null;
+                return NpcRegistry.compileCondition(key, expression);
+            }
+
+            if(obj.has("lambda"))
+            {
+                try
                 {
-                    return (SerializableBiPredicate<Location, NPC>) ois.readObject();
+                    byte[] data = Base64.getDecoder().decode(obj.get("lambda").getAsString());
+                    try(ByteArrayInputStream bais = new ByteArrayInputStream(data);
+                        ObjectInputStream ois = new ObjectInputStream(bais))
+                    {
+                        return (SerializableBiPredicate<Location, NPC>) ois.readObject();
+                    }
                 }
-                catch (IOException | ClassNotFoundException e)
-                {
-                    return null;
-                }
+                catch(Exception ignored) {}
             }
 
             return null;
