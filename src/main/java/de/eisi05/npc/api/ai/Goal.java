@@ -265,7 +265,7 @@ public abstract class Goal implements Serializable
                 return null;
 
             if(json.isJsonPrimitive())
-                return NpcRegistry.compileCondition(NpcRegistry.EXPRESSION_PARSER, json.getAsString());
+                return new RegistryPredicate<>(NpcRegistry.EXPRESSION_PARSER, json.getAsString());
 
             JsonObject obj = json.getAsJsonObject();
 
@@ -273,7 +273,7 @@ public abstract class Goal implements Serializable
             {
                 String key = obj.get("key").getAsString();
                 String expression = obj.has("expression") && !obj.get("expression").isJsonNull() ? obj.get("expression").getAsString() : null;
-                return NpcRegistry.compileCondition(key, expression);
+                return new RegistryPredicate<>(key, expression);
             }
 
             if(obj.entrySet().size() == 1)
@@ -283,7 +283,7 @@ public abstract class Goal implements Serializable
                 JsonElement val = entry.getValue();
 
                 String expression = (val != null && !val.isJsonNull() && !val.getAsString().isEmpty()) ? val.getAsString() : null;
-                return NpcRegistry.compileCondition(key, expression);
+                return new RegistryPredicate<>(key, expression);
             }
 
             if(obj.has("lambda"))

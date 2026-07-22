@@ -950,7 +950,7 @@ public class AttackEntityGoal extends Goal
                 return null;
 
             if(json.isJsonPrimitive())
-                return NpcRegistry.compileTargetFilter(NpcRegistry.EXPRESSION_PARSER, json.getAsString());
+                return new RegistryPredicate<>(NpcRegistry.EXPRESSION_PARSER, json.getAsString());
 
             JsonObject obj = json.getAsJsonObject();
 
@@ -958,7 +958,7 @@ public class AttackEntityGoal extends Goal
             {
                 String key = obj.get("key").getAsString();
                 String expression = obj.has("expression") ? obj.get("expression").getAsString() : null;
-                return NpcRegistry.compileTargetFilter(key, expression);
+                return new RegistryPredicate<>(key, expression);
             }
 
             if(obj.entrySet().size() == 1)
@@ -968,7 +968,7 @@ public class AttackEntityGoal extends Goal
                 JsonElement val = entry.getValue();
 
                 String expression = (val != null && !val.isJsonNull() && !val.getAsString().isEmpty()) ? val.getAsString() : null;
-                return NpcRegistry.compileTargetFilter(key, expression);
+                return new RegistryPredicate<>(key, expression);
             }
 
             if(obj.has("lambda") || obj.has("lamda"))

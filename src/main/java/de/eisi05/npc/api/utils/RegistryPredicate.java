@@ -1,6 +1,9 @@
 package de.eisi05.npc.api.utils;
 
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.utils.serialize.NpcRegistry;
+import org.bukkit.Location;
+import org.bukkit.entity.LivingEntity;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -51,11 +54,15 @@ public class RegistryPredicate<T> implements SerializableBiPredicate<T, NPC>
      *
      * @param object  the primary target or context object being evaluated
      * @param object2 the target NPC
-     * @return always {@code false} in baseline instance; delegated runtime behavior is provided upon compilation
+     * @return {@code true} if the predicate matches the given arguments, {@code false} otherwise
      */
     @Override
     public boolean test(T object, NPC object2)
     {
+        if(object instanceof Location location)
+            return NpcRegistry.compileCondition(key, expression).test(location, object2);
+        else if(object instanceof LivingEntity entity)
+            return NpcRegistry.compileTargetFilter(key, expression).test(entity, object2);
         return false;
     }
 
