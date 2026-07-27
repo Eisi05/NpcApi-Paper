@@ -329,7 +329,7 @@ public class NameDisplayOptions implements Serializable
             config = YamlConfiguration.loadConfiguration(file);
 
             @SuppressWarnings("unchecked")
-            List<Double> list = (List<Double>) config.get("name-display.scale", List.of(1.0f, 1.0f, 1.0f));
+            List<Double> list = (List<Double>) config.get("name-display.scale", List.of(1.0D, 1.0D, 1.0D));
             DEFAULT_SCALE = new float[]{list.get(0).floatValue(), list.get(1).floatValue(), list.get(2).floatValue()};
             DEFAULT_BRIGHTNESS = config.getInt("name-display.brightness", -1);
             DEFAULT_VIEW_RANGE = (float) config.getDouble("name-display.view-range", 1.0f);
