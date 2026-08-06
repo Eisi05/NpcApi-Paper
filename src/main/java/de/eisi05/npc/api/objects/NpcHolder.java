@@ -152,7 +152,7 @@ public abstract class NpcHolder implements InventoryHolder
                 if(player == null)
                     return;
 
-                option.getPacket(value, npc, player).ifPresent(packetWrapper -> ((CraftPlayer) player).getHandle().connection.send((Packet<?>) packetWrapper));
+                option.getPacket(npc, player).ifPresent(packetWrapper -> ((CraftPlayer) player).getHandle().connection.send((Packet<?>) packetWrapper));
             });
         }
     }

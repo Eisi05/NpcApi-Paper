@@ -16,10 +16,10 @@ import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.pathfinding.PathfindingUtils;
 import de.eisi05.npc.api.scheduler.PathTask;
-import de.eisi05.npc.api.utils.serialize.ObjectSaver;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Var;
 import de.eisi05.npc.api.utils.Versions;
+import de.eisi05.npc.api.utils.serialize.ObjectSaver;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
@@ -160,8 +160,8 @@ public class NPC extends NpcHolder
 
         Display.TextDisplay display = new Display.TextDisplay(
                 Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
-                EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
-                        ((CraftWorld) location.getWorld()).getHandle());
+                        EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
+                ((CraftWorld) location.getWorld()).getHandle());
         Var.moveEntity(display, location.getX(), location.getY() + 2, location.getZ(), 0f, 0f);
 
         nameTag = new CustomNameTag(display);
@@ -664,12 +664,12 @@ public class NPC extends NpcHolder
 
         wrappedServerPlayer.listName = team == null ? wrappedServerPlayer.getName() : CraftChatMessage.fromJSON(
                 JSONComponentSerializer.json().serialize(team.prefix().append(player.name().color(team.hasColor() ? team.color() : NamedTextColor.WHITE))
-                                                         .append(team.suffix())));
+                        .append(team.suffix())));
 
         List<Packet<?>> packets = new ArrayList<>();
 
         Arrays.stream(NpcOption.values()).filter(NpcOption::loadBefore)
-                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption, player), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
+                .forEach(npcOption -> npcOption.getPacket(this, player).ifPresent(o -> packets.add((Packet<?>) o)));
 
         if(!name.isStatic() && getOption(NpcOption.SHOW_TAB_LIST, player))
             setOption(NpcOption.SHOW_TAB_LIST, false);
@@ -677,9 +677,9 @@ public class NPC extends NpcHolder
         packets.add(ClientboundPlayerInfoUpdatePacket.createSinglePlayerInitializing(serverPlayer, true));
 
         Arrays.stream(NpcOption.values()).filter(npcOption -> !npcOption.equals(NpcOption.ENABLED) && !npcOption.loadBefore())
-                .forEach(npcOption -> npcOption.getPacket(getOption(npcOption, player), this, player).ifPresent(o -> packets.add((Packet<?>) o)));
+                .forEach(npcOption -> npcOption.getPacket(this, player).ifPresent(o -> packets.add((Packet<?>) o)));
 
-        NpcOption.ENABLED.getPacket(isEnabled(), this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
+        NpcOption.ENABLED.getPacket(this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
 
         packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, wrappedServerPlayer));
 
