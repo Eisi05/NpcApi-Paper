@@ -527,7 +527,8 @@ public class NpcOption<T, S extends Serializable>
                     }.runTaskLater(NpcApi.plugin, 1);
                 }
 
-                Integer oldId = npc.toDeleteEntities.remove("sit");
+                Map<String, Integer> playerEntities = npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
+                Integer oldId = playerEntities.remove("sit");
                 if(pose == Pose.SITTING)
                 {
                     Display.TextDisplay textDisplay = new Display.TextDisplay(
@@ -535,7 +536,7 @@ public class NpcOption<T, S extends Serializable>
                                     EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
                                 npc.entity.level());
                     textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
-                    npc.toDeleteEntities.put("sit", textDisplay.getId());
+                    playerEntities.put("sit", textDisplay.getId());
 
                     Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(
                             Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
@@ -635,7 +636,7 @@ public class NpcOption<T, S extends Serializable>
                     npc.defaultBoundingBoxEntity = entity.getBoundingBox();
                     Var.moveEntity(entity, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(),
                             npc.getLocation().getPitch());
-                    npc.toDeleteEntities.put("entity", entity.getId());
+                    npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put("entity", entity.getId());
                 }
                 else
                     entity = npc.entity;
@@ -711,7 +712,7 @@ public class NpcOption<T, S extends Serializable>
                     float height = scale.y;
 
                     NpcManager.addID(interaction.getId(), npc);
-                    npc.toDeleteEntities.put("interaction", interaction.getId());
+                    npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put("interaction", interaction.getId());
                     passengers.add(interaction);
 
                     npc.name.getDisplayOptions().setHeight(height);

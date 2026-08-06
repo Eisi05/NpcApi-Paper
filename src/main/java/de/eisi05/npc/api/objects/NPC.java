@@ -80,7 +80,7 @@ import java.util.stream.Collectors;
 public class NPC extends NpcHolder
 {
     public transient final Map<UUID, String> nameCache = new HashMap<>();
-    final Map<String, Integer> toDeleteEntities = new HashMap<>();
+    transient final Map<UUID, Map<String, Integer>> toDeleteEntities = new HashMap<>();
     private final List<UUID> viewers = new ArrayList<>();
     private final CustomNameTag nameTag;
     private final Path npcPath;
@@ -705,6 +705,7 @@ public class NPC extends NpcHolder
         }
 
         Bukkit.getOnlinePlayers().forEach(this::hideNpcFromPlayer);
+        toDeleteEntities.clear();
     }
 
     /**
@@ -734,8 +735,9 @@ public class NPC extends NpcHolder
             TeamManager.clear(player.getUniqueId(), getGameProfileName());
         }
 
-        toDeleteEntities.values().forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
-        toDeleteEntities.clear();
+        var values = toDeleteEntities.remove(player.getUniqueId());
+        if(values != null)
+            values.values().forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
 
         connection.send(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
 
