@@ -81,7 +81,7 @@ public class NPC extends NpcHolder
 {
     public transient final Map<UUID, String> nameCache = new HashMap<>();
     transient final Map<UUID, Map<String, Integer>> toDeleteEntities = new HashMap<>();
-    private final List<UUID> viewers = new ArrayList<>();
+    private final Set<UUID> viewers = new HashSet<>();
     private final CustomNameTag nameTag;
     private final Path npcPath;
     private final Map<UUID, PathTask> pathTasks = new HashMap<>();
@@ -544,6 +544,54 @@ public class NPC extends NpcHolder
     }
 
     /**
+     * Retrieves the tags associated with this NPC. The tags are stored as a set of strings.
+     *
+     * @return A {@code HashSet} containing the tags, or {@code null} if no tags are set
+     * @see NpcOption#TAGS
+     */
+    public @NotNull Set<String> getTags()
+    {
+        return getOption(NpcOption.TAGS, GLOBAL_UUID);
+    }
+
+    /**
+     * Sets the tags associated with this NPC. The tags are stored as a set of strings.
+     *
+     * @param tags the set of tags to set
+     * @see NpcOption#TAGS
+     */
+    public void setTags(@NotNull Set<String> tags)
+    {
+        setOption(NpcOption.TAGS, tags, GLOBAL_UUID);
+    }
+
+    /**
+     * Adds a tag to this NPC. The tag is stored as a string and is added to the set of tags associated with the NPC.
+     *
+     * @param tag the tag to add
+     * @see NpcOption#TAGS
+     */
+    public void addTag(@NotNull String tag)
+    {
+        Set<String> tags = getTags();
+        tags.add(tag);
+        setOption(NpcOption.TAGS, tags, GLOBAL_UUID);
+    }
+
+    /**
+     * Removes a tag from this NPC. The tag is stored as a string and is removed from the set of tags associated with the NPC.
+     *
+     * @param tag the tag to remove
+     * @see NpcOption#TAGS
+     */
+    public void removeTag(@NotNull String tag)
+    {
+        Set<String> tags = getTags();
+        tags.remove(tag);
+        setOption(NpcOption.TAGS, tags, GLOBAL_UUID);
+    }
+
+    /**
      * Updates the display name of the given player on the server.
      * <p>
      * Sends a packet to the player to modify their name tag, taking into account the server version and whether custom naming is enabled.
@@ -608,7 +656,7 @@ public class NPC extends NpcHolder
     }
 
     @ApiStatus.Internal
-    public List<UUID> getViewers()
+    public Set<UUID> getViewers()
     {
         return viewers;
     }
@@ -656,8 +704,8 @@ public class NPC extends NpcHolder
         if(npcPreShowEvent.isCancelled())
             return;
 
-        if(!viewers.contains(player.getUniqueId()))
-            viewers.add(player.getUniqueId());
+        if(!viewers.add(player.getUniqueId()))
+            return;
 
         ServerPlayer wrappedServerPlayer = ((CraftPlayer) player).getHandle();
         Team team = player.getScoreboard().getEntryTeam(player.getName());

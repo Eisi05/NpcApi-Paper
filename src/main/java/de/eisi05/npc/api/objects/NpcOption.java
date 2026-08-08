@@ -751,6 +751,14 @@ public class NpcOption<T, S extends Serializable>
             }).loadBefore(true).type(WrappedEntitySnapshot.class);
 
     /**
+     * NPC option to store custom tags for referencing and categorizing NPCs.
+     */
+    static final NpcOption<Set<String>, HashSet<String>> TAGS = new NpcOption<Set<String>, HashSet<String>>("tags", HashSet::new,
+            HashSet::new, HashSet::new, HashSet::new,
+            (tags, npc, player) -> null)
+            .type(new com.google.gson.reflect.TypeToken<HashSet<String>>() {}.getType());
+
+    /**
      * NPC option to control if the NPC is enabled (visible and interactable). If false, a "DISABLED" marker may be shown. This is an internal option, typically
      * not directly set by users but controlled by {@link NPC#setEnabled(boolean)}.
      */

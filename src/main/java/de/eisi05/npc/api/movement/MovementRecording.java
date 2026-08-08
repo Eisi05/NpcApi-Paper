@@ -1,6 +1,9 @@
 package de.eisi05.npc.api.movement;
 
+import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.serialize.ObjectSaver;
+import org.bukkit.Location;
+import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -10,6 +13,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Creates a new MovementRecording instance.
@@ -26,6 +30,51 @@ public record MovementRecording(@NotNull ArrayList<MovementData> movements, long
 {
     @Serial
     private static final long serialVersionUID = 1L;
+
+    /**
+     * Generates a synthetic MovementRecording between two locations.
+     *
+     * @param start         Starting location
+     * @param end           Destination location
+     * @param steps         Number of intermediate steps (e.g., 10)
+     * @param intervalTicks Delay between points in ticks (e.g., 1 or 2 ticks)
+     * @param npc           NPC associated with the movement playback
+     * @return A constructed MovementRecording instance
+     */
+    public static @NotNull MovementRecording createSyntheticRecording(@NotNull Location start, @NotNull Location end, long steps, int intervalTicks,
+                                                                      @NotNull NPC npc
+    )
+    {
+        ArrayList<MovementData> movements = new ArrayList<>();
+        long startTime = System.currentTimeMillis();
+        long stepDurationMs = intervalTicks * 50L;
+
+        double deltaX = (end.getX() - start.getX()) / steps;
+        double deltaY = (end.getY() - start.getY()) / steps;
+        double deltaZ = (end.getZ() - start.getZ()) / steps;
+
+        Vector dir = end.toVector().subtract(start.toVector());
+        Location lookLocation = start.clone().setDirection(dir);
+        float yaw = lookLocation.getYaw();
+        float pitch = lookLocation.getPitch();
+
+        for(long i = 0; i <= steps; i++)
+        {
+            double x = start.getX() + (deltaX * i);
+            double y = start.getY() + (deltaY * i);
+            double z = start.getZ() + (deltaZ * i);
+            long timestamp = (i * stepDurationMs);
+
+            Location location = new Location(start.getWorld(), x, y, z, yaw, pitch);
+            MovementData data = new MovementData(location, timestamp);
+            movements.add(data);
+        }
+
+        long endTime = (steps * stepDurationMs);
+        long sessionId = ThreadLocalRandom.current().nextLong(100_000L, 999_999L);
+
+        return new MovementRecording(movements, sessionId, startTime, endTime, npc.getUUID(), intervalTicks);
+    }
 
     /**
      * Loads a MovementRecording from a file.

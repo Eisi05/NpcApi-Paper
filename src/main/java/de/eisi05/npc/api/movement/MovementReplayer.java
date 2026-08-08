@@ -138,7 +138,7 @@ public class MovementReplayer
         private long lastTimestamp;
 
         private ReplaySession(@NotNull NPC npc, @NotNull MovementRecording recording, double speedMultiplier, boolean changeRealLocation,
-                              @Nullable Consumer<ReplayResult> onComplete, long replayId, @NotNull Player... viewers)
+                              @Nullable Consumer<ReplayResult> onComplete, long replayId, @Nullable Player... viewers)
         {
             this.npc = npc;
             this.recording = recording;
@@ -149,7 +149,7 @@ public class MovementReplayer
             this.startTime = System.currentTimeMillis();
             this.currentIndex = 0;
             this.lastTimestamp = 0;
-            this.viewers = viewers;
+            this.viewers = viewers != null && viewers.length > 0 ? viewers : null;
         }
 
         private void start()
@@ -172,9 +172,23 @@ public class MovementReplayer
 
             Location startLocation = firstMovement.toLocation(world);
 
-            npc.setEnabled(true);
-            for(Player p : viewers)
-                npc.showNPCToPlayer(p);
+            if(viewers != null)
+            {
+                for(Player p : viewers)
+                    npc.showNPCToPlayer(p);
+            }
+            else if(npc.getVisibilityManager().shouldShowToAllPlayers())
+                npc.showNpcToAllPlayers();
+            else
+            {
+                for(UUID uuid : npc.getVisibilityManager().getSpecificPlayers())
+                {
+                    Player player = Bukkit.getPlayer(uuid);
+                    if(player == null)
+                        continue;
+                    npc.showNPCToPlayer(player);
+                }
+            }
 
             Location currentLocation = npc.getLocation();
             npc.changeRealLocation(startLocation);
@@ -191,6 +205,9 @@ public class MovementReplayer
                 {
                     if(currentIndex >= recording.getMovementCount())
                     {
+                        if(!recording.movements().isEmpty())
+                            executeMovement(recording.getLastMovement());
+
                         complete(ReplayResult.COMPLETED);
                         return;
                     }
