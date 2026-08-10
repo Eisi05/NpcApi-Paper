@@ -569,26 +569,32 @@ public class NPC extends NpcHolder
      * Adds a tag to this NPC. The tag is stored as a string and is added to the set of tags associated with the NPC.
      *
      * @param tag the tag to add
+     * @return true if the tag was added, false if the tag was already present
      * @see NpcOption#TAGS
      */
-    public void addTag(@NotNull String tag)
+    public boolean addTag(@NotNull String tag)
     {
         Set<String> tags = getTags();
-        tags.add(tag);
+        if(!tags.add(tag))
+            return false;
         setOption(NpcOption.TAGS, tags, GLOBAL_UUID);
+        return true;
     }
 
     /**
      * Removes a tag from this NPC. The tag is stored as a string and is removed from the set of tags associated with the NPC.
      *
      * @param tag the tag to remove
+     * @return true if the tag was removed, false if the tag was not present
      * @see NpcOption#TAGS
      */
-    public void removeTag(@NotNull String tag)
+    public boolean removeTag(@NotNull String tag)
     {
         Set<String> tags = getTags();
-        tags.remove(tag);
+        if(!tags.remove(tag))
+            return false;
         setOption(NpcOption.TAGS, tags, GLOBAL_UUID);
+        return true;
     }
 
     /**
