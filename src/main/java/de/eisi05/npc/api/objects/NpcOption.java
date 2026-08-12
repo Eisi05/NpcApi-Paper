@@ -238,7 +238,7 @@ public class NpcOption<T, S extends Serializable>
                         new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
 
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, npcServerPlayer);
-            });
+            }).type(TypeToken.of(Integer.class).getType());
 
     /**
      * NPC option to control the visibility of the NPC's nametag.
@@ -314,7 +314,8 @@ public class NpcOption<T, S extends Serializable>
      */
     public static final NpcOption<Double, Double> LOOK_AT_PLAYER = new NpcOption<>("look-at-player", () -> 0.0,
             distance -> distance, distance -> distance, distance -> distance,
-            (distance, npc, player) -> null);
+            (distance, npc, player) -> null)
+            .type(TypeToken.of(Double.class).getType());
 
     /**
      * NPC option to control visibility with three states: fully visible, transparent, or invisible.
@@ -406,7 +407,7 @@ public class NpcOption<T, S extends Serializable>
                 if(color == null)
                 {
                     entityData.set(accessor, (byte) (flags & ~modifier));
-                    return (Packet<?>) SetEntityDataPacket.create(npc.entity.getId(), entityData);
+                    return SetEntityDataPacket.create(npc.entity.getId(), entityData);
                 }
 
                 var teamPair = getTeam(player, npc);
@@ -443,7 +444,7 @@ public class NpcOption<T, S extends Serializable>
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
                 team.setCollisionRule(collision ? Team.CollisionRule.ALWAYS : Team.CollisionRule.NEVER);
-                return (Packet<?>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
+                return SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
             });
 
     /**
@@ -560,7 +561,7 @@ public class NpcOption<T, S extends Serializable>
                 else
                 {
                     if(oldId == null)
-                        return packet == null ? (Packet<?>) SetEntityDataPacket.create(npc.entity.getId(), data) :
+                        return packet == null ? SetEntityDataPacket.create(npc.entity.getId(), data) :
                                 new ClientboundBundlePacket(
                                         List.of((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
 
@@ -588,7 +589,7 @@ public class NpcOption<T, S extends Serializable>
                 instance.setBaseValue(scale);
 
                 return new ClientboundUpdateAttributesPacket(npc.entity.getId(), List.of(instance));
-            });
+            }).type(TypeToken.of(Double.class).getType());
 
     /**
      * NPC option to control the position of the NPC in the TAB list.
@@ -607,7 +608,7 @@ public class NpcOption<T, S extends Serializable>
 
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER,
                         (ServerPlayer) npc.getServerPlayer());
-            }).since(Versions.V1_21_2);
+            }).since(Versions.V1_21_2).type(TypeToken.of(Integer.class).getType());
 
     /**
      * NPC option to control if the NPC is enabled (visible and interactable). If false, a "DISABLED" marker may be shown. This is an internal option, typically
@@ -756,7 +757,7 @@ public class NpcOption<T, S extends Serializable>
     static final NpcOption<Set<String>, HashSet<String>> TAGS = new NpcOption<Set<String>, HashSet<String>>("tags", HashSet::new,
             HashSet::new, HashSet::new, HashSet::new,
             (tags, npc, player) -> null)
-            .type(new com.google.gson.reflect.TypeToken<HashSet<String>>() {}.getType());
+            .type(new TypeToken<HashSet<String>>() {}.getType());
 
     /**
      * NPC option to control if the NPC is enabled (visible and interactable). If false, a "DISABLED" marker may be shown. This is an internal option, typically
@@ -781,10 +782,12 @@ public class NpcOption<T, S extends Serializable>
      * NPC option to store custom data for the NPC. This is an internal option, typically not directly set by users but controlled by
      * {@link NPC#addCustomData(Serializable, Serializable)}.
      */
-    static final NpcOption<HashMap<Serializable, Serializable>, HashMap<Serializable, Serializable>> CUSTOM_DATA = new NpcOption<>("custom-data",
-            HashMap::new, HashMap::new,
-            aHashMap -> aHashMap, aHashMap -> aHashMap,
-            (customData, npc, player) -> null);
+    static final NpcOption<HashMap<Serializable, Serializable>, HashMap<Serializable, Serializable>> CUSTOM_DATA =
+            new NpcOption<HashMap<Serializable, Serializable>, HashMap<Serializable, Serializable>>("custom-data",
+                    HashMap::new, HashMap::new,
+                    aHashMap -> aHashMap, aHashMap -> aHashMap,
+                    (customData, npc, player) -> null)
+                    .type(new TypeToken<HashMap<Serializable, Serializable>>() {}.getType());
 
     /**
      * NPC option to manage visibility settings for the NPC. This controls whether the NPC should be shown to all players (including new ones) or only to
@@ -1028,13 +1031,12 @@ public class NpcOption<T, S extends Serializable>
      * @param player The {@link Player} who will receive the update. Must not be null.
      * @return An {@link Optional} containing the {@link Packet} if one is generated and the option is compatible, otherwise an empty Optional.
      */
-    @SuppressWarnings("unchecked")
     public @NotNull Optional<Object> getPacket(@NotNull NPC npc, Player player)
     {
         if(packet == null || !isCompatible())
             return Optional.empty();
 
-        return Optional.ofNullable(packet.apply((T) npc.getOption(this), npc, player));
+        return Optional.ofNullable(packet.apply(npc.getOption(this), npc, player));
     }
 
     @Override

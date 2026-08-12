@@ -61,6 +61,7 @@ import org.bukkit.scoreboard.Team;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.io.IOException;
 import java.io.Serial;
@@ -72,6 +73,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -144,7 +146,16 @@ public class NPC extends NpcHolder
         ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
         GameProfile profile = new GameProfile(uuid, "NPC" + uuid.toString().substring(0, 13));
 
-        this.entity = this.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
+        Supplier<Component> nameSupplier = this::getName;
+        this.entity = this.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault())
+        {
+            @Override
+            public net.minecraft.network.chat.@NonNull Component getDisplayName()
+            {
+                return PlayerTeam.formatNameForTeam(this.getTeam(), CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(nameSupplier.get())))
+                        .withStyle((style) -> style.withHoverEvent(this.createHoverEvent()).withInsertion(this.getStringUUID()));
+            }
+        };
         Var.moveEntity(serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
 
         npcPath = NpcApi.plugin.getDataFolder().toPath().resolve("NPC").resolve(uuid + ".npc.json");
@@ -1638,7 +1649,8 @@ public class NPC extends NpcHolder
             NPC npc = new NPC(new Location(world1, x, y, z, yaw, pitch), id, name).setClickEvent(clickEvent == null ? clickEvent : clickEvent.initialize());
 
             if(newOptions != null)
-                newOptions.forEach((s, stringSerializableHashMap) -> stringSerializableHashMap.forEach((s1, serializable) ->
+                newOptions.forEach((s, stringSerializableHashMap) ->
+                        stringSerializableHashMap.forEach((s1, serializable) ->
                         NpcOption.getOption(s1)
                                 .ifPresent(npcOption -> npc.setOption((NpcOption<T, S>) npcOption, (T) npcOption.deserialize(Var.unsafeCast(serializable)),
                                         UUID.fromString(s)))));
