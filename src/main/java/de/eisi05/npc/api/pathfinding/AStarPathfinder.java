@@ -1,20 +1,22 @@
 package de.eisi05.npc.api.pathfinding;
 
 import de.eisi05.npc.api.NpcApi;
-import de.eisi05.npc.api.utils.Var;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.function.Consumer;
 
-public class AStarPathfinder
+/**
+ * Standard block-grid based A* pathfinder.
+ */
+public class AStarPathfinder extends AbstractPathfinder
 {
     private static final double[][][] MOVE_COSTS = new double[3][3][3];
 
@@ -35,33 +37,18 @@ public class AStarPathfinder
         }
     }
 
-    private final int maxIterations;
-    private final boolean allowDiagonal;
-    private final double entityHeight;
-    private final double entityWidth;
     private final PriorityQueue<Node> openSet = new PriorityQueue<>();
     private final Set<Long> openSetIds = new HashSet<>();
-    private final Map<Long, Node> allNodes = new HashMap<>();
+    private final Long2ObjectOpenHashMap<Node> allNodes = new Long2ObjectOpenHashMap<>();
     private World world;
 
     public AStarPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
-        this.maxIterations = maxIterations;
-        this.allowDiagonal = allowDiagonal;
-        this.entityHeight = entityHeight;
-        this.entityWidth = entityWidth;
+        super(maxIterations, allowDiagonal, entityHeight, entityWidth);
     }
 
     /**
      * Checks if a position is valid (not inside a solid block).
-     *
-     * @param world        The world to check in
-     * @param tx           The x coordinate of the position
-     * @param ty           The y coordinate of the position
-     * @param tz           The z coordinate of the position
-     * @param entityHeight The height of the entity
-     * @param entityWidth  The width of the entity
-     * @return true if the position is valid, false otherwise
      */
     public static boolean isPositionValid(@NotNull World world, double tx, double ty, double tz, double entityHeight, double entityWidth)
     {
@@ -110,7 +97,9 @@ public class AStarPathfinder
         return true;
     }
 
-    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end) throws PathfindingUtils.PathfindingException
+    @Override
+    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
+            throws PathfindingUtils.PathfindingException
     {
         if(start.getWorld() == null || end.getWorld() == null)
             return null;
@@ -138,6 +127,9 @@ public class AStarPathfinder
         startNode.gCost = 0;
         startNode.calculateH(end);
 
+        double startH = startNode.hCost;
+        double minH = startH;
+
         openSet.add(startNode);
         openSetIds.add(startNode.id);
         allNodes.put(startNode.id, startNode);
@@ -153,6 +145,13 @@ public class AStarPathfinder
 
             Node current = openSet.poll();
             openSetIds.remove(current.id);
+
+            if(startH > 0 && current.hCost < minH)
+            {
+                minH = current.hCost;
+                if(progressListener != null)
+                    progressListener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0));
+            }
 
             if(distanceSq(current, end) < 1.0)
                 return retracePath(current);
@@ -253,8 +252,8 @@ public class AStarPathfinder
     }
 
     /**
-     * Resolves the block Y coordinate of the floor beneath a feet-based location.
-     * This keeps path nodes aligned with partial collision blocks such as slabs and stairs.
+     * Resolves the block Y coordinate of the floor beneath a feet-based location. This keeps path nodes aligned with partial collision blocks such as slabs and
+     * stairs.
      *
      * @param loc the feet-based location to inspect
      * @return the Y coordinate of the floor block
@@ -282,7 +281,7 @@ public class AStarPathfinder
             if(block.isLiquid())
                 continue;
 
-            if(!block.getType().isSolid() || block.isPassable())
+            if(!block.getType().isSolid() || block.isPassable() || NpcApi.config.pathfindingPassableOverride().test(block))
                 continue;
 
             Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
@@ -299,21 +298,6 @@ public class AStarPathfinder
         }
 
         return loc.getBlockY() - 1;
-    }
-
-    /**
-     * Checks if a block is valid to stand on.
-     */
-    public static boolean isSafeFloor(Block block)
-    {
-        if(block == null)
-            return false;
-
-        Material type = block.getType();
-        if(type.isAir() || block.isLiquid())
-            return false;
-
-        return !block.isPassable();
     }
 
     private @NotNull List<Location> retracePath(@NotNull Node current)

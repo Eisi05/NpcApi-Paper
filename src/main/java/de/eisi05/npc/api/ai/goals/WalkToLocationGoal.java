@@ -351,7 +351,7 @@ public class WalkToLocationGoal extends Goal
             return;
         }
 
-        CompletableFuture<Path> future = npc.findPathAsync(List.of(start, end), maxIterations, allowDiagonal, null);
+        CompletableFuture<Path> future = npc.findPathAsync(null, List.of(start, end), maxIterations, allowDiagonal, null);
         Tasks.trackFuture(future);
         future.thenAcceptAsync(path -> pathable = path != null, task -> Bukkit.getScheduler().runTask(NpcApi.plugin, task))
                 .exceptionally(e ->
@@ -381,7 +381,7 @@ public class WalkToLocationGoal extends Goal
 
         isWalking = true;
 
-        pathfindingFuture = npc.findPathAsync(List.of(start, end), maxIterations, allowDiagonal, null);
+        pathfindingFuture = npc.findPathAsync(null, List.of(start, end), maxIterations, allowDiagonal, null);
         Tasks.trackFuture(pathfindingFuture);
         pathfindingFuture.thenAcceptAsync(path ->
                 {

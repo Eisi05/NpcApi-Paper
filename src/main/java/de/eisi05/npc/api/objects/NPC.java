@@ -14,6 +14,7 @@ import de.eisi05.npc.api.interfaces.NpcClickAction;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
+import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.PathfindingUtils;
 import de.eisi05.npc.api.scheduler.PathTask;
 import de.eisi05.npc.api.utils.Reflections;
@@ -71,7 +72,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -960,22 +960,24 @@ public class NPC extends NpcHolder
      * This method executes the pathfinding logic off the main thread using the Bukkit scheduler.
      * </p>
      *
+     * @param pathfinderFactory     the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
      * @param waypoints             the list of locations the path must pass through, must not be null
      * @param maxIterations         the maximum number of iterations allowed for the pathfinding algorithm before giving up
      * @param allowDiagonalMovement {@code true} to allow diagonal movement between nodes, {@code false} for straight lines only
-     * @param progressListener      an optional listener to receive progress updates (current iteration, max iterations), can be null
+     * @param progressListener      an optional listener to receive progress updates (in percent), can be null
      * @return a {@link CompletableFuture} that will complete with the calculated {@link de.eisi05.npc.api.pathfinding.Path}
      * @throws RuntimeException if an underlying {@link PathfindingUtils.PathfindingException} occurs during execution
      */
-    public @NotNull CompletableFuture<de.eisi05.npc.api.pathfinding.Path> findPathAsync(@NotNull List<Location> waypoints, int maxIterations,
+    public @NotNull CompletableFuture<de.eisi05.npc.api.pathfinding.Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory<?> pathfinderFactory,
+                                                                                        @NotNull List<Location> waypoints, int maxIterations,
                                                                                         boolean allowDiagonalMovement,
-                                                                                        @Nullable BiConsumer<Integer, Integer> progressListener)
+                                                                                        @Nullable Consumer<Double> progressListener)
     {
         return CompletableFuture.supplyAsync(() ->
         {
             try
             {
-                return findPath(waypoints, maxIterations, allowDiagonalMovement, progressListener);
+                return findPath(pathfinderFactory, waypoints, maxIterations, allowDiagonalMovement, progressListener);
             }
             catch(PathfindingUtils.PathfindingException e)
             {
@@ -987,20 +989,22 @@ public class NPC extends NpcHolder
     /**
      * Synchronously calculates a path through the specified waypoints based on the entity's current bounding box and scale.
      *
+     * @param pathfinderFactory     the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
      * @param waypoints             the list of locations the path must pass through, must not be null
      * @param maxIterations         the maximum number of iterations allowed for the pathfinding algorithm before giving up
      * @param allowDiagonalMovement {@code true} to allow diagonal movement between nodes, {@code false} for straight lines only
-     * @param progressListener      an optional listener to receive progress updates (current iteration, max iterations), can be null
+     * @param progressListener      an optional listener to receive progress updates (in percent), can be null
      * @return the calculated {@link de.eisi05.npc.api.pathfinding.Path}, must not be null
      * @throws PathfindingUtils.PathfindingException if the pathfinding algorithm fails to find a valid path or encounters an error
      */
-    public @NotNull de.eisi05.npc.api.pathfinding.Path findPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
-                                                                @Nullable BiConsumer<Integer, Integer> progressListener)
+    public @NotNull de.eisi05.npc.api.pathfinding.Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> pathfinderFactory,
+                                                                @NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
+                                                                @Nullable Consumer<Double> progressListener)
             throws PathfindingUtils.PathfindingException
     {
         AABB boundingBox = entity.getBoundingBox();
         double scale = getOption(NpcOption.SCALE);
-        return PathfindingUtils.findPath(waypoints, maxIterations, allowDiagonalMovement, boundingBox.getYsize() * scale,
+        return PathfindingUtils.findPath(pathfinderFactory, waypoints, maxIterations, allowDiagonalMovement, boundingBox.getYsize() * scale,
                 boundingBox.getXsize() * scale, progressListener);
     }
 

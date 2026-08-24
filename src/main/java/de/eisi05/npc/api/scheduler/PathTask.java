@@ -5,7 +5,7 @@ import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
-import de.eisi05.npc.api.pathfinding.AStarPathfinder;
+import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
@@ -21,7 +21,6 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,10 +34,10 @@ import java.util.function.Consumer;
  */
 public class PathTask extends BukkitRunnable
 {
-    private static final double gravity = -0.08;
-    private static final double jumpVelocity = 0.5;
-    private static final double terminalVelocity = -0.5;
-    private static final double stepHeight = 0.55;
+    private static final double GRAVITY = -0.08;
+    private static final double JUMP_VELOCITY = 0.5;
+    private static final double TERMINAL_VELOCITY = -0.5;
+    private static final double STEP_HEIGHT = 0.55;
 
     private final NPC npc;
     private final double entityHeight;
@@ -51,15 +50,15 @@ public class PathTask extends BukkitRunnable
     private final Consumer<WalkingResult> callback;
     private final boolean withRotation;
 
-    // Settings
     private final double speed;
     private final boolean updateRealLocation;
+
     private final Set<Block> openedDoors = new HashSet<>();
-    // State
+    private final Vector previousMoveDir;
+
     private boolean finished = false;
     private int index = 0;
     private Vector currentPos;
-    private final Vector previousMoveDir;
     private float previousPitch;
     private float previousYaw;
     private double verticalVelocity = 0.0;
@@ -87,7 +86,6 @@ public class PathTask extends BukkitRunnable
                     this.viewerIds.add(viewer.getUniqueId());
             }
         }
-
         this.autoManageWalkingViewers = builder.autoManageWalkingViewers;
         this.callback = builder.callback;
         this.withRotation = builder.withRotation;
@@ -109,24 +107,25 @@ public class PathTask extends BukkitRunnable
     public void run()
     {
         World world = npc.getLocation().getWorld();
-        if(world == null) return;
+        if(world == null)
+            return;
 
         int currentChunkX = currentPos.getBlockX() >> 4;
         int currentChunkZ = currentPos.getBlockZ() >> 4;
 
-        if (!world.isChunkLoaded(currentChunkX, currentChunkZ))
+        if(!world.isChunkLoaded(currentChunkX, currentChunkZ))
         {
             handleUnloadedChunk(world, currentChunkX, currentChunkZ);
             return;
         }
 
-        if (index < pathPoints.size())
+        if(index < pathPoints.size())
         {
             Location next = pathPoints.get(index);
             int nextChunkX = next.getBlockX() >> 4;
             int nextChunkZ = next.getBlockZ() >> 4;
 
-            if (!world.isChunkLoaded(nextChunkX, nextChunkZ))
+            if(!world.isChunkLoaded(nextChunkX, nextChunkZ))
             {
                 handleUnloadedChunk(world, nextChunkX, nextChunkZ);
                 return;
@@ -170,8 +169,7 @@ public class PathTask extends BukkitRunnable
             if(movement.lengthSquared() < 1e-6 && index < pathPoints.size() && currentPos.equals(target))
                 return;
 
-            PhysicsResult physics = applyPhysics(movement, toTarget);
-
+            PhysicsResult physics = applyPhysics(movement);
             if(physics.skipHorizontal)
             {
                 movement.setX(0);
@@ -181,7 +179,6 @@ public class PathTask extends BukkitRunnable
                 movement.multiply(physics.horizontalSlowdown);
 
             movement.setY(physics.yChange);
-
             currentPos.add(movement);
 
             float yaw, pitch;
@@ -229,10 +226,11 @@ public class PathTask extends BukkitRunnable
      */
     private void handleUnloadedChunk(World world, int chunkX, int chunkZ)
     {
-        if (NpcApi.config.loadChunksOnPath() && !isWaitingForChunkLoad)
+        if(NpcApi.config.loadChunksOnPath() && !isWaitingForChunkLoad)
         {
             isWaitingForChunkLoad = true;
-            world.getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> isWaitingForChunkLoad = false);
+            world.getChunkAt(chunkX, chunkZ);
+            isWaitingForChunkLoad = false;
         }
     }
 
@@ -298,7 +296,6 @@ public class PathTask extends BukkitRunnable
             }
 
             double distSq = Math.pow(door.getX() + 0.5 - currentPos.getX(), 2) + Math.pow(door.getZ() + 0.5 - currentPos.getZ(), 2);
-
             if(distSq > 1.69)
             {
                 if(openable.isOpen())
@@ -313,7 +310,7 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Forces all doors opened by this path task to close. Used when the path is completed or cancelled.
+     * Forces all doors opened by this path task to close. Used when the path is completed or canceled.
      */
     private void forceCloseAllDoors()
     {
@@ -327,68 +324,6 @@ public class PathTask extends BukkitRunnable
             }
         }
         openedDoors.clear();
-    }
-
-    /**
-     * Handles the completion of the path. Performs final cleanup and calls the completion callback.
-     *
-     * @return true if the path was successfully finished, false otherwise
-     */
-    private boolean finishPath()
-    {
-        Location last = path.getWaypoints().isEmpty() ? null : path.getWaypoints().getLast();
-
-        if(last != null)
-        {
-            if(currentPos.distanceSquared(last.toVector()) > 0.04)
-            {
-                pathPoints.add(last);
-                return false;
-            }
-            else
-                smoothEndRotation(last);
-        }
-
-        finished = true;
-        forceCloseAllDoors();
-
-        if(callback != null)
-            callback.accept(WalkingResult.SUCCESS);
-
-        NpcStopWalkingEvent event = new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation);
-        Bukkit.getPluginManager().callEvent(event);
-
-        if(event.changeRealLocation())
-        {
-            Location loc = path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast();
-            npc.changeRealLocation(loc, getViewers());
-        }
-
-        npc.clearWalkingTask(this);
-        cancel();
-        return true;
-    }
-
-    /**
-     * Smoothly rotates the NPC to face the final direction when reaching the end of the path.
-     *
-     * @param loc The target location to face
-     */
-    private void smoothEndRotation(Location loc)
-    {
-        if(serverEntity == null)
-            return;
-
-        ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket(serverEntity, (byte) (loc.getYaw() * 256 / 360));
-        ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(serverEntity.getId(), (byte) (loc.getYaw() * 256 / 360),
-                (byte) (loc.getPitch() * 256 / 360), true);
-
-        Vec3 vec = new Vec3(loc.toVector().getX(), loc.toVector().getY(), loc.toVector().getZ());
-        ClientboundTeleportEntityPacket teleport = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverEntity, vec, Vec3.ZERO,
-                loc.getYaw(), loc.getPitch(), Set.of(), true);
-
-        npc.sendNpcMovePackets(teleport, head, getViewers());
-        npc.sendNpcBodyPackets(body, getViewers());
     }
 
     /**
@@ -436,10 +371,9 @@ public class PathTask extends BukkitRunnable
      * Applies physics (gravity, jumping, collision) to the NPC's movement.
      *
      * @param movement The current movement vector
-     * @param toTarget The vector to the target waypoint
      * @return A PhysicsResult containing the vertical movement and ground state
      */
-    private @NotNull PhysicsResult applyPhysics(Vector movement, Vector toTarget)
+    private @NotNull PhysicsResult applyPhysics(Vector movement)
     {
         World world = npc.getLocation().getWorld();
         if(world == null)
@@ -447,98 +381,187 @@ public class PathTask extends BukkitRunnable
 
         double groundY = getGroundY(world, currentPos);
         boolean onGround = currentPos.getY() <= groundY + 1e-5;
-        double yChange = 0;
+        double yChange;
 
         if(onGround)
         {
-            if(toTarget.getY() < 0 && Math.abs(toTarget.getY()) <= stepHeight)
+            Vector stepTarget = currentPos.clone().add(movement);
+            double liveGroundY = getGroundY(world, stepTarget);
+            double yDiff = liveGroundY - currentPos.getY();
+
+            if(yDiff < 0 && Math.abs(yDiff) <= STEP_HEIGHT)
             {
-                Vector testPos = currentPos.clone().add(movement);
-                testPos.setY(currentPos.getY() + toTarget.getY());
-                if(isPositionValid(world, testPos))
+                Vector testPos = stepTarget.clone();
+                testPos.setY(currentPos.getY() + yDiff);
+                if(canSweepMove(world, currentPos, testPos))
                 {
-                    yChange = toTarget.getY();
                     verticalVelocity = 0;
-                    double slowdown = 0.5;
-                    return new PhysicsResult(yChange, true, false, slowdown);
+                    return new PhysicsResult(yDiff, true, false, 0.5);
                 }
             }
 
-            if(toTarget.getY() > 0 && toTarget.getY() <= stepHeight && movement.lengthSquared() > 1e-6)
+            if(yDiff > 0 && yDiff <= STEP_HEIGHT && movement.lengthSquared() > 1e-6)
             {
-                Vector testPos = currentPos.clone().add(movement);
-                testPos.setY(currentPos.getY() + Math.min(toTarget.getY(), stepHeight));
-                if(!isPositionValid(world, testPos))
+                Vector testPos = stepTarget.clone();
+                testPos.setY(currentPos.getY() + yDiff);
+                if(canSweepMove(world, currentPos, testPos))
                 {
-                    yChange = Math.min(toTarget.getY(), stepHeight);
                     verticalVelocity = 0;
-                    return new PhysicsResult(yChange, true, true, 1.0);
+                    return new PhysicsResult(yDiff, true, false, 1.0);
                 }
-                yChange = Math.min(toTarget.getY(), stepHeight);
-                verticalVelocity = 0;
-                return new PhysicsResult(yChange, true, false, 1.0);
             }
-            else if(toTarget.getY() > 0.5)
+            else if(yDiff > STEP_HEIGHT && movement.lengthSquared() > 1e-6)
             {
-                Vector testPos = currentPos.clone().add(movement);
-                testPos.setY(currentPos.getY() + jumpVelocity);
-                if(!isPositionValid(world, testPos))
+                Vector testPos = stepTarget.clone();
+                testPos.setY(currentPos.getY() + JUMP_VELOCITY);
+                if(canSweepMove(world, currentPos, testPos))
                 {
-                    verticalVelocity = jumpVelocity;
-                    return new PhysicsResult(jumpVelocity, false, true, 1.0);
+                    verticalVelocity = JUMP_VELOCITY;
+                    return new PhysicsResult(JUMP_VELOCITY, false, false, 1.0);
                 }
-                verticalVelocity = jumpVelocity;
-                onGround = false;
+                else
+                {  // Blocked jumping forward (e.g. wall). Jump straight UP instead.
+                    Vector straightUp = currentPos.clone();
+                    straightUp.setY(currentPos.getY() + JUMP_VELOCITY);
+                    if(canSweepMove(world, currentPos, straightUp))
+                    {
+                        verticalVelocity = JUMP_VELOCITY;
+                        return new PhysicsResult(JUMP_VELOCITY, false, true, 1.0);
+                    }
+                }
             }
-            else
+
+            verticalVelocity = 0;
+            if(movement.lengthSquared() > 1e-6)
             {
-                verticalVelocity = 0;
-                if(Math.abs(currentPos.getY() - groundY) > 1e-6)
-                    currentPos.setY(groundY);
-                return new PhysicsResult(0, true, false, 1.0);
+                Vector flatTarget = stepTarget.clone();
+                flatTarget.setY(groundY);
+                if(!canSweepMove(world, currentPos, flatTarget))
+                {
+                    Vector slideX = currentPos.clone().add(new Vector(movement.getX(), 0, 0));
+                    Vector slideZ = currentPos.clone().add(new Vector(0, 0, movement.getZ()));
+                    slideX.setY(groundY);
+                    slideZ.setY(groundY);
+
+                    boolean canMoveX = Math.abs(movement.getX()) > 1e-6 && canSweepMove(world, currentPos, slideX);
+                    boolean canMoveZ = Math.abs(movement.getZ()) > 1e-6 && canSweepMove(world, currentPos, slideZ);
+
+                    if(canMoveX && !canMoveZ)
+                    {
+                        movement.setZ(0);
+                        return new PhysicsResult(0, true, false, 1.0);
+                    }
+                    else if(canMoveZ && !canMoveX)
+                    {
+                        movement.setX(0);
+                        return new PhysicsResult(0, true, false, 1.0);
+                    }
+                    else if(canMoveX && canMoveZ)
+                    {
+                        if(Math.abs(movement.getX()) > Math.abs(movement.getZ()))
+                            movement.setZ(0);
+                        else
+                            movement.setX(0);
+                        return new PhysicsResult(0, true, false, 1.0);
+                    }
+
+                    if(Math.abs(currentPos.getY() - groundY) > 1e-6)
+                        currentPos.setY(groundY);
+                    return new PhysicsResult(0, true, true, 1.0);
+                }
             }
+
+            if(Math.abs(currentPos.getY() - groundY) > 1e-6)
+                currentPos.setY(groundY);
+            return new PhysicsResult(0, true, false, 1.0);
         }
-
-        if(!onGround)
+        else
         {
-            verticalVelocity += gravity;
-            if(verticalVelocity < terminalVelocity)
-                verticalVelocity = terminalVelocity;
+            verticalVelocity += GRAVITY;
+            if(verticalVelocity < TERMINAL_VELOCITY)
+                verticalVelocity = TERMINAL_VELOCITY;
             yChange = verticalVelocity;
 
             Vector testPos = currentPos.clone().add(movement);
             testPos.setY(currentPos.getY() + yChange);
-            if(!isPositionValid(world, testPos) && currentPos.getY() + yChange <= groundY + 0.1)
+
+            if(!canSweepMove(world, currentPos, testPos))
+            {
+                Vector verticalOnly = currentPos.clone();
+                verticalOnly.setY(currentPos.getY() + yChange);
+
+                if(canSweepMove(world, currentPos, verticalOnly))
+                {
+                    Vector slideX = verticalOnly.clone().add(new Vector(movement.getX(), 0, 0));
+                    Vector slideZ = verticalOnly.clone().add(new Vector(0, 0, movement.getZ()));
+
+                    boolean canMoveX = Math.abs(movement.getX()) > 1e-6 && canSweepMove(world, currentPos, slideX);
+                    boolean canMoveZ = Math.abs(movement.getZ()) > 1e-6 && canSweepMove(world, currentPos, slideZ);
+
+                    if(canMoveX && !canMoveZ)
+                        movement.setZ(0);
+                    else if(canMoveZ && !canMoveX)
+                        movement.setX(0);
+                    else if(canMoveX && canMoveZ)
+                    {
+                        if(Math.abs(movement.getX()) > Math.abs(movement.getZ()))
+                            movement.setZ(0);
+                        else
+                            movement.setX(0);
+                    }
+                    else
+                    {
+                        movement.setX(0);
+                        movement.setZ(0);
+                    }
+                }
+                else
+                {
+                    if(verticalVelocity < 0)
+                    {
+                        yChange = groundY - currentPos.getY();
+                        if(yChange > 0)
+                            yChange = 0;
+                        verticalVelocity = 0;
+                        onGround = true;
+                    }
+                    else
+                    {
+                        yChange = 0;
+                        verticalVelocity = 0;
+                    }
+                }
+            }
+            else if(currentPos.getY() + yChange <= groundY + 1e-5)
             {
                 yChange = groundY - currentPos.getY();
                 verticalVelocity = 0;
                 onGround = true;
             }
-            else if(currentPos.getY() + yChange <= groundY)
-            {
-                yChange = groundY - currentPos.getY();
-                verticalVelocity = 0;
-                onGround = true;
-            }
+
+            return new PhysicsResult(yChange, onGround, false, 1.0);
         }
-
-        return new PhysicsResult(yChange, onGround, false, 1.0);
     }
 
     /**
-     * Checks if a position is valid (not inside a solid block).
+     * Checks whether the NPC can move in a straight line between two points without clipping any solid collision shape along the way. Delegates to
+     * {@link BoundingBoxPathfinder#canSweepMove}, the same swept-volume check the pathfinder used while planning, rather than validating only the endpoint - an
+     * endpoint-only check can miss thin obstacles (e.g. a single-block-thick wall) that the movement vector passes through without ever landing inside.
      *
-     * @param world The world to check in
-     * @param pos   The position to check
-     * @return true if the position is valid, false otherwise
+     * @param world the world to check in
+     * @param from  the starting position
+     * @param to    the position being moved to
+     * @return true if the full swept path is clear
      */
-    private boolean isPositionValid(@NotNull World world, @NotNull Vector pos)
+    private boolean canSweepMove(@NotNull World world, @NotNull Vector from, @NotNull Vector to)
     {
-        return AStarPathfinder.isPositionValid(world, pos.getX(), pos.getY(), pos.getZ(), entityHeight, entityWidth);
+        return BoundingBoxPathfinder.canSweepMove(world, from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ(), entityHeight, entityWidth);
     }
 
     /**
-     * Calculates the feet Y-coordinate of the ground at a given position.
+     * Calculates the feet Y-coordinate of the ground at a given position. Delegates to {@link BoundingBoxPathfinder#resolveGroundSupport} so ground detection
+     * uses the exact same full-footprint, collision-shape-based logic the pathfinder used when it planned the route - a single-point/block-center sample here
+     * would disagree with the planner right at obstacle edges (e.g. an open trapdoor), which is what was causing spurious jumps.
      *
      * @param world The world to check in
      * @param pos   The position to check
@@ -546,42 +569,73 @@ public class PathTask extends BukkitRunnable
      */
     private double getGroundY(@NotNull World world, @NotNull Vector pos)
     {
-        int bx = pos.getBlockX();
-        int bz = pos.getBlockZ();
-        int startY = pos.getBlockY();
+        BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(world, pos.getX(), pos.getY(), pos.getZ(), entityWidth);
 
-        for(int y = startY; y >= startY - 4; y--)
+        if(support.valid())
+            return support.feetY();
+
+        return world.getHighestBlockYAt(pos.getBlockX(), pos.getBlockZ());
+    }
+
+    /**
+     * Handles the completion of the path. Performs final cleanup and calls the completion callback.
+     *
+     * @return true if the path was successfully finished, false otherwise
+     */
+    private boolean finishPath()
+    {
+        Location last = path.getWaypoints().isEmpty() ? null : path.getWaypoints().getLast();
+        if(last != null)
         {
-            Block block = world.getBlockAt(bx, y, bz);
-
-            if(block.getBlockData() instanceof Openable || block.isLiquid())
-                continue;
-
-            Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
-            if(boxes.isEmpty())
-                continue;
-
-            double lx = pos.getX() - bx;
-            double lz = pos.getZ() - bz;
-
-            double bestTop = -1.0;
-
-            for(BoundingBox bb : boxes)
+            if(currentPos.distanceSquared(last.toVector()) > 0.04)
             {
-                if(lx >= bb.getMinX() && lx <= bb.getMaxX() && lz >= bb.getMinZ() && lz <= bb.getMaxZ())
-                    bestTop = Math.max(bestTop, bb.getMaxY());
+                pathPoints.add(last);
+                return false;
             }
 
-            if(bestTop < 0.0)
-            {
-                for(BoundingBox bb : boxes)
-                    bestTop = Math.max(bestTop, bb.getMaxY());
-            }
-
-            return y + bestTop;
+            smoothEndRotation(last);
         }
 
-        return world.getHighestBlockYAt(bx, bz);
+        finished = true;
+        forceCloseAllDoors();
+
+        if(callback != null)
+            callback.accept(WalkingResult.SUCCESS);
+
+        NpcStopWalkingEvent event = new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation);
+        Bukkit.getPluginManager().callEvent(event);
+
+        if(event.changeRealLocation())
+        {
+            Location loc = path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast();
+            npc.changeRealLocation(loc, getViewers());
+        }
+
+        npc.clearWalkingTask(this);
+        cancel();
+        return true;
+    }
+
+    /**
+     * Smoothly rotates the NPC to face the final direction when reaching the end of the path.
+     *
+     * @param loc The target location to face
+     */
+    private void smoothEndRotation(Location loc)
+    {
+        if(serverEntity == null)
+            return;
+
+        ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket(serverEntity, (byte) (loc.getYaw() * 256 / 360));
+        ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(serverEntity.getId(), (byte) (loc.getYaw() * 256 / 360),
+                (byte) (loc.getPitch() * 256 / 360), true);
+
+        Vec3 vec = new Vec3(loc.toVector().getX(), loc.toVector().getY(), loc.toVector().getZ());
+        ClientboundTeleportEntityPacket teleport = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverEntity, vec, Vec3.ZERO,
+                loc.getYaw(), loc.getPitch(), Set.of(), true);
+
+        npc.sendNpcMovePackets(teleport, head, getViewers());
+        npc.sendNpcBodyPackets(body, getViewers());
     }
 
     /**
@@ -609,7 +663,7 @@ public class PathTask extends BukkitRunnable
         targetYaw = normalizeAngle(targetYaw);
 
         float diff = normalizeAngle(targetYaw - previousYaw);
-        diff = Math.max(-15f, Math.min(15f, diff));
+        diff = Math.clamp(diff, -15f, 15f);
 
         float yaw = previousYaw + diff;
         previousYaw = yaw;
@@ -717,7 +771,6 @@ public class PathTask extends BukkitRunnable
      */
     private void sendCurrentPosition(@NotNull Player player)
     {
-
         if(serverEntity == null)
             return;
 
@@ -767,7 +820,7 @@ public class PathTask extends BukkitRunnable
     /**
      * Cancels the path task and cleans up resources. Calls the callback with CANCELLED status if not already finished.
      *
-     * @throws IllegalStateException if the task was already cancelled
+     * @throws IllegalStateException if the task was already canceled
      */
     @Override
     public synchronized void cancel() throws IllegalStateException
@@ -790,7 +843,8 @@ public class PathTask extends BukkitRunnable
 
         if(event.changeRealLocation())
         {
-            World world = path.getWaypoints().isEmpty() ? pathPoints.getLast().getWorld() : path.getWaypoints().getLast().getWorld();
+            World world = path.getWaypoints().isEmpty() ? pathPoints.getLast().getWorld() :
+                    path.getWaypoints().getLast().getWorld();
             Location loc = new Location(world, currentPos.getX(), currentPos.getY(), currentPos.getZ());
             npc.changeRealLocation(loc, getViewers());
         }
@@ -897,7 +951,7 @@ public class PathTask extends BukkitRunnable
         }
 
         /**
-         * Sets the callback to be executed when the path is completed or cancelled.
+         * Sets the callback to be executed when the path is completed or canceled.
          *
          * @param callback The callback to execute
          * @return This builder instance for method chaining
