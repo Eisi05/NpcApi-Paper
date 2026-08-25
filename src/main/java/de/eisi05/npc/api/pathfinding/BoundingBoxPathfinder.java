@@ -24,130 +24,111 @@ import java.util.function.Consumer;
 public class BoundingBoxPathfinder extends AbstractPathfinder
 {
     private final double gridStep;
+    private final double maxJumpHeight;
+    private final double maxFallDistance;
+    private final double supportWidth;
+
     private final PriorityQueue<SubNode> openSet = new PriorityQueue<>();
     private final Long2ObjectOpenHashMap<SubNode> allNodes = new Long2ObjectOpenHashMap<>();
-    private final Long2ObjectOpenHashMap<Collection<BoundingBox>> collisionCache = new Long2ObjectOpenHashMap<>();
+
+    private final Long2ObjectOpenHashMap<BlockData> blockCache = new Long2ObjectOpenHashMap<>();
+    private final Long2ObjectOpenHashMap<FootSupport> supportCache = new Long2ObjectOpenHashMap<>();
+
     private World world;
 
+    /**
+     * Constructs a new BoundingBoxPathfinder with default step, jump height, and fall distance settings.
+     *
+     * @param maxIterations the maximum number of iterations allowed
+     * @param allowDiagonal whether diagonal movement is permitted
+     * @param entityHeight  the height of the entity
+     * @param entityWidth   the width of the entity
+     */
     public BoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
-        this(maxIterations, allowDiagonal, entityHeight, entityWidth, 0.25);
+        this(maxIterations, allowDiagonal, entityHeight, entityWidth, 0.25, 1.25, 3.0);
     }
 
+    /**
+     * Constructs a new BoundingBoxPathfinder with a custom grid step and default movement limits.
+     *
+     * @param maxIterations the maximum number of iterations allowed
+     * @param allowDiagonal whether diagonal movement is permitted
+     * @param entityHeight  the height of the entity
+     * @param entityWidth   the width of the entity
+     * @param gridStep      the sub-grid step size
+     */
     public BoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth, double gridStep)
+    {
+        this(maxIterations, allowDiagonal, entityHeight, entityWidth, gridStep, 1.25, 3.0);
+    }
+
+    /**
+     * Constructs a new BoundingBoxPathfinder with fully customized parameters.
+     *
+     * @param maxIterations   the maximum number of iterations allowed
+     * @param allowDiagonal   whether diagonal movement is permitted
+     * @param entityHeight    the height of the entity
+     * @param entityWidth     the width of the entity
+     * @param gridStep        the sub-grid step size
+     * @param maxJumpHeight   the maximum height the entity can jump
+     * @param maxFallDistance the maximum safe fall distance for the entity
+     */
+    public BoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth, double gridStep,
+                                 double maxJumpHeight, double maxFallDistance)
     {
         super(maxIterations, allowDiagonal, entityHeight, entityWidth);
         this.gridStep = Math.max(0.1, gridStep);
+        this.maxJumpHeight = maxJumpHeight;
+        this.maxFallDistance = maxFallDistance;
+        this.supportWidth = Math.max(0.1, entityWidth * 0.85);
     }
 
+    /**
+     * Packs block coordinates into a single unique long identifier hash.
+     *
+     * @param x the block X coordinate
+     * @param y the block Y coordinate
+     * @param z the block Z coordinate
+     * @return the packed coordinate hash
+     */
     private static long packBlockCoord(int x, int y, int z)
     {
         return ((long) (x & 0x3FFFFFF)) | (((long) (z & 0x3FFFFFF)) << 26) | (((long) (y & 0xFFF)) << 52);
     }
 
     /**
-     * Checks if a specific 3D location is valid for an entity bounding box without overlapping solid block collision shapes. Fully spatial and
-     * non-block-bound.
-     */
-    public static boolean isBoxValidAt(@NotNull World world, double x, double y, double z, double entityHeight, double entityWidth)
-    {
-        double radius = entityWidth / 2.0;
-        BoundingBox entityBox = new BoundingBox(
-                x - radius + 0.001, y + 0.001, z - radius + 0.001,
-                x + radius - 0.001, y + entityHeight - 0.001, z + radius - 0.001
-        );
-
-        int minBlockX = (int) Math.floor(entityBox.getMinX());
-        int maxBlockX = (int) Math.floor(entityBox.getMaxX());
-        int minBlockY = (int) Math.floor(entityBox.getMinY());
-        int maxBlockY = (int) Math.floor(entityBox.getMaxY());
-        int minBlockZ = (int) Math.floor(entityBox.getMinZ());
-        int maxBlockZ = (int) Math.floor(entityBox.getMaxZ());
-
-        for(int bx = minBlockX; bx <= maxBlockX; bx++)
-        {
-            for(int by = minBlockY; by <= maxBlockY; by++)
-            {
-                for(int bz = minBlockZ; bz <= maxBlockZ; bz++)
-                {
-                    Block block = world.getBlockAt(bx, by, bz);
-                    if(block.getBlockData() instanceof Openable)
-                        continue;
-
-                    if(block.isEmpty() || block.isPassable() || NpcApi.config.pathfindingPassableOverride().test(block))
-                        continue;
-
-                    Collection<BoundingBox> blockBoxes = block.getCollisionShape().getBoundingBoxes();
-                    if(blockBoxes.isEmpty())
-                        continue;
-
-                    for(BoundingBox blockBox : blockBoxes)
-                    {
-                        double bMinX = blockBox.getMinX() + bx;
-                        double bMaxX = blockBox.getMaxX() + bx;
-                        double bMinY = blockBox.getMinY() + by;
-                        double bMaxY = blockBox.getMaxY() + by;
-                        double bMinZ = blockBox.getMinZ() + bz;
-                        double bMaxZ = blockBox.getMaxZ() + bz;
-                        if(entityBox.getMinX() < bMaxX && entityBox.getMaxX() > bMinX &&
-                                entityBox.getMinY() < bMaxY && entityBox.getMaxY() > bMinY &&
-                                entityBox.getMinZ() < bMaxZ && entityBox.getMaxZ() > bMinZ)
-                            return false;
-                    }
-                }
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Static, world-parameterized swept bounding-box check with no per-search caching. Companion to {@link #resolveGroundSupport} for callers outside an active
-     * search.
-     */
-    public static boolean canSweepMove(@NotNull World world, double x1, double y1, double z1, double x2, double y2, double z2,
-                                       double entityHeight, double entityWidth)
-    {
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        double dz = z2 - z1;
-        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-        if(distance < 0.0001)
-            return true;
-
-        double safeStep = Math.max(0.1, entityWidth / 2.0);
-        int steps = Math.max(1, (int) Math.ceil(distance / safeStep));
-
-        double stepX = dx / steps;
-        double stepY = dy / steps;
-        double stepZ = dz / steps;
-
-        for(int i = 0; i <= steps; i++)
-        {
-            double cx = x1 + (stepX * i);
-            double cy = y1 + (stepY * i);
-            double cz = z1 + (stepZ * i);
-
-            if(!isBoxValidAt(world, cx, cy, cz, entityHeight, entityWidth))
-                return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Static, world-parameterized ground/footprint support probe with no per-search caching. Intended for callers outside an active search (e.g.
-     * {@code PathTask} during path execution) that want the exact same footprint-aware, collision-shape-accurate ground logic the pathfinder itself used to
-     * plan the route - so a spot the planner considered walkable (like a gap next to an open trapdoor) is judged the same way at execution time.
-     * <p>
-     * Deliberately takes no {@code entityHeight}: this method only answers "where is the floor," based on the entity's horizontal footprint
-     * ({@code entityWidth}). Whether there's enough headroom above that floor for the entity to actually stand there is a separate question, already answered
-     * correctly by the height-aware {@link #isBoxValidAt} / {@link #canSweepMove} checks callers run against the resulting feet position.
+     * Resolves ground support for an entity at the specified coordinates using default jump and fall constraints.
+     *
+     * @param world       the world to check in
+     * @param x           the target X coordinate
+     * @param currentY    the current Y coordinate
+     * @param z           the target Z coordinate
+     * @param entityWidth the width of the entity
+     * @return a {@link FootSupport} instance describing the ground details
      */
     public static @NotNull FootSupport resolveGroundSupport(@NotNull World world, double x, double currentY, double z, double entityWidth)
     {
-        double radius = entityWidth / 2.0;
+        return resolveGroundSupport(world, x, currentY, z, entityWidth, 1.25, 3.0);
+    }
+
+    /**
+     * Resolves ground support for an entity at the specified coordinates with custom movement limitations.
+     *
+     * @param world           the world to check in
+     * @param x               the target X coordinate
+     * @param currentY        the current Y coordinate
+     * @param z               the target Z coordinate
+     * @param entityWidth     the width of the entity
+     * @param maxJumpHeight   the maximum jump height allowed
+     * @param maxFallDistance the maximum fall distance allowed
+     * @return a {@link FootSupport} instance describing the ground details
+     */
+    public static @NotNull FootSupport resolveGroundSupport(@NotNull World world, double x, double currentY, double z, double entityWidth, double maxJumpHeight,
+                                                            double maxFallDistance)
+    {
+        double supportWidth = Math.max(0.1, entityWidth * 0.85);
+        double radius = supportWidth / 2.0;
         double minX = x - radius;
         double maxX = x + radius;
         double minZ = z - radius;
@@ -158,8 +139,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         int minBlockZ = (int) Math.floor(minZ);
         int maxBlockZ = (int) Math.floor(maxZ);
 
-        int searchStartY = (int) Math.floor(currentY + 0.6);
-        int searchEndY = (int) Math.floor(currentY - 3.0);
+        int searchStartY = (int) Math.floor(currentY + maxJumpHeight);
+        int searchEndY = (int) Math.floor(currentY - maxFallDistance);
 
         double highestTopY = -Double.MAX_VALUE;
         boolean foundSolid = false;
@@ -177,17 +158,15 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                     if(mat == Material.LAVA || mat == Material.FIRE || mat == Material.SOUL_FIRE || mat == Material.MAGMA_BLOCK)
                         hazardPenalty += 10.0;
 
-                    if(block.getBlockData() instanceof Openable)
-                        continue;
-
-                    if(block.isEmpty() || block.isPassable() || block.isLiquid() || NpcApi.config.pathfindingPassableOverride().test(block))
+                    if(block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() || block.isLiquid() ||
+                            NpcApi.config.pathfindingPassableOverride().test(block))
                         continue;
 
                     Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
                     if(boxes.isEmpty())
                     {
                         double top = by + 1.0;
-                        if(top <= currentY + 0.6 && top > highestTopY)
+                        if(top <= currentY + maxJumpHeight && top > highestTopY)
                         {
                             highestTopY = top;
                             foundSolid = true;
@@ -205,7 +184,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                             if(bMaxX >= minX && bMinX <= maxX && bMaxZ >= minZ && bMinZ <= maxZ)
                             {
                                 double top = bb.getMaxY() + by;
-                                if(top <= currentY + 0.6 && top > highestTopY)
+                                if(top <= currentY + maxJumpHeight && top > highestTopY)
                                 {
                                     highestTopY = top;
                                     foundSolid = true;
@@ -217,33 +196,46 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             }
         }
 
-        if(!foundSolid)
-            return FootSupport.INVALID;
-
-        return new FootSupport(highestTopY, hazardPenalty);
+        return foundSolid ? new FootSupport(highestTopY, hazardPenalty) : FootSupport.INVALID;
     }
 
-    private Collection<BoundingBox> cachedCollisionBoxes(int bx, int by, int bz)
+    /**
+     * Retrieves cached block collision and hazard metadata for a specific block coordinate.
+     *
+     * @param bx the block X coordinate
+     * @param by the block Y coordinate
+     * @param bz the block Z coordinate
+     * @return the corresponding {@link BlockData}
+     */
+    private BlockData getCachedBlock(int bx, int by, int bz)
     {
         long key = packBlockCoord(bx, by, bz);
-        Collection<BoundingBox> cached = collisionCache.get(key);
+        BlockData cached = blockCache.get(key);
         if(cached != null)
             return cached;
 
         Block block = world.getBlockAt(bx, by, bz);
-        Collection<BoundingBox> boxes;
-        if(block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() || NpcApi.config.pathfindingPassableOverride().test(block))
-            boxes = Collections.emptyList();
-        else
-            boxes = block.getCollisionShape().getBoundingBoxes();
+        Material mat = block.getType();
+        double hazard = (mat == Material.LAVA || mat == Material.FIRE || mat == Material.SOUL_FIRE || mat == Material.MAGMA_BLOCK) ? 10.0 : 0.0;
 
-        collisionCache.put(key, boxes);
-        return boxes;
+        boolean bodyPassable = block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() ||
+                NpcApi.config.pathfindingPassableOverride().test(block);
+        Collection<BoundingBox> boxes = bodyPassable ? Collections.emptyList() : block.getCollisionShape().getBoundingBoxes();
+
+        boolean isFootingSolid = !bodyPassable && !block.isLiquid();
+
+        BlockData data = new BlockData(boxes, isFootingSolid, hazard);
+        blockCache.put(key, data);
+        return data;
     }
 
     /**
-     * Instance-level, cached equivalent of {@link #isBoxValidAt}. Used internally by the search so repeated probes against the same blocks don't re-query the
-     * world/collision shapes every time.
+     * Checks if the entity's bounding box is entirely valid and free of obstacles at the given position using cached blocks.
+     *
+     * @param x the target center X coordinate
+     * @param y the target feet Y coordinate
+     * @param z the target center Z coordinate
+     * @return true if the box position is valid, false otherwise
      */
     private boolean isBoxValidAtCached(double x, double y, double z)
     {
@@ -266,7 +258,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             {
                 for(int bz = minBlockZ; bz <= maxBlockZ; bz++)
                 {
-                    for(BoundingBox blockBox : cachedCollisionBoxes(bx, by, bz))
+                    for(BoundingBox blockBox : getCachedBlock(bx, by, bz).collisionBoxes())
                     {
                         double bMinX = blockBox.getMinX() + bx;
                         double bMaxX = blockBox.getMaxX() + bx;
@@ -274,6 +266,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                         double bMaxY = blockBox.getMaxY() + by;
                         double bMinZ = blockBox.getMinZ() + bz;
                         double bMaxZ = blockBox.getMaxZ() + bz;
+
                         if(entityBox.getMinX() < bMaxX && entityBox.getMaxX() > bMinX &&
                                 entityBox.getMinY() < bMaxY && entityBox.getMaxY() > bMinY &&
                                 entityBox.getMinZ() < bMaxZ && entityBox.getMaxZ() > bMinZ)
@@ -282,44 +275,84 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                 }
             }
         }
-
         return true;
     }
 
     /**
-     * Unified 3D swept bounding-box raycast.
+     * Performs a swept-volume collision check along a movement path from one point to another.
      *
-     * @param checkGround If true, ensures solid floor support exists underneath every raycast step.
+     * @param x1          start X coordinate
+     * @param y1          start Y coordinate
+     * @param z1          start Z coordinate
+     * @param x2          target X coordinate
+     * @param y2          target Y coordinate
+     * @param z2          target Z coordinate
+     * @param checkGround whether to validate ground support along the sweep
+     * @return true if the movement path is clear, false otherwise
      */
     private boolean canSweep(double x1, double y1, double z1, double x2, double y2, double z2, boolean checkGround)
     {
         double dx = x2 - x1;
         double dy = y2 - y1;
         double dz = z2 - z1;
-        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double hDist = Math.sqrt(dx * dx + dz * dz);
 
-        if(distance < 0.0001)
+        if(hDist < 0.0001 && Math.abs(dy) < 0.0001)
             return true;
 
         double safeStep = Math.max(0.1, entityWidth / 2.0);
-        int steps = Math.max(1, (int) Math.ceil(distance / safeStep));
-        double stepX = dx / steps;
-        double stepY = dy / steps;
-        double stepZ = dz / steps;
 
-        for(int i = 0; i <= steps; i++)
+        if(dy > 0.0001)
         {
-            double cx = x1 + (stepX * i);
-            double cy = y1 + (stepY * i);
-            double cz = z1 + (stepZ * i);
-
-            if(!isBoxValidAtCached(cx, cy, cz))
-                return false;
-
-            if(checkGround)
+            int vSteps = Math.max(1, (int) Math.ceil(dy / safeStep));
+            double vStepY = dy / vSteps;
+            for(int i = 0; i <= vSteps; i++)
             {
-                FootSupport support = resolveFootSupport(cx, cy, cz);
-                if(!support.valid() || Math.abs(support.feetY() - cy) > 0.6)
+                if(!isBoxValidAtCached(x1, y1 + (vStepY * i), z1))
+                    return false;
+            }
+        }
+
+        double sweepY = Math.max(y1, y2);
+        if(hDist > 0.0001)
+        {
+            int hSteps = Math.max(1, (int) Math.ceil(hDist / safeStep));
+            double stepX = dx / hSteps;
+            double stepZ = dz / hSteps;
+            double lastFeetY = y1;
+
+            for(int i = 0; i <= hSteps; i++)
+            {
+                double cx = x1 + (stepX * i);
+                double cz = z1 + (stepZ * i);
+
+                if(!isBoxValidAtCached(cx, sweepY, cz))
+                    return false;
+
+                if(checkGround)
+                {
+                    FootSupport support = resolveFootSupport(cx, sweepY, cz);
+                    if(!support.valid())
+                        return false;
+
+                    if(i > 0)
+                    {
+                        double stepYDiff = support.feetY() - lastFeetY;
+                        if(stepYDiff > maxJumpHeight || stepYDiff < -maxFallDistance)
+                            return false;
+                    }
+                    lastFeetY = support.feetY();
+                }
+            }
+        }
+
+        if(dy < -0.0001)
+        {
+            int vSteps = Math.max(1, (int) Math.ceil(Math.abs(dy) / safeStep));
+            double vStepY = Math.abs(dy) / vSteps;
+            for(int i = 0; i <= vSteps; i++)
+            {
+                if(!isBoxValidAtCached(x2, y1 - (vStepY * i), z2))
                     return false;
             }
         }
@@ -328,7 +361,15 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Performs a continuous 3D swept bounding-box check between two points for physical collision only.
+     * Checks if a general movement sweep is valid between two points without ground validation.
+     *
+     * @param x1 start X
+     * @param y1 start Y
+     * @param z1 start Z
+     * @param x2 target X
+     * @param y2 target Y
+     * @param z2 target Z
+     * @return true if the movement is valid
      */
     public boolean canSweepMove(double x1, double y1, double z1, double x2, double y2, double z2)
     {
@@ -336,7 +377,15 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Performs a continuous 3D swept bounding-box check ensuring both physical clearance AND valid floor support.
+     * Checks if a walking sweep movement is valid between two points, including ground support verification.
+     *
+     * @param x1 start X
+     * @param y1 start Y
+     * @param z1 start Z
+     * @param x2 target X
+     * @param y2 target Y
+     * @param z2 target Z
+     * @return true if the walking move is valid
      */
     private boolean canSweepWalk(double x1, double y1, double z1, double x2, double y2, double z2)
     {
@@ -344,12 +393,13 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Inspects colliding block bounding boxes (e.g. open trapdoors, fence edges, wall frames) at a target location and calculates exact coordinate offsets that
-     * shift the entity's bounding box outside the collision shape boundary.
+     * Probes and processes obstacle clearance offsets around a target point, evaluating alternative candidate points.
      *
-     * @param targetX Candidate X target coordinate
-     * @param targetY Candidate Y target coordinate
-     * @param targetZ Candidate Z target coordinate
+     * @param targetX target X coordinate
+     * @param targetY target Y coordinate
+     * @param targetZ target Z coordinate
+     * @param current current sub-node being expanded
+     * @param end     the ultimate destination location
      */
     private void processClearanceOffsets(double targetX, double targetY, double targetZ, SubNode current, Location end)
     {
@@ -376,9 +426,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             {
                 for(int bz = minBlockZ; bz <= maxBlockZ; bz++)
                 {
-                    for(BoundingBox bb : cachedCollisionBoxes(bx, by, bz))
+                    for(BoundingBox bb : getCachedBlock(bx, by, bz).collisionBoxes())
                     {
-
                         double bMinX = bb.getMinX() + bx;
                         double bMaxX = bb.getMaxX() + bx;
                         double bMinY = bb.getMinY() + by;
@@ -388,7 +437,6 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
 
                         if(eMinX < bMaxX && eMaxX > bMinX && eMinY < bMaxY && eMaxY > bMinY && eMinZ < bMaxZ && eMaxZ > bMinZ)
                         {
-
                             double shiftPlusX = bMaxX + radius + margin;
                             double shiftMinusX = bMinX - radius - margin;
                             double shiftPlusZ = bMaxZ + radius + margin;
@@ -406,13 +454,21 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Evaluates solid ground support across the entity's full 2D footprint rather than a single block center.
+     * Resolves foot support using cached block data and support cache lookups.
+     *
+     * @param x        the target X coordinate
+     * @param currentY the current Y coordinate
+     * @param z        the target Z coordinate
+     * @return the resolved {@link FootSupport}
      */
     private @NotNull FootSupport resolveFootSupport(double x, double currentY, double z)
     {
-        double safeWidth = Math.max(0.1, entityWidth * 0.4);
-        double radius = safeWidth / 2.0;
+        long cacheKey = SubNode.hash(x, currentY, z, gridStep / 2.0);
+        FootSupport cached = supportCache.get(cacheKey);
+        if(cached != null)
+            return cached;
 
+        double radius = supportWidth / 2.0;
         double minX = x - radius;
         double maxX = x + radius;
         double minZ = z - radius;
@@ -423,8 +479,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         int minBlockZ = (int) Math.floor(minZ);
         int maxBlockZ = (int) Math.floor(maxZ);
 
-        int searchStartY = (int) Math.floor(currentY + 0.6);
-        int searchEndY = (int) Math.floor(currentY - 3.0);
+        int searchStartY = (int) Math.floor(currentY + maxJumpHeight);
+        int searchEndY = (int) Math.floor(currentY - maxFallDistance);
 
         double highestTopY = -Double.MAX_VALUE;
         boolean foundSolid = false;
@@ -436,23 +492,17 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             {
                 for(int by = searchStartY; by >= searchEndY; by--)
                 {
-                    Block block = world.getBlockAt(bx, by, bz);
-                    Material mat = block.getType();
+                    BlockData blockData = getCachedBlock(bx, by, bz);
+                    hazardPenalty += blockData.hazardPenalty();
 
-                    if(mat == Material.LAVA || mat == Material.FIRE || mat == Material.SOUL_FIRE || mat == Material.MAGMA_BLOCK)
-                        hazardPenalty += 10.0;
-
-                    if(block.getBlockData() instanceof Openable)
+                    if(!blockData.isFootingSolid())
                         continue;
 
-                    if(block.isEmpty() || block.isPassable() || block.isLiquid() || NpcApi.config.pathfindingPassableOverride().test(block))
-                        continue;
-
-                    Collection<BoundingBox> boxes = cachedCollisionBoxes(bx, by, bz);
+                    Collection<BoundingBox> boxes = blockData.collisionBoxes();
                     if(boxes.isEmpty())
                     {
                         double top = by + 1.0;
-                        if(top <= currentY + 0.6 && top > highestTopY)
+                        if(top <= currentY + maxJumpHeight && top > highestTopY)
                         {
                             highestTopY = top;
                             foundSolid = true;
@@ -470,7 +520,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                             if(bMaxX >= minX && bMinX <= maxX && bMaxZ >= minZ && bMinZ <= maxZ)
                             {
                                 double top = bb.getMaxY() + by;
-                                if(top <= currentY + 0.6 && top > highestTopY)
+                                if(top <= currentY + maxJumpHeight && top > highestTopY)
                                 {
                                     highestTopY = top;
                                     foundSolid = true;
@@ -482,12 +532,20 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             }
         }
 
-        if(!foundSolid)
-            return FootSupport.INVALID;
-
-        return new FootSupport(highestTopY, hazardPenalty);
+        FootSupport result = foundSolid ? new FootSupport(highestTopY, hazardPenalty) : FootSupport.INVALID;
+        supportCache.put(cacheKey, result);
+        return result;
     }
 
+    /**
+     * Calculates an optimized continuous 3D path from start to end using the Bounding-Box Theta* algorithm.
+     *
+     * @param start            the starting location
+     * @param end              the target destination location
+     * @param progressListener an optional consumer tracking calculation progress (0.0 to 1.0)
+     * @return a list of locations representing the smoothed path, or null if unreachable
+     * @throws PathfindingUtils.PathfindingException if start or end locations lack valid floor support
+     */
     @Override
     public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
             throws PathfindingUtils.PathfindingException
@@ -498,7 +556,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         this.world = start.getWorld();
         openSet.clear();
         allNodes.clear();
-        collisionCache.clear();
+        blockCache.clear();
+        supportCache.clear();
 
         FootSupport startSupport = resolveFootSupport(start.getX(), start.getY(), start.getZ());
         FootSupport endSupport = resolveFootSupport(end.getX(), end.getY(), end.getZ());
@@ -567,7 +626,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             }
 
             double endYDiff = endFeetY - current.y;
-            if(endYDiff <= 0.6 && endYDiff >= -1.2 && canSweepWalk(current.x, current.y, current.z, end.getX(), endFeetY, end.getZ()))
+            if(endYDiff <= maxJumpHeight && endYDiff >= -maxFallDistance && canSweepWalk(current.x, current.y, current.z, end.getX(), endFeetY, end.getZ()))
             {
                 SubNode endNode = createSubNode(end.getX(), endFeetY, end.getZ(), null);
                 double directCost = current.gCost + current.distanceTo(end.getX(), endFeetY, end.getZ());
@@ -598,6 +657,14 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         return simplifyPath(rawPath, rawPath.isEmpty() ? end : rawPath.getLast());
     }
 
+    /**
+     * Evaluates a candidate point during path exploration, updating costs and parent nodes if optimal.
+     *
+     * @param nextX   the target candidate X coordinate
+     * @param nextZ   the target candidate Z coordinate
+     * @param current the current sub-node
+     * @param end     the target end location
+     */
     private void evaluateCandidatePoint(double nextX, double nextZ, SubNode current, Location end)
     {
         FootSupport footSupport = resolveFootSupport(nextX, current.y, nextZ);
@@ -607,7 +674,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         double nextFeetY = footSupport.feetY();
         double yDiff = nextFeetY - current.y;
 
-        if(yDiff > 0.6 || yDiff < -1.2)
+        if(yDiff > maxJumpHeight || yDiff < -maxFallDistance)
             return;
 
         if(!canSweepMove(current.x, current.y, current.z, nextX, nextFeetY, nextZ))
@@ -623,7 +690,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         if(parentCandidate != current)
         {
             double pYDiff = nextFeetY - parentCandidate.y;
-            if(pYDiff <= 0.6 && pYDiff >= -1.2)
+            if(Math.abs(pYDiff) <= 0.1)
                 losFromParent = canSweepWalk(parentCandidate.x, parentCandidate.y, parentCandidate.z, nextX, nextFeetY, nextZ);
         }
 
@@ -640,6 +707,15 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         }
     }
 
+    /**
+     * Creates or retrieves a sub-node for the given coordinates from the node registry.
+     *
+     * @param x          X coordinate
+     * @param y          Y coordinate
+     * @param z          Z coordinate
+     * @param explicitId explicit node identifier, or null to auto-generate
+     * @return the created or cached sub-node
+     */
     private SubNode createSubNode(double x, double y, double z, @Nullable Long explicitId)
     {
         long id = (explicitId != null) ? explicitId : SubNode.hash(x, y, z, gridStep);
@@ -652,6 +728,12 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         return node;
     }
 
+    /**
+     * Retraces the path backwards from the given sub-node to construct a raw location list.
+     *
+     * @param current the target sub-node
+     * @return a list of locations representing the raw path
+     */
     private @NotNull List<Location> retracePath(@NotNull SubNode current)
     {
         List<Location> path = new ArrayList<>();
@@ -665,7 +747,11 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Post-processes and simplifies sub-grid path points by pruning unnecessary waypoints via 3D line-of-sight raycasts.
+     * Simplifies and smooths a raw path using line-of-sight sweep checks.
+     *
+     * @param path      the raw path locations
+     * @param targetEnd the final target destination
+     * @return a smoothed list of path locations
      */
     private List<Location> simplifyPath(List<Location> path, Location targetEnd)
     {
@@ -683,6 +769,9 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             for(int j = i + 2; j < path.size(); j++)
             {
                 Location target = path.get(j);
+                if(Math.abs(target.getY() - current.getY()) > 0.1)
+                    break;
+
                 if(canSweepWalk(current.getX(), current.getY(), current.getZ(), target.getX(), target.getY(), target.getZ()))
                     furthestVisible = j;
                 else
@@ -695,22 +784,48 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         }
 
         Location lastPoint = smoothPath.getLast();
-        if(canSweepWalk(lastPoint.getX(), lastPoint.getY(), lastPoint.getZ(), targetEnd.getX(), targetEnd.getY(), targetEnd.getZ()))
+
+        if(Math.abs(targetEnd.getY() - lastPoint.getY()) <= 0.1)
+        {
+            if(canSweepWalk(lastPoint.getX(), lastPoint.getY(), lastPoint.getZ(), targetEnd.getX(), targetEnd.getY(), targetEnd.getZ()))
+                smoothPath.add(targetEnd.clone());
+        }
+        else
             smoothPath.add(targetEnd.clone());
 
         return smoothPath;
     }
 
+    /**
+     * Record holding cached collision metadata, footing solidity, and hazard penalties for a block.
+     */
+    private record BlockData(Collection<BoundingBox> collisionBoxes, boolean isFootingSolid, double hazardPenalty) {}
+
+    /**
+     * Record representing ground support metadata beneath an entity's feet.
+     */
     public record FootSupport(double feetY, boolean valid, double hazardPenalty)
     {
+        /**
+         * Constant representing an invalid ground support state.
+         */
         public static final FootSupport INVALID = new FootSupport(0, false, 0);
 
+        /**
+         * Constructs a valid FootSupport instance with the given feet Y coordinate and hazard penalty.
+         *
+         * @param feetY         the vertical feet position
+         * @param hazardPenalty the hazard penalty value
+         */
         public FootSupport(double feetY, double hazardPenalty)
         {
             this(feetY, true, hazardPenalty);
         }
     }
 
+    /**
+     * Represents a continuous 3D coordinate node within the BoundingBox pathfinding grid.
+     */
     private static class SubNode implements Comparable<SubNode>
     {
         final double x, y, z;
@@ -721,6 +836,14 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         SubNode parent = null;
         boolean closed = false;
 
+        /**
+         * Constructs a new SubNode.
+         *
+         * @param x  X coordinate
+         * @param y  Y coordinate
+         * @param z  Z coordinate
+         * @param id unique long identifier
+         */
         public SubNode(double x, double y, double z, long id)
         {
             this.x = x;
@@ -729,6 +852,15 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             this.id = id;
         }
 
+        /**
+         * Generates a packed long hash for continuous 3D coordinates based on a grid step size.
+         *
+         * @param x        X coordinate
+         * @param y        Y coordinate
+         * @param z        Z coordinate
+         * @param gridStep the grid step size
+         * @return the packed coordinate hash
+         */
         public static long hash(double x, double y, double z, double gridStep)
         {
             long gx = Math.round(x / gridStep);
@@ -737,6 +869,11 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             return (gx & 0x1FFFFFFL) | ((gz & 0x1FFFFFFL) << 25) | ((gy & 0x3FFFL) << 50);
         }
 
+        /**
+         * Calculates the heuristic cost (H-cost) to the destination location.
+         *
+         * @param end the target destination location
+         */
         public void calculateH(@NotNull Location end)
         {
             double dx = x - end.getX();
@@ -745,6 +882,14 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             this.hCost = Math.sqrt(dx * dx + dy * dy + dz * dz) * 1.001;
         }
 
+        /**
+         * Calculates the Euclidean distance to specific target coordinates.
+         *
+         * @param targetX target X
+         * @param targetY target Y
+         * @param targetZ target Z
+         * @return the distance
+         */
         public double distanceTo(double targetX, double targetY, double targetZ)
         {
             double dx = x - targetX;
@@ -753,6 +898,12 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             return Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
 
+        /**
+         * Calculates the squared distance to a target location.
+         *
+         * @param l the target location
+         * @return the squared distance
+         */
         public double distanceSqTo(@NotNull Location l)
         {
             double dx = x - l.getX();
@@ -761,11 +912,22 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             return dx * dx + dy * dy + dz * dz;
         }
 
+        /**
+         * Gets the total estimated F-cost (G-cost + H-cost).
+         *
+         * @return the F-cost
+         */
         public double getFCost()
         {
             return gCost + hCost;
         }
 
+        /**
+         * Compares this node with another sub-node based on their F-costs.
+         *
+         * @param other the other sub-node
+         * @return comparison result (-1, 0, or 1)
+         */
         @Override
         public int compareTo(@NotNull SubNode other)
         {

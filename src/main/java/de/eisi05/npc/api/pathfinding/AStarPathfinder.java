@@ -42,13 +42,29 @@ public class AStarPathfinder extends AbstractPathfinder
     private final Long2ObjectOpenHashMap<Node> allNodes = new Long2ObjectOpenHashMap<>();
     private World world;
 
+    /**
+     * Constructs a new AStarPathfinder instance with the specified configuration parameters.
+     *
+     * @param maxIterations the maximum number of iterations allowed during pathfinding
+     * @param allowDiagonal whether diagonal movement is permitted
+     * @param entityHeight  the height of the entity
+     * @param entityWidth   the width of the entity
+     */
     public AStarPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
         super(maxIterations, allowDiagonal, entityHeight, entityWidth);
     }
 
     /**
-     * Checks if a position is valid (not inside a solid block).
+     * Checks if a target position is valid and clear of obstacles for an entity of given dimensions.
+     *
+     * @param world        the world in which to check the position
+     * @param tx           the target X coordinate (center)
+     * @param ty           the target Y coordinate (feet level)
+     * @param tz           the target Z coordinate (center)
+     * @param entityHeight the height of the entity
+     * @param entityWidth  the width of the entity
+     * @return true if the position is valid and unoccupied, false otherwise
      */
     public static boolean isPositionValid(@NotNull World world, double tx, double ty, double tz, double entityHeight, double entityWidth)
     {
@@ -97,6 +113,15 @@ public class AStarPathfinder extends AbstractPathfinder
         return true;
     }
 
+    /**
+     * Calculates a path from start to end locations using the A* algorithm, reporting progress updates via a listener.
+     *
+     * @param start            the starting location
+     * @param end              the target location
+     * @param progressListener an optional listener that receives calculation progress percentages between 0.0 and 1.0
+     * @return a list of locations forming the path, or null if no path could be found
+     * @throws PathfindingUtils.PathfindingException if the start or end location fails floor validity checks
+     */
     @Override
     public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
             throws PathfindingUtils.PathfindingException
@@ -214,6 +239,14 @@ public class AStarPathfinder extends AbstractPathfinder
      * Advanced physics check. Checks whether we can move from one floor block to another.
      * <p>
      * The {@code fy} and {@code ty} values are floor-block Y coordinates. Entity feet and headspace are checked at {@code ty + 1} and {@code ty + 2}.
+     *
+     * @return true if movement between the blocks is valid, false otherwise
+     * @code fx the source floor X coordinate
+     * @code fy the source floor Y coordinate
+     * @code fz the source floor Z coordinate
+     * @code tx the target floor X coordinate
+     * @code ty the target floor Y coordinate
+     * @code tz the target floor Z coordinate
      */
     private boolean canWalk(int fx, int fy, int fz, int tx, int ty, int tz)
     {
@@ -300,6 +333,12 @@ public class AStarPathfinder extends AbstractPathfinder
         return loc.getBlockY() - 1;
     }
 
+    /**
+     * Retraces the path backwards from the final node to the start node, building a list of locations.
+     *
+     * @param current the final target node
+     * @return an ordered list of locations representing the path
+     */
     private @NotNull List<Location> retracePath(@NotNull Node current)
     {
         List<Location> path = new ArrayList<>();
@@ -313,12 +352,28 @@ public class AStarPathfinder extends AbstractPathfinder
         return path;
     }
 
+    /**
+     * Calculates the exact Y coordinate for an entity's feet at a given block coordinate.
+     *
+     * @param x      the block X coordinate
+     * @param floorY the block Y coordinate of the floor
+     * @param z      the block Z coordinate
+     * @return the precise vertical position for the entity's feet
+     */
     private double feetYAt(int x, int floorY, int z)
     {
         Block floor = world.getBlockAt(x, floorY, z);
         return floorY + topSurfaceAt(floor, 0.5, 0.5);
     }
 
+    /**
+     * Determines the top surface Y offset of a block's collision shape at a specific local coordinate.
+     *
+     * @param block the block to inspect
+     * @param lx    the local X coordinate within the block
+     * @param lz    the local Z coordinate within the block
+     * @return the highest surface Y offset
+     */
     private double topSurfaceAt(@NotNull Block block, double lx, double lz)
     {
         Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
@@ -345,6 +400,13 @@ public class AStarPathfinder extends AbstractPathfinder
         return bestTop;
     }
 
+    /**
+     * Calculates the squared distance between a path node and a target location.
+     *
+     * @return the squared distance
+     * @code n the path node
+     * @code l the target location
+     */
     private double distanceSq(@NotNull Node n, @NotNull Location l)
     {
         double dx = (n.x + 0.5) - l.getX();
@@ -353,6 +415,9 @@ public class AStarPathfinder extends AbstractPathfinder
         return dx * dx + dy * dy + dz * dz;
     }
 
+    /**
+     * Represents a single node within the A* pathfinding grid.
+     */
     private static class Node implements Comparable<Node>
     {
         final int x, y, z;
@@ -363,6 +428,14 @@ public class AStarPathfinder extends AbstractPathfinder
         Node parent = null;
         boolean closed = false;
 
+        /**
+         * Constructs a new Node with specified coordinates and an optional pre-computed identifier.
+         *
+         * @param x  the block X coordinate
+         * @param y  the block Y coordinate
+         * @param z  the block Z coordinate
+         * @param id the unique long identifier, or null to generate one
+         */
         public Node(int x, int y, int z, Long id)
         {
             this.x = x;
@@ -371,11 +444,24 @@ public class AStarPathfinder extends AbstractPathfinder
             this.id = (id != null) ? id : hash(x, y, z);
         }
 
+        /**
+         * Generates a unique long hash for the given grid coordinates.
+         *
+         * @param x the block X coordinate
+         * @param y the block Y coordinate
+         * @param z the block Z coordinate
+         * @return a packed long hash representing the coordinates
+         */
         public static long hash(int x, int y, int z)
         {
             return ((long) x & 0x3FFFFFF) | (((long) z & 0x3FFFFFF) << 26) | (((long) y & 0xFFF) << 52);
         }
 
+        /**
+         * Calculates the heuristic cost (H-cost) from this node to the end location.
+         *
+         * @param end the target destination location
+         */
         public void calculateH(@NotNull Location end)
         {
             double dx = (x + 0.5) - end.getX();
@@ -384,11 +470,22 @@ public class AStarPathfinder extends AbstractPathfinder
             this.hCost = Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
 
+        /**
+         * Gets the total estimated cost (F-cost) for this node, combining G-cost and H-cost.
+         *
+         * @return the total F-cost
+         */
         public double getFCost()
         {
             return gCost + hCost;
         }
 
+        /**
+         * Compares this node with another node based on their F-costs for priority queue ordering.
+         *
+         * @param other the other node to compare against
+         * @return a negative integer, zero, or a positive integer as this node's F-cost is less than, equal to, or greater than the specified node's F-cost
+         */
         @Override
         public int compareTo(@NotNull Node other)
         {

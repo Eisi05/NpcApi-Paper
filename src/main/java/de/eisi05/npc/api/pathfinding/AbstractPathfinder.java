@@ -20,6 +20,14 @@ public abstract class AbstractPathfinder
     protected final double entityHeight;
     protected final double entityWidth;
 
+    /**
+     * Constructs a new AbstractPathfinder with the specified configuration.
+     *
+     * @param maxIterations the maximum number of iterations allowed for pathfinding
+     * @param allowDiagonal whether diagonal movement is permitted
+     * @param entityHeight  the height of the entity
+     * @param entityWidth   the width of the entity
+     */
     public AbstractPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
         this.maxIterations = maxIterations;
@@ -30,6 +38,9 @@ public abstract class AbstractPathfinder
 
     /**
      * Checks if a block is safe to stand on.
+     *
+     * @param block the block to check
+     * @return true if the block is safe to stand on, false otherwise
      */
     public static boolean isSafeFloor(@Nullable Block block)
     {
@@ -41,26 +52,6 @@ public abstract class AbstractPathfinder
             return false;
 
         return !block.isPassable() && !NpcApi.config.pathfindingPassableOverride().test(block);
-    }
-
-    public int getMaxIterations()
-    {
-        return maxIterations;
-    }
-
-    public boolean isAllowDiagonal()
-    {
-        return allowDiagonal;
-    }
-
-    public double getEntityHeight()
-    {
-        return entityHeight;
-    }
-
-    public double getEntityWidth()
-    {
-        return entityWidth;
     }
 
     /**

@@ -35,12 +35,11 @@ import java.util.function.Consumer;
 public class PathTask extends BukkitRunnable
 {
     private static final double GRAVITY = -0.08;
-    private static final double JUMP_VELOCITY = 0.5;
+    private static final double JUMP_VELOCITY = 0.42;
     private static final double TERMINAL_VELOCITY = -0.5;
     private static final double STEP_HEIGHT = 0.55;
 
     private final NPC npc;
-    private final double entityHeight;
     private final double entityWidth;
     private final Path path;
     private final List<Location> pathPoints;
@@ -74,7 +73,6 @@ public class PathTask extends BukkitRunnable
     {
         this.npc = builder.npc;
         double scale = npc.getOption(NpcOption.SCALE);
-        this.entityHeight = ((Entity) npc.getEntity()).getBoundingBox().getYsize() * scale;
         this.entityWidth = ((Entity) npc.getEntity()).getBoundingBox().getXsize() * scale;
         this.path = builder.path;
         this.pathPoints = new ArrayList<>(builder.path.asLocations());
@@ -170,14 +168,6 @@ public class PathTask extends BukkitRunnable
                 return;
 
             PhysicsResult physics = applyPhysics(movement);
-            if(physics.skipHorizontal)
-            {
-                movement.setX(0);
-                movement.setZ(0);
-            }
-            else if(physics.horizontalSlowdown < 1.0)
-                movement.multiply(physics.horizontalSlowdown);
-
             movement.setY(physics.yChange);
             currentPos.add(movement);
 
@@ -354,12 +344,18 @@ public class PathTask extends BukkitRunnable
             return new Vector(0, 0, 0);
 
         double dist = Math.sqrt(distSq);
-        double moveDistance = Math.min(speed, dist);
+        double currentSpeed = speed;
+        double yDiff = targetPoint.getY() - currentPos.getY();
+        if(yDiff > STEP_HEIGHT && currentPos.getY() < targetPoint.getY())
+            currentSpeed *= 0.6;
+
+        double moveDistance = Math.min(currentSpeed, dist);
         Vector moveStep = horizontal.clone().normalize().multiply(moveDistance);
 
         if(Math.abs(moveDistance - dist) < 1e-6)
         {
-            this.currentPos = targetPoint.clone();
+            this.currentPos.setX(targetPoint.getX());
+            this.currentPos.setZ(targetPoint.getZ());
             index++;
             return new Vector(0, 0, 0);
         }
@@ -368,200 +364,77 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Applies physics (gravity, jumping, collision) to the NPC's movement.
+     * Applies physics (gravity, jumping) to the NPC's movement. Excludes strict bounding-box checks because the pathfinder guarantees a safe route.
      *
-     * @param movement The current movement vector
+     * @param movement The current horizontal movement vector
      * @return A PhysicsResult containing the vertical movement and ground state
      */
     private @NotNull PhysicsResult applyPhysics(Vector movement)
     {
         World world = npc.getLocation().getWorld();
         if(world == null)
-            return new PhysicsResult(0, false, false, 1.0);
+            return new PhysicsResult(0, false);
 
-        double groundY = getGroundY(world, currentPos);
-        boolean onGround = currentPos.getY() <= groundY + 1e-5;
+        Vector stepTarget = currentPos.clone().add(movement);
+        double targetGroundY = getGroundY(world, stepTarget);
+
+        Location targetWaypoint = pathPoints.get(Math.min(index, pathPoints.size() - 1));
+        if(targetGroundY < targetWaypoint.getY() - STEP_HEIGHT)
+            targetGroundY = targetWaypoint.getY();
+
+        double currentGroundY = getGroundY(world, currentPos);
+        boolean onGround = currentPos.getY() <= currentGroundY + 1e-5;
         double yChange;
 
         if(onGround)
         {
-            Vector stepTarget = currentPos.clone().add(movement);
-            double liveGroundY = getGroundY(world, stepTarget);
-            double yDiff = liveGroundY - currentPos.getY();
+            double yDiff = targetGroundY - currentPos.getY();
 
-            if(yDiff < 0 && Math.abs(yDiff) <= STEP_HEIGHT)
+            if(yDiff <= 0 && yDiff >= -STEP_HEIGHT)
             {
-                Vector testPos = stepTarget.clone();
-                testPos.setY(currentPos.getY() + yDiff);
-                if(canSweepMove(world, currentPos, testPos))
-                {
-                    verticalVelocity = 0;
-                    return new PhysicsResult(yDiff, true, false, 0.5);
-                }
+                verticalVelocity = 0;
+                return new PhysicsResult(yDiff, true);
             }
 
-            if(yDiff > 0 && yDiff <= STEP_HEIGHT && movement.lengthSquared() > 1e-6)
+            if(yDiff > 0 && yDiff <= STEP_HEIGHT)
             {
-                Vector testPos = stepTarget.clone();
-                testPos.setY(currentPos.getY() + yDiff);
-                if(canSweepMove(world, currentPos, testPos))
-                {
-                    verticalVelocity = 0;
-                    return new PhysicsResult(yDiff, true, false, 1.0);
-                }
-            }
-            else if(yDiff > STEP_HEIGHT && movement.lengthSquared() > 1e-6)
-            {
-                Vector testPos = stepTarget.clone();
-                testPos.setY(currentPos.getY() + JUMP_VELOCITY);
-                if(canSweepMove(world, currentPos, testPos))
-                {
-                    verticalVelocity = JUMP_VELOCITY;
-                    return new PhysicsResult(JUMP_VELOCITY, false, false, 1.0);
-                }
-                else
-                {  // Blocked jumping forward (e.g. wall). Jump straight UP instead.
-                    Vector straightUp = currentPos.clone();
-                    straightUp.setY(currentPos.getY() + JUMP_VELOCITY);
-                    if(canSweepMove(world, currentPos, straightUp))
-                    {
-                        verticalVelocity = JUMP_VELOCITY;
-                        return new PhysicsResult(JUMP_VELOCITY, false, true, 1.0);
-                    }
-                }
+                verticalVelocity = 0;
+                return new PhysicsResult(yDiff, true);
             }
 
-            verticalVelocity = 0;
-            if(movement.lengthSquared() > 1e-6)
+            if(yDiff > STEP_HEIGHT)
             {
-                Vector flatTarget = stepTarget.clone();
-                flatTarget.setY(groundY);
-                if(!canSweepMove(world, currentPos, flatTarget))
-                {
-                    Vector slideX = currentPos.clone().add(new Vector(movement.getX(), 0, 0));
-                    Vector slideZ = currentPos.clone().add(new Vector(0, 0, movement.getZ()));
-                    slideX.setY(groundY);
-                    slideZ.setY(groundY);
-
-                    boolean canMoveX = Math.abs(movement.getX()) > 1e-6 && canSweepMove(world, currentPos, slideX);
-                    boolean canMoveZ = Math.abs(movement.getZ()) > 1e-6 && canSweepMove(world, currentPos, slideZ);
-
-                    if(canMoveX && !canMoveZ)
-                    {
-                        movement.setZ(0);
-                        return new PhysicsResult(0, true, false, 1.0);
-                    }
-                    else if(canMoveZ && !canMoveX)
-                    {
-                        movement.setX(0);
-                        return new PhysicsResult(0, true, false, 1.0);
-                    }
-                    else if(canMoveX && canMoveZ)
-                    {
-                        if(Math.abs(movement.getX()) > Math.abs(movement.getZ()))
-                            movement.setZ(0);
-                        else
-                            movement.setX(0);
-                        return new PhysicsResult(0, true, false, 1.0);
-                    }
-
-                    if(Math.abs(currentPos.getY() - groundY) > 1e-6)
-                        currentPos.setY(groundY);
-                    return new PhysicsResult(0, true, true, 1.0);
-                }
+                verticalVelocity = JUMP_VELOCITY;
+                return new PhysicsResult(JUMP_VELOCITY, false);
             }
 
-            if(Math.abs(currentPos.getY() - groundY) > 1e-6)
-                currentPos.setY(groundY);
-            return new PhysicsResult(0, true, false, 1.0);
+            verticalVelocity += GRAVITY;
+            if(verticalVelocity < TERMINAL_VELOCITY)
+                verticalVelocity = TERMINAL_VELOCITY;
+
+            return new PhysicsResult(verticalVelocity, false);
         }
         else
         {
             verticalVelocity += GRAVITY;
             if(verticalVelocity < TERMINAL_VELOCITY)
                 verticalVelocity = TERMINAL_VELOCITY;
+
             yChange = verticalVelocity;
-
-            Vector testPos = currentPos.clone().add(movement);
-            testPos.setY(currentPos.getY() + yChange);
-
-            if(!canSweepMove(world, currentPos, testPos))
+            if(currentPos.getY() + yChange <= targetGroundY + 1e-5)
             {
-                Vector verticalOnly = currentPos.clone();
-                verticalOnly.setY(currentPos.getY() + yChange);
-
-                if(canSweepMove(world, currentPos, verticalOnly))
-                {
-                    Vector slideX = verticalOnly.clone().add(new Vector(movement.getX(), 0, 0));
-                    Vector slideZ = verticalOnly.clone().add(new Vector(0, 0, movement.getZ()));
-
-                    boolean canMoveX = Math.abs(movement.getX()) > 1e-6 && canSweepMove(world, currentPos, slideX);
-                    boolean canMoveZ = Math.abs(movement.getZ()) > 1e-6 && canSweepMove(world, currentPos, slideZ);
-
-                    if(canMoveX && !canMoveZ)
-                        movement.setZ(0);
-                    else if(canMoveZ && !canMoveX)
-                        movement.setX(0);
-                    else if(canMoveX && canMoveZ)
-                    {
-                        if(Math.abs(movement.getX()) > Math.abs(movement.getZ()))
-                            movement.setZ(0);
-                        else
-                            movement.setX(0);
-                    }
-                    else
-                    {
-                        movement.setX(0);
-                        movement.setZ(0);
-                    }
-                }
-                else
-                {
-                    if(verticalVelocity < 0)
-                    {
-                        yChange = groundY - currentPos.getY();
-                        if(yChange > 0)
-                            yChange = 0;
-                        verticalVelocity = 0;
-                        onGround = true;
-                    }
-                    else
-                    {
-                        yChange = 0;
-                        verticalVelocity = 0;
-                    }
-                }
-            }
-            else if(currentPos.getY() + yChange <= groundY + 1e-5)
-            {
-                yChange = groundY - currentPos.getY();
+                yChange = targetGroundY - currentPos.getY();
                 verticalVelocity = 0;
                 onGround = true;
             }
 
-            return new PhysicsResult(yChange, onGround, false, 1.0);
+            return new PhysicsResult(yChange, onGround);
         }
     }
 
     /**
-     * Checks whether the NPC can move in a straight line between two points without clipping any solid collision shape along the way. Delegates to
-     * {@link BoundingBoxPathfinder#canSweepMove}, the same swept-volume check the pathfinder used while planning, rather than validating only the endpoint - an
-     * endpoint-only check can miss thin obstacles (e.g. a single-block-thick wall) that the movement vector passes through without ever landing inside.
-     *
-     * @param world the world to check in
-     * @param from  the starting position
-     * @param to    the position being moved to
-     * @return true if the full swept path is clear
-     */
-    private boolean canSweepMove(@NotNull World world, @NotNull Vector from, @NotNull Vector to)
-    {
-        return BoundingBoxPathfinder.canSweepMove(world, from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ(), entityHeight, entityWidth);
-    }
-
-    /**
      * Calculates the feet Y-coordinate of the ground at a given position. Delegates to {@link BoundingBoxPathfinder#resolveGroundSupport} so ground detection
-     * uses the exact same full-footprint, collision-shape-based logic the pathfinder used when it planned the route - a single-point/block-center sample here
-     * would disagree with the planner right at obstacle edges (e.g. an open trapdoor), which is what was causing spurious jumps.
+     * uses the exact same full-footprint, collision-shape-based logic the pathfinder used when it planned the route.
      *
      * @param world The world to check in
      * @param pos   The position to check
@@ -574,7 +447,16 @@ public class PathTask extends BukkitRunnable
         if(support.valid())
             return support.feetY();
 
-        return world.getHighestBlockYAt(pos.getBlockX(), pos.getBlockZ());
+        Location currentWaypoint = pathPoints.get(Math.min(index, pathPoints.size() - 1));
+        double highestY = world.getHighestBlockYAt(pos.getBlockX(), pos.getBlockZ());
+
+        if(Math.abs(currentWaypoint.getX() - pos.getX()) < 1.0 && Math.abs(currentWaypoint.getZ() - pos.getZ()) < 1.0)
+        {
+            if(highestY < currentWaypoint.getY() - 1.0)
+                return currentWaypoint.getY();
+        }
+
+        return highestY;
     }
 
     /**
@@ -864,12 +746,10 @@ public class PathTask extends BukkitRunnable
     /**
      * A record representing the result of physics calculations.
      *
-     * @param yChange            The vertical movement to apply
-     * @param isGrounded         Whether the NPC is on the ground
-     * @param skipHorizontal     Whether to skip horizontal movement this tick
-     * @param horizontalSlowdown Factor to slow down horizontal movement (1.0 = normal, <1.0 = slower)
+     * @param yChange    The vertical movement to apply
+     * @param isGrounded Whether the NPC is on the ground
      */
-    private record PhysicsResult(double yChange, boolean isGrounded, boolean skipHorizontal, double horizontalSlowdown) {}
+    private record PhysicsResult(double yChange, boolean isGrounded) {}
 
     // --- Builder Class ---
 
@@ -883,7 +763,7 @@ public class PathTask extends BukkitRunnable
 
         private Player[] viewers = null;
         private Consumer<WalkingResult> callback = null;
-        private double speed = 1.0;
+        private double speed = 0.25;
         private boolean updateRealLocation = false;
         private boolean withRotation = true;
         private boolean autoManageWalkingViewers = false;
