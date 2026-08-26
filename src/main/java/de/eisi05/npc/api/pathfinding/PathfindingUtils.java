@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Utility class for calculating paths between locations using A* pathfinding. Provides synchronous and asynchronous methods.
@@ -24,11 +24,11 @@ public class PathfindingUtils
      * @param waypoints             the ordered list of locations to traverse
      * @param maxIterations         the maximum number of iterations the A* algorithm will attempt per segment
      * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param progressListener      a progress listener receiving an overall completion percentage between 0.0 and 1.0
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
      */
     public static @NotNull CompletableFuture<Path> findPathAsync(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
-                                                                 @Nullable Consumer<Double> progressListener)
+                                                                 @Nullable BiConsumer<Double, Integer> progressListener)
     {
         return findPathAsync(null, waypoints, maxIterations, allowDiagonalMovement, 1.8, 0.6, progressListener);
     }
@@ -42,12 +42,12 @@ public class PathfindingUtils
      * @param allowDiagonalMovement whether diagonal movement is allowed
      * @param entityHeight          the height of the entity traversing the path
      * @param entityWidth           the width of the entity traversing the path
-     * @param progressListener      a progress listener receiving an overall completion percentage between 0.0 and 1.0
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
      */
     public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory factory, @NotNull List<Location> waypoints,
                                                                  int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
-                                                                 @Nullable Consumer<Double> progressListener)
+                                                                 @Nullable BiConsumer<Double, Integer> progressListener)
     {
         return CompletableFuture.supplyAsync(() ->
         {
@@ -70,12 +70,12 @@ public class PathfindingUtils
      * @param waypoints             the ordered list of locations to traverse
      * @param maxIterations         the maximum number of iterations the A* algorithm will attempt per segment
      * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param progressListener      a progress listener receiving an overall completion percentage between 0.0 and 1.0
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return the calculated {@link Path} containing all intermediate locations
      * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
     public static @NotNull Path findPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
-                                         @Nullable Consumer<Double> progressListener) throws PathfindingException
+                                         @Nullable BiConsumer<Double, Integer> progressListener) throws PathfindingException
     {
         return findPath(null, waypoints, maxIterations, allowDiagonalMovement, 1.8, 0.6, progressListener);
     }
@@ -91,12 +91,13 @@ public class PathfindingUtils
      * @param allowDiagonalMovement whether diagonal movement is allowed
      * @param entityHeight          the height of the entity traversing the path
      * @param entityWidth           the width of the entity traversing the path
-     * @param progressListener      a progress listener receiving an overall completion percentage between 0.0 and 1.0
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return the calculated {@link Path} containing all intermediate locations
      * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
     public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory factory, @NotNull List<Location> waypoints, int maxIterations,
-                                         boolean allowDiagonalMovement, double entityHeight, double entityWidth, @Nullable Consumer<Double> progressListener)
+                                         boolean allowDiagonalMovement, double entityHeight, double entityWidth,
+                                         @Nullable BiConsumer<Double, Integer> progressListener)
             throws PathfindingException
     {
         if(waypoints.size() < 2)
@@ -114,12 +115,12 @@ public class PathfindingUtils
             Location end = waypoints.get(i + 1);
 
             final int currentSegmentIndex = i;
-            List<Location> segment = pathfinder.getPath(start, end, segmentProgress ->
+            List<Location> segment = pathfinder.getPath(start, end, (segmentProgress, iterations) ->
             {
                 if(progressListener != null)
                 {
                     double overallProgress = (currentSegmentIndex + segmentProgress) / totalSegments;
-                    progressListener.accept(overallProgress);
+                    progressListener.accept(overallProgress, iterations);
                 }
             });
 
@@ -132,7 +133,7 @@ public class PathfindingUtils
             fullPathPoints.addAll(segment.stream().map(Location::clone).toList());
 
             if(progressListener != null)
-                progressListener.accept((currentSegmentIndex + 1.0) / totalSegments);
+                progressListener.accept((currentSegmentIndex + 1.0) / totalSegments,0);
         }
 
         return new Path(fullPathPoints, waypoints);

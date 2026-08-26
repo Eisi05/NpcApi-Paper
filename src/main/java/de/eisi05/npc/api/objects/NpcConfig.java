@@ -105,7 +105,6 @@ public class NpcConfig
      * <p>
      * Default: {@link AbstractPathfinder.PathfinderFactory#ASTAR}
      */
-    @ApiOnly
     private AbstractPathfinder.PathfinderFactory pathfinderFactory = AbstractPathfinder.PathfinderFactory.ASTAR;
 
     /**
@@ -113,7 +112,6 @@ public class NpcConfig
      * <p>
      * Default: {@code block -> false}
      */
-    @ApiOnly
     private Predicate<Block> pathfindingPassableOverride = block -> false;
 
     /**

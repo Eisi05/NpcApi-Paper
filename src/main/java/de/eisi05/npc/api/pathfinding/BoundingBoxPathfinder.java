@@ -12,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Continuous 3D Bounding-Box Theta* Pathfinder with Dynamic Obstacle Clearance Probing.
@@ -78,7 +78,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                                  double maxJumpHeight, double maxFallDistance)
     {
         super(maxIterations, allowDiagonal, entityHeight, entityWidth);
-        this.gridStep = Math.max(0.1, gridStep);
+        this.gridStep = Math.clamp(0.01, gridStep, 1);
         this.maxJumpHeight = maxJumpHeight;
         this.maxFallDistance = maxFallDistance;
         this.supportWidth = Math.max(0.1, entityWidth * 0.85);
@@ -184,6 +184,16 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         }
 
         return foundSolid ? new FootSupport(highestTopY, hazardPenalty) : FootSupport.INVALID;
+    }
+
+    /**
+     * Returns the sub-grid step size used by the pathfinder.
+     *
+     * @return the sub-grid step size
+     */
+    public double getGridStep()
+    {
+        return gridStep;
     }
 
     /**
@@ -529,12 +539,12 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
      *
      * @param start            the starting location
      * @param end              the target destination location
-     * @param progressListener an optional consumer tracking calculation progress (0.0 to 1.0)
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a list of locations representing the smoothed path, or null if unreachable
      * @throws PathfindingUtils.PathfindingException if start or end locations lack valid floor support
      */
     @Override
-    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
+    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable BiConsumer<Double, Integer> progressListener)
             throws PathfindingUtils.PathfindingException
     {
         if(start.getWorld() == null || end.getWorld() == null || !start.getWorld().equals(end.getWorld()))
@@ -588,8 +598,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
 
         while(!openSet.isEmpty())
         {
-            if(iterations > maxIterations)
-                break;
+            if(iterations >= maxIterations)
+                return null;
 
             iterations++;
 
@@ -602,9 +612,10 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             {
                 bestHCost = current.hCost;
                 bestNode = current;
-                if(progressListener != null)
-                    progressListener.accept(Math.clamp(1.0 - (bestHCost / startH), 0.0, 1.0));
             }
+
+            if(progressListener != null)
+                progressListener.accept(Math.clamp(1.0 - (bestHCost / startH), 0.0, 1.0), iterations);
 
             if(current.distanceSqTo(end) < (gridStep * gridStep * 1.5))
             {

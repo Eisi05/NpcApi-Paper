@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Standard block-grid based A* pathfinder.
@@ -130,12 +130,12 @@ public class AStarPathfinder extends AbstractPathfinder
      *
      * @param start            the starting location
      * @param end              the target location
-     * @param progressListener an optional listener that receives calculation progress percentages between 0.0 and 1.0
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a list of locations forming the path, or null if no path could be found
      * @throws PathfindingUtils.PathfindingException if the start or end location fails floor validity checks
      */
     @Override
-    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
+    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable BiConsumer<Double, Integer> progressListener)
             throws PathfindingUtils.PathfindingException
     {
         if(start.getWorld() == null || end.getWorld() == null)
@@ -175,7 +175,7 @@ public class AStarPathfinder extends AbstractPathfinder
 
         while(!openSet.isEmpty())
         {
-            if(iterations > maxIterations)
+            if(iterations >= maxIterations)
                 return null;
 
             iterations++;
@@ -184,11 +184,10 @@ public class AStarPathfinder extends AbstractPathfinder
             openSetIds.remove(current.id);
 
             if(startH > 0 && current.hCost < minH)
-            {
                 minH = current.hCost;
-                if(progressListener != null)
-                    progressListener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0));
-            }
+
+            if(progressListener != null)
+                progressListener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
 
             if(distanceSq(current, end) < 1.0)
                 return retracePath(current);

@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Base abstract class for NPC pathfinding algorithms. Handles shared configuration, safety checks, and surface resolution.
@@ -85,11 +85,11 @@ public abstract class AbstractPathfinder
      *
      * @param start            The starting location
      * @param end              The target location
-     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return A list of locations forming the path, or null if unreachable
      * @throws PathfindingUtils.PathfindingException if start or end location is invalid
      */
-    public abstract @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
+    public abstract @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable BiConsumer<Double, Integer> progressListener)
             throws PathfindingUtils.PathfindingException;
 
 
@@ -115,6 +115,18 @@ public abstract class AbstractPathfinder
                     new BoundingBoxPathfinder(maxIterations, allowDiagonal, entityHeight, entityWidth, gridStep);
         }
 
+        /**
+         * Creates a new instance of the pathfinder with the specified parameters.
+         * <p>
+         * This factory method ensures thread safety by instantiating a fresh pathfinder for every calculation invocation, avoiding shared state issues across
+         * threads.
+         *
+         * @param maxIterations the maximum number of iterations allowed during path calculation
+         * @param allowDiagonal whether diagonal movement is permitted
+         * @param entityHeight  the height of the entity navigating the path
+         * @param entityWidth   the width of the entity navigating the path
+         * @return a newly created, thread-safe instance of the pathfinder
+         */
         @NotNull T create(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth);
     }
 }

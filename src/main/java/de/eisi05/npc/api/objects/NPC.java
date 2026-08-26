@@ -72,6 +72,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -964,14 +965,14 @@ public class NPC extends NpcHolder
      * @param waypoints             the list of locations the path must pass through, must not be null
      * @param maxIterations         the maximum number of iterations allowed for the pathfinding algorithm before giving up
      * @param allowDiagonalMovement {@code true} to allow diagonal movement between nodes, {@code false} for straight lines only
-     * @param progressListener      an optional listener to receive progress updates (in percent), can be null
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a {@link CompletableFuture} that will complete with the calculated {@link de.eisi05.npc.api.pathfinding.Path}
      * @throws RuntimeException if an underlying {@link PathfindingUtils.PathfindingException} occurs during execution
      */
     public @NotNull CompletableFuture<de.eisi05.npc.api.pathfinding.Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory<?> pathfinderFactory,
                                                                                         @NotNull List<Location> waypoints, int maxIterations,
                                                                                         boolean allowDiagonalMovement,
-                                                                                        @Nullable Consumer<Double> progressListener)
+                                                                                        @Nullable BiConsumer<Double, Integer> progressListener)
     {
         return CompletableFuture.supplyAsync(() ->
         {
@@ -993,13 +994,13 @@ public class NPC extends NpcHolder
      * @param waypoints             the list of locations the path must pass through, must not be null
      * @param maxIterations         the maximum number of iterations allowed for the pathfinding algorithm before giving up
      * @param allowDiagonalMovement {@code true} to allow diagonal movement between nodes, {@code false} for straight lines only
-     * @param progressListener      an optional listener to receive progress updates (in percent), can be null
+     * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return the calculated {@link de.eisi05.npc.api.pathfinding.Path}, must not be null
      * @throws PathfindingUtils.PathfindingException if the pathfinding algorithm fails to find a valid path or encounters an error
      */
     public @NotNull de.eisi05.npc.api.pathfinding.Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> pathfinderFactory,
                                                                 @NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
-                                                                @Nullable Consumer<Double> progressListener)
+                                                                @Nullable BiConsumer<Double, Integer> progressListener)
             throws PathfindingUtils.PathfindingException
     {
         AABB boundingBox = entity.getBoundingBox();
