@@ -142,12 +142,12 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                     Block block = world.getBlockAt(bx, by, bz);
                     Material mat = block.getType();
 
-                    if(mat == Material.LAVA || mat == Material.FIRE || mat == Material.SOUL_FIRE || mat == Material.MAGMA_BLOCK)
-                        hazardPenalty += 10.0;
-
                     if(block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() || block.isLiquid() ||
                             NpcApi.config.pathfindingPassableOverride().test(block))
                         continue;
+
+                    if(mat == Material.LAVA || mat == Material.FIRE || mat == Material.SOUL_FIRE || mat == Material.MAGMA_BLOCK)
+                        hazardPenalty += 10.0;
 
                     Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
                     if(boxes.isEmpty())
