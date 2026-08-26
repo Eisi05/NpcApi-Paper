@@ -40,6 +40,7 @@ public class AStarPathfinder extends AbstractPathfinder
     private final PriorityQueue<Node> openSet = new PriorityQueue<>();
     private final Set<Long> openSetIds = new HashSet<>();
     private final Long2ObjectOpenHashMap<Node> allNodes = new Long2ObjectOpenHashMap<>();
+    private final Long2ObjectOpenHashMap<Collection<BoundingBox>> boundingBoxCache = new Long2ObjectOpenHashMap<>();
     private World world;
 
     /**
@@ -96,14 +97,25 @@ public class AStarPathfinder extends AbstractPathfinder
                     if(block.getBlockData() instanceof Openable)
                         continue;
 
+                    if(NpcApi.config.pathfindingPassableOverride().test(block))
+                        continue;
+
                     Collection<BoundingBox> blockBoxes = block.getCollisionShape().getBoundingBoxes();
                     if(blockBoxes.isEmpty())
                         continue;
 
                     for(BoundingBox blockBox : blockBoxes)
                     {
-                        BoundingBox absoluteBox = blockBox.clone().shift(x, y, z);
-                        if(entityBox.overlaps(absoluteBox))
+                        double bMinX = blockBox.getMinX() + x;
+                        double bMaxX = blockBox.getMaxX() + x;
+                        double bMinY = blockBox.getMinY() + y;
+                        double bMaxY = blockBox.getMaxY() + y;
+                        double bMinZ = blockBox.getMinZ() + z;
+                        double bMaxZ = blockBox.getMaxZ() + z;
+
+                        if(entityBox.getMinX() < bMaxX && entityBox.getMaxX() > bMinX &&
+                                entityBox.getMinY() < bMaxY && entityBox.getMaxY() > bMinY &&
+                                entityBox.getMinZ() < bMaxZ && entityBox.getMaxZ() > bMinZ)
                             return false;
                     }
                 }
@@ -307,7 +319,6 @@ public class AStarPathfinder extends AbstractPathfinder
         for(int y = startY + 1; y >= startY - 6; y--)
         {
             Block block = w.getBlockAt(bx, y, bz);
-
             if(block.getBlockData() instanceof Openable)
                 continue;
 
@@ -317,7 +328,7 @@ public class AStarPathfinder extends AbstractPathfinder
             if(!block.getType().isSolid() || block.isPassable() || NpcApi.config.pathfindingPassableOverride().test(block))
                 continue;
 
-            Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
+            Collection<BoundingBox> boxes = getCachedCollisions(block);
             if(boxes.isEmpty())
                 return y;
 
@@ -376,7 +387,7 @@ public class AStarPathfinder extends AbstractPathfinder
      */
     private double topSurfaceAt(@NotNull Block block, double lx, double lz)
     {
-        Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
+        Collection<BoundingBox> boxes = getCachedCollisions(block);
         if(boxes.isEmpty())
             return 1.0;
 
@@ -398,6 +409,26 @@ public class AStarPathfinder extends AbstractPathfinder
             return 1.0;
 
         return bestTop;
+    }
+
+    /**
+     * Retrieves cached block collision.
+     *
+     * @param block the block to retrieve cached collisions for
+     * @return the corresponding collection of bounding boxes
+     */
+    private @NotNull Collection<BoundingBox> getCachedCollisions(@NotNull Block block)
+    {
+        long key = packBlockCoord(block.getX(), block.getY(), block.getZ());
+        Collection<BoundingBox> cached = boundingBoxCache.get(key);
+        if(cached != null)
+            return cached;
+
+        boolean bodyPassable = block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() ||
+                NpcApi.config.pathfindingPassableOverride().test(block);
+        Collection<BoundingBox> boxes = bodyPassable ? Collections.emptyList() : block.getCollisionShape().getBoundingBoxes();
+        boundingBoxCache.put(key, boxes);
+        return boxes;
     }
 
     /**

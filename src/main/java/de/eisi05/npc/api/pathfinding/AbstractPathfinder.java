@@ -55,6 +55,19 @@ public abstract class AbstractPathfinder
     }
 
     /**
+     * Packs block coordinates into a single unique long identifier hash.
+     *
+     * @param x the block X coordinate
+     * @param y the block Y coordinate
+     * @param z the block Z coordinate
+     * @return the packed coordinate hash
+     */
+    protected static long packBlockCoord(int x, int y, int z)
+    {
+        return ((long) (x & 0x3FFFFFF)) | (((long) (z & 0x3FFFFFF)) << 26) | (((long) (y & 0xFFF)) << 52);
+    }
+
+    /**
      * Calculates a path from start to end.
      *
      * @param start The starting location
@@ -76,7 +89,8 @@ public abstract class AbstractPathfinder
      * @return A list of locations forming the path, or null if unreachable
      * @throws PathfindingUtils.PathfindingException if start or end location is invalid
      */
-    public abstract @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener) throws PathfindingUtils.PathfindingException;
+    public abstract @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable Consumer<Double> progressListener)
+            throws PathfindingUtils.PathfindingException;
 
 
     /**

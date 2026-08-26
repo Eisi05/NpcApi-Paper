@@ -85,19 +85,6 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Packs block coordinates into a single unique long identifier hash.
-     *
-     * @param x the block X coordinate
-     * @param y the block Y coordinate
-     * @param z the block Z coordinate
-     * @return the packed coordinate hash
-     */
-    private static long packBlockCoord(int x, int y, int z)
-    {
-        return ((long) (x & 0x3FFFFFF)) | (((long) (z & 0x3FFFFFF)) << 26) | (((long) (y & 0xFFF)) << 52);
-    }
-
-    /**
      * Resolves ground support for an entity at the specified coordinates using default jump and fall constraints.
      *
      * @param world       the world to check in
