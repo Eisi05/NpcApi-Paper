@@ -44,7 +44,7 @@ This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?lo
 <dependency>
     <groupId>com.github.Eisi05</groupId>
     <artifactId>NpcApi-Paper</artifactId>
-    <version>3.2.2</version>
+    <version>3.3.3</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -60,7 +60,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    compileOnly 'com.github.Eisi05:NpcApi-Paper:3.2.2'
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:3.3.3'
 }
 ```
 
@@ -99,7 +99,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>3.2.2</version>
+	    <version>3.3.3</version>
 	</dependency>
 </dependencies>
 ```
@@ -116,7 +116,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:3.2.2'
+    implementation 'com.github.Eisi05:NpcApi-Paper:3.3.3'
 }
 ```
 
