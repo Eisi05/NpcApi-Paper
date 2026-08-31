@@ -142,6 +142,9 @@ public class Tasks
      */
     public static void updateSkin(@NotNull Player player, @NotNull NPC npc, @NotNull NpcSkin npcSkin)
     {
+        if(!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
+            return;
+
         String newPlaceholder = (String) Reflections.invokeStaticMethod("me.clip.placeholderapi.PlaceholderAPI", "setPlaceholders", player,
                 npcSkin.getPlaceholder()).get();
 
