@@ -4,6 +4,7 @@ import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.Reflections;
+import de.eisi05.npc.api.utils.SerializableBiFunction;
 import de.eisi05.npc.api.utils.TriFunction;
 import de.eisi05.npc.api.utils.serialize.NpcRegistry;
 import org.bukkit.Bukkit;
@@ -30,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </p>
  */
 @JsonAdapter(NpcSkin.NpcSkinAdapter.class)
+@SuppressWarnings({"Convert2Lambda", "Convert2Diamond"})
 public class NpcSkin implements SkinData
 {
     @Serial
@@ -37,33 +39,38 @@ public class NpcSkin implements SkinData
 
     static
     {
-        NpcRegistry.registerSkinFunction(NpcRegistry.KEY_PLACEHOLDER_API, (player, npc, placeholder) ->
+        // Needs to be an anonymous class to avoid lambda deserialization issues
+        NpcRegistry.registerSkinFunction(NpcRegistry.KEY_PLACEHOLDER_API, new TriFunction<Player, NPC, String, Skin>()
         {
-            if(!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
-                return null;
-
-            String newPlaceholder = Tasks.placeholderCache
-                    .computeIfAbsent(npc.getUUID(), k -> new ConcurrentHashMap<>())
-                    .get(player.getUniqueId());
-
-            if(newPlaceholder == null)
-                newPlaceholder = (String) Reflections.invokeStaticMethod("me.clip.placeholderapi.PlaceholderAPI", "setPlaceholders", player, placeholder).get();
-
-            if(newPlaceholder == null)
-                return null;
-
-            try
+            @Override
+            public Skin apply(Player player, NPC npc, String placeholder)
             {
-                UUID uuid = UUID.fromString(newPlaceholder);
-                if(Skin.isPreLoaded(uuid))
-                    return Skin.fetchSkin(uuid).orElse(null);
+                if(!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
+                    return null;
+
+                String newPlaceholder = Tasks.placeholderCache
+                        .computeIfAbsent(npc.getUUID(), k -> new ConcurrentHashMap<>())
+                        .get(player.getUniqueId());
+
+                if(newPlaceholder == null)
+                    newPlaceholder = (String) Reflections.invokeStaticMethod("me.clip.placeholderapi.PlaceholderAPI", "setPlaceholders", player, placeholder).get();
+
+                if(newPlaceholder == null)
+                    return null;
+
+                try
+                {
+                    UUID uuid = UUID.fromString(newPlaceholder);
+                    if(Skin.isPreLoaded(uuid))
+                        return Skin.fetchSkin(uuid).orElse(null);
+                }
+                catch(IllegalArgumentException e)
+                {
+                    if(Skin.isPreLoaded(newPlaceholder))
+                        return Skin.fetchSkin(newPlaceholder).orElse(null);
+                }
+                return null;
             }
-            catch(IllegalArgumentException e)
-            {
-                if(Skin.isPreLoaded(newPlaceholder))
-                    return Skin.fetchSkin(newPlaceholder).orElse(null);
-            }
-            return null;
         });
     }
 
@@ -84,7 +91,6 @@ public class NpcSkin implements SkinData
         this.skinFunctionKey = skinFunctionKey;
         this.placeholder = placeholder;
     }
-
 
     /**
      * Creates a static NPC skin that always uses the given {@link Skin}.
@@ -154,6 +160,29 @@ public class NpcSkin implements SkinData
     public static @NotNull NpcSkin ofPlaceholderAPI(@NotNull String placeholder, @Nullable Skin fallback)
     {
         return new NpcSkin(NpcRegistry.KEY_PLACEHOLDER_API, placeholder, fallback);
+    }
+
+    /**
+     * Hijacks Java's internal lambda deserialization to safely bypass old lambda crashes.
+     */
+    @SuppressWarnings("unused")
+    private static Object $deserializeLambda$(java.lang.invoke.SerializedLambda lambda)
+    {
+        String funcInterface = lambda.getFunctionalInterfaceClass();
+        if (funcInterface != null && funcInterface.contains("SerializableBiFunction"))
+        {
+            return new SerializableBiFunction<Player, NPC, Skin>()
+            {
+                @Override
+                public Skin apply(Player p, NPC n) { return null; }
+            };
+        }
+
+        return new TriFunction<Player, NPC, String, Skin>()
+        {
+            @Override
+            public Skin apply(Player p, NPC n, String s) { return null; }
+        };
     }
 
     /**

@@ -92,7 +92,6 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      */
     public static @Nullable Optional<Skin> fetchSkin(@NotNull UUID uuid)
     {
-
         if(skinCacheUUID.containsKey(uuid))
             return Optional.ofNullable(skinCacheUUID.get(uuid));
 
@@ -102,6 +101,7 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setReadTimeout(10000);
 
+            connection.getResponseCode();
             try(InputStream is = connection.getInputStream(); Scanner scanner = new Scanner(is))
             {
                 String response = scanner.useDelimiter("\\A").next();
@@ -126,6 +126,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
         }
         catch(Exception e)
         {
+            if(NpcApi.config.debug())
+                e.printStackTrace();
+
             skinCacheUUID.remove(uuid);
             return Optional.empty();
         }
@@ -142,12 +145,16 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
         if (input.toLowerCase().startsWith("http://") || input.toLowerCase().startsWith("https://"))
             return fetchSkinByUrl(input);
 
+        if(skinCacheName.containsKey(input))
+            return Optional.ofNullable(skinCacheName.get(input));
+
         try
         {
             URL url = URI.create("https://api.mojang.com/users/profiles/minecraft/" + input).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setReadTimeout(10000);
 
+            conn.getResponseCode();
             try(InputStream is = conn.getInputStream(); Scanner scanner = new Scanner(is))
             {
                 String response = scanner.useDelimiter("\\A").next();
@@ -160,6 +167,9 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
         }
         catch(Exception e)
         {
+            if(NpcApi.config.debug())
+                e.printStackTrace();
+
             skinCacheName.remove(input);
             return Optional.empty();
         }

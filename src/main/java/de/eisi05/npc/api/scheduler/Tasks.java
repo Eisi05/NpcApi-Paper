@@ -17,29 +17,44 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * The {@link Tasks} class manages and starts various recurring tasks related to Non-Player Characters (NPCs) within the Bukkit environment. These tasks often
- * involve NPC behavior such as looking at nearby players.
+ * involve NPC behavior such as looking at nearby players and updating skins via placeholders.
  */
 public class Tasks
 {
     public static final Map<UUID, Map<UUID, String>> placeholderCache = new ConcurrentHashMap<>();
     private static final List<CompletableFuture<?>> activeFutures = new ArrayList<>();
+
+    // --- Skin Queue & Rate Limiting Constants ---
+    private static final Map<String, Long> negativeCache = new ConcurrentHashMap<>();
+    private static final long NEGATIVE_CACHE_DURATION = 300_000L; // 5 minutes
+    private static final PriorityBlockingQueue<SkinRequest> fetchQueue = new PriorityBlockingQueue<>();
+    private static final Map<String, SkinRequest> pendingRequests = new ConcurrentHashMap<>();
+    private static final int MAX_TOKENS = 180;
+    private static final AtomicInteger tokens = new AtomicInteger(MAX_TOKENS);
+
     private static BukkitTask lookAtTask;
     private static BukkitTask placeholderTask;
+    private static BukkitTask queueProcessorTask;
 
     /**
-     * Starts all defined NPC-related tasks. This method should be called when the plugin is enabled to ensure that NPC behaviors are active.
+     * Starts all defined NPC-related tasks, including the skin fetch queue processor. This method should be called when the plugin is enabled to ensure that
+     * NPC behaviors are active.
      */
     public static void start()
     {
         lookAtTask();
         placeholderTask();
+        startQueueProcessor();
     }
 
     /**
-     * Stops all defined NPC-related tasks.
+     * Stops all defined NPC-related tasks and cancels active skin requests.
      */
     public static void stop()
     {
@@ -49,8 +64,12 @@ public class Tasks
         if(placeholderTask != null && !placeholderTask.isCancelled())
             placeholderTask.cancel();
 
+        if(queueProcessorTask != null && !queueProcessorTask.isCancelled())
+            queueProcessorTask.cancel();
+
         lookAtTask = null;
         placeholderTask = null;
+        queueProcessorTask = null;
 
         List<CompletableFuture<?>> futuresToCancel;
         synchronized(activeFutures)
@@ -61,6 +80,96 @@ public class Tasks
 
         for(CompletableFuture<?> future : futuresToCancel)
             future.cancel(true);
+    }
+
+    /**
+     * Starts the asynchronous token bucket rate limiter and queue consumer for skin fetches.
+     */
+    private static void startQueueProcessor()
+    {
+        Bukkit.getScheduler().runTaskTimerAsynchronously(NpcApi.plugin, () ->
+                tokens.updateAndGet(current -> current < MAX_TOKENS ? Math.min(MAX_TOKENS, current + 3) : current), 20L, 20L);
+
+        queueProcessorTask = Bukkit.getScheduler().runTaskTimerAsynchronously(NpcApi.plugin, () ->
+        {
+            SkinRequest request = fetchQueue.peek();
+            if(request == null)
+                return;
+
+            int current;
+            do
+            {
+                current = tokens.get();
+                if(current <= 0)
+                    return;
+            }
+            while(!tokens.compareAndSet(current, current - 1));
+
+            fetchQueue.poll();
+            if(request.cacheKey() != null && isNegativeCached(request.cacheKey()))
+            {
+                request.future().complete(Optional.empty());
+                return;
+            }
+
+            Optional<Skin> result = request.task().get();
+            if(result.isEmpty() && request.cacheKey() != null)
+                addNegativeCache(request.cacheKey());
+            request.future().complete(result);
+        }, 0L, 2L);
+    }
+
+    private static boolean isNegativeCached(String identifier)
+    {
+        if(negativeCache.containsKey(identifier))
+        {
+            if(negativeCache.get(identifier) > System.currentTimeMillis())
+                return true;
+            negativeCache.remove(identifier);
+        }
+        return false;
+    }
+
+    private static void addNegativeCache(String identifier)
+    {
+        if(identifier != null && !identifier.isBlank())
+            negativeCache.put(identifier, System.currentTimeMillis() + NEGATIVE_CACHE_DURATION);
+    }
+
+    /**
+     * Enqueues a skin fetch task, combining futures if a request for the same key is already pending.
+     */
+    private static CompletableFuture<Optional<Skin>> enqueueFetch(@NotNull String cacheKey, @NotNull Supplier<Optional<Skin>> task)
+    {
+        SkinRequest existing = pendingRequests.get(cacheKey);
+        if(existing != null)
+            return existing.future();
+
+        CompletableFuture<Optional<Skin>> future = new CompletableFuture<>();
+        future.whenComplete((result, error) -> pendingRequests.remove(cacheKey));
+
+        SkinRequest request = new SkinRequest(cacheKey, task, future);
+        pendingRequests.put(cacheKey, request);
+        fetchQueue.add(request);
+
+        trackFuture(future);
+        return future;
+    }
+
+    /**
+     * Asynchronously fetches a skin by UUID using the rate-limited queue.
+     */
+    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull UUID uuid)
+    {
+        return enqueueFetch(uuid.toString(), () -> Skin.fetchSkin(uuid));
+    }
+
+    /**
+     * Asynchronously fetches a skin by name or URL using the rate-limited queue.
+     */
+    public static CompletableFuture<Optional<Skin>> fetchSkinAsync(@NotNull String nameOrUrl)
+    {
+        return enqueueFetch(nameOrUrl, () -> Skin.fetchSkin(nameOrUrl));
     }
 
     /**
@@ -133,7 +242,7 @@ public class Tasks
 
     /**
      * Updates the skin of an NPC for a specific player based on a placeholder value. This method handles both UUID and string-based skin lookups, and updates
-     * the NPC's skin asynchronously when the skin is fetched.
+     * the NPC's skin asynchronously when the skin is fetched via the queue.
      *
      * @param player  The player who will see the updated skin. Must not be null.
      * @param npc     The NPC whose skin will be updated. Must not be null.
@@ -158,12 +267,12 @@ public class Tasks
         try
         {
             UUID skinUuid = UUID.fromString(newPlaceholder);
-            Skin.fetchSkinAsync(skinUuid).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
+            fetchSkinAsync(skinUuid).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
                     Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
         }
         catch(IllegalArgumentException e)
         {
-            Skin.fetchSkinAsync(newPlaceholder).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
+            fetchSkinAsync(newPlaceholder).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
                     Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
         }
     }
@@ -195,5 +304,14 @@ public class Tasks
                 activeFutures.remove(future);
             }
         });
+    }
+
+    private record SkinRequest(String cacheKey, Supplier<Optional<Skin>> task, CompletableFuture<Optional<Skin>> future) implements Comparable<SkinRequest>
+    {
+        @Override
+        public int compareTo(@NotNull SkinRequest o)
+        {
+            return 0;
+        }
     }
 }
