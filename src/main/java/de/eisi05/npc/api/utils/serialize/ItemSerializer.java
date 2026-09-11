@@ -5,7 +5,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
+
+import java.util.Base64;
 
 /**
  * The {@link ItemSerializer} class provides utility methods for serializing and deserializing
@@ -24,7 +25,7 @@ public class ItemSerializer
      */
     public static @NotNull String itemStackToBase64(@NotNull ItemStack item)
     {
-        return Base64Coder.encodeLines(item.serializeAsBytes());
+        return Base64.getEncoder().encodeToString(item.serializeAsBytes());
     }
 
     /**
@@ -37,6 +38,6 @@ public class ItemSerializer
      */
     public static @Nullable ItemStack itemStackFromBase64(@NotNull String data)
     {
-        return ItemStack.deserializeBytes(Base64Coder.decodeLines(data));
+        return ItemStack.deserializeBytes(Base64.getMimeDecoder().decode(data));
     }
 }
