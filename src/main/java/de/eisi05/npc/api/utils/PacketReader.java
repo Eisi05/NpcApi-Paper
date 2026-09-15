@@ -5,11 +5,11 @@ import de.eisi05.npc.api.enums.ClickActionType;
 import de.eisi05.npc.api.events.NpcInteractEvent;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -105,7 +105,7 @@ public class PacketReader
             {
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
                 serverPlayer.stopUsingItem();
-                serverPlayer.connection.send(new ClientboundAnimatePacket(serverPlayer, ClientboundAnimatePacket.SWING_MAIN_HAND));
+                serverPlayer.connection.send((Packet<?>) AnimatePacket.create(serverPlayer, AnimatePacket.Animation.SWING_MAIN_HAND));
                 player.updateInventory();
             });
         }

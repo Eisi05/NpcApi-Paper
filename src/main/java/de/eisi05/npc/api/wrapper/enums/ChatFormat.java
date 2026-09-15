@@ -3,7 +3,6 @@ package de.eisi05.npc.api.wrapper.enums;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.format.TextFormat;
-import net.kyori.adventure.text.serializer.legacy.Reset;
 
 import java.io.Serializable;
 
@@ -29,8 +28,7 @@ public enum ChatFormat implements Serializable
     BOLD('l', TextDecoration.BOLD),
     STRIKETHROUGH('m', TextDecoration.STRIKETHROUGH),
     UNDERLINE('n', TextDecoration.UNDERLINED),
-    ITALIC('o', TextDecoration.ITALIC),
-    RESET('p', Reset.INSTANCE);
+    ITALIC('o', TextDecoration.ITALIC),;
 
     private final char color;
     private final TextFormat textFormat;

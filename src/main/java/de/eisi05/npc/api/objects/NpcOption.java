@@ -229,10 +229,13 @@ public class NpcOption<T, S extends Serializable>
                 if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
                     commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
-                else
+                else if(Versions.isCurrentVersionSmallerThan(Versions.V26_3))
                     commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
                             new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
+                else
+                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
+                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null, new HashSet<>()).orElseThrow();
 
                 npcServerPlayer.connection = new ServerGamePacketListenerImpl(((CraftServer) Bukkit.getServer()).getServer(),
                         new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
@@ -644,7 +647,7 @@ public class NpcOption<T, S extends Serializable>
 
                 npc.entity = entity;
                 if(entity instanceof EnderDragon dragon)
-                    Arrays.stream(dragon.subEntities).forEach(part -> NpcManager.addID(part.getId(), npc));
+                    Arrays.stream(dragon.getSubEntities()).forEach(part -> NpcManager.addID(part.getId(), npc));
 
                 NpcManager.addID(npc.entity.getId(), npc);
 

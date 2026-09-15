@@ -119,8 +119,11 @@ public class Var
                             return BiConsumer.super.andThen(after);
                         }
                     }, Set.of()).orElseThrow();
-        else
+        else if(Versions.isCurrentVersionSmallerThan(Versions.V26_3))
             serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false, null, Set.of()).orElseThrow();
+        else
+            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity,
+                    Reflections.getStaticField("net.minecraft.world.entity.UpdateInterval", "NEVER"), false, null, Set.of()).orElseThrow();
 
         return serverEntity;
     }
