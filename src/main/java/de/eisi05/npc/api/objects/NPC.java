@@ -174,7 +174,7 @@ public class NPC extends NpcHolder
                 Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
                         EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
                 ((CraftWorld) location.getWorld()).getHandle());
-        Var.moveEntity(display, location.getX(), location.getY() + 2, location.getZ(), 0f, 0f);
+        Var.moveEntity(display, location.getX(), location.getY() + 0.2, location.getZ(), 0f, 0f);
 
         nameTag = new CustomNameTag(display);
         serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(name.getName()));
@@ -748,7 +748,6 @@ public class NPC extends NpcHolder
         NpcOption.ENABLED.getPacket(this, player).map(o -> (Packet<?>) o).ifPresent(packets::add);
 
         packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, wrappedServerPlayer));
-
         packets.add(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED, wrappedServerPlayer));
 
         ServerGamePacketListenerImpl connection = wrappedServerPlayer.connection;
@@ -879,11 +878,8 @@ public class NPC extends NpcHolder
 
         double dx = targetLoc.getX() - npcLoc.getX();
 
-        double eyeHeight = (entity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() :
-                entity.getBukkitEntity().getHeight()) - (getOption(NpcOption.POSE, viewer) == Pose.SITTING ? 0.625 : 0);
-
         double dy = (targetLoc.getY() + (targetEntity instanceof LivingEntity le ? le.getEyeHeight() : targetEntity.getHeight())) -
-                (npcLoc.getY() + (eyeHeight * getOption(NpcOption.SCALE, viewer)));
+                (npcLoc.getY() + getEyeHeight(viewer));
         double dz = targetLoc.getZ() - npcLoc.getZ();
 
         double distanceXZ = Math.sqrt(dx * dx + dz * dz);
@@ -913,8 +909,12 @@ public class NPC extends NpcHolder
     {
         Pose pose = viewer == null ? getOption(NpcOption.POSE) : getOption(NpcOption.POSE, viewer);
         double scale = viewer == null ? getOption(NpcOption.SCALE) : getOption(NpcOption.SCALE, viewer);
-        double eyeHeight = (entity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() :
-                entity.getBukkitEntity().getHeight()) - (pose == Pose.SITTING ? 0.625 : 0);
+        org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
+
+        double eyeHeight = bukkitEntity instanceof LivingEntity living ? living.getEyeHeight() : bukkitEntity.getHeight();
+        if (pose == Pose.SITTING)
+            eyeHeight -= Math.pow(((AABB) getDefaultBoundingBox()).getYsize() / 1.8D, 1.175D) * 0.625D;
+
         return eyeHeight * scale;
     }
 
@@ -933,10 +933,7 @@ public class NPC extends NpcHolder
 
         double dx = playerLoc.getX() - npcLoc.getX();
 
-        double eyeHeight = (entity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() :
-                entity.getBukkitEntity().getHeight()) - (getOption(NpcOption.POSE, viewer) == Pose.SITTING ? 0.625 : 0);
-
-        double dy = (playerLoc.getY() + viewer.getEyeHeight()) - (npcLoc.getY() + (eyeHeight * getOption(NpcOption.SCALE, viewer)));
+        double dy = (playerLoc.getY() + viewer.getEyeHeight()) - (npcLoc.getY() + getEyeHeight(viewer));
         double dz = playerLoc.getZ() - npcLoc.getZ();
 
         double distanceXZ = Math.sqrt(dx * dx + dz * dz);

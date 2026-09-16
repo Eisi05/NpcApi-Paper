@@ -43,6 +43,7 @@ import net.minecraft.world.entity.Interaction;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -229,13 +230,20 @@ public class NpcOption<T, S extends Serializable>
                 if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
                     commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
                             npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
-                else if(Versions.isCurrentVersionSmallerThan(Versions.V26_3))
-                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
-                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
-                            new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
                 else
-                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
-                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null, new HashSet<>()).orElseThrow();
+                {
+                    try
+                    {
+                        commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
+                                npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
+                                new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
+                    }
+                    catch(Exception e)
+                    {
+                        commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
+                                npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null, new HashSet<>()).orElseThrow();
+                    }
+                }
 
                 npcServerPlayer.connection = new ServerGamePacketListenerImpl(((CraftServer) Bukkit.getServer()).getServer(),
                         new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
@@ -644,6 +652,11 @@ public class NpcOption<T, S extends Serializable>
                 }
                 else
                     entity = npc.entity;
+
+                Location location = npc.getLocation();
+                if(npc.getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SITTING)
+                    location = location.clone().subtract(0, npc.getOption(NpcOption.SCALE) * (((AABB) npc.getDefaultBoundingBox()).getYsize() / 3D),0);
+                Var.moveEntity(entity, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
 
                 npc.entity = entity;
                 if(entity instanceof EnderDragon dragon)
