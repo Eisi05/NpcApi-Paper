@@ -655,8 +655,11 @@ public class NpcOption<T, S extends Serializable>
 
                 Location location = npc.getLocation();
                 if(npc.getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SITTING)
-                    location = location.clone().subtract(0, npc.getOption(NpcOption.SCALE) * (((AABB) npc.getDefaultBoundingBox()).getYsize() / 3D),0);
+                    location = location.clone().subtract(0, npc.getOption(NpcOption.SCALE) * (((AABB) npc.getDefaultBoundingBox()).getYsize() / 3D), 0);
                 Var.moveEntity(entity, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+
+                Var.moveEntity((Entity) npc.getNameTag().getDisplay(), location.getX(),
+                        location.getY() + 0.25 + npc.getNpcName().getDisplayOptions().getHeight(), location.getZ(), 0f, 0f);
 
                 npc.entity = entity;
                 if(entity instanceof EnderDragon dragon)

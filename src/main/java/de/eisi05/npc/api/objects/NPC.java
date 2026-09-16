@@ -169,7 +169,6 @@ public class NPC extends NpcHolder
         for(NpcOption<?, ?> value : NpcOption.values())
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
 
-
         Display.TextDisplay display = new Display.TextDisplay(
                 Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
                         EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
