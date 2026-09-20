@@ -166,8 +166,11 @@ public class NPC extends NpcHolder
 
         defaultBoundingBoxPlayer = serverPlayer.getBoundingBox();
 
+        boolean autoUpdate = NpcApi.config.autoUpdate();
+        NpcApi.config.autoUpdate(false);
         for(NpcOption<?, ?> value : NpcOption.values())
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
+        NpcApi.config.autoUpdate(autoUpdate);
 
         Display.TextDisplay display = new Display.TextDisplay(
                 Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
@@ -387,9 +390,16 @@ public class NPC extends NpcHolder
         Set<UUID> specificPlayers = visibilityManager.getSpecificPlayers();
         hideNpcFromAllPlayers();
         TeamManager.clear(getGameProfileName());
-        visibilityManager.setShowToAllPlayers(shouldShowToAll);
-        specificPlayers.forEach(visibilityManager::addSpecificPlayer);
-        viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
+
+        if(shouldShowToAll)
+            showNpcToAllPlayers();
+        else
+        {
+            visibilityManager.setShowToAllPlayers(shouldShowToAll);
+            specificPlayers.forEach(visibilityManager::addSpecificPlayer);
+            viewers.stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).forEach(uuid -> showNPCToPlayer(Bukkit.getPlayer(uuid)));
+        }
+
         if(!hasUnsavedChanges)
         {
             try
