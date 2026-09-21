@@ -149,7 +149,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                     if(mat == Material.LAVA || mat == Material.FIRE || mat == Material.SOUL_FIRE || mat == Material.MAGMA_BLOCK)
                         hazardPenalty += 10.0;
 
-                    Collection<BoundingBox> boxes = block.getCollisionShape().getBoundingBoxes();
+                    Collection<BoundingBox> boxes = getBlockBoxes(block);
                     if(boxes.isEmpty())
                     {
                         double top = by + 1.0;
@@ -217,7 +217,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
 
         boolean bodyPassable = block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() ||
                 NpcApi.config.pathfindingPassableOverride().test(block);
-        Collection<BoundingBox> boxes = bodyPassable ? Collections.emptyList() : block.getCollisionShape().getBoundingBoxes();
+        Collection<BoundingBox> boxes = bodyPassable ? Collections.emptyList() : getBlockBoxes(block);
 
         boolean isFootingSolid = !bodyPassable && !block.isLiquid();
 
@@ -297,7 +297,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         if(hDist < 0.0001 && Math.abs(dy) < 0.0001)
             return true;
 
-        double safeStep = Math.max(0.1, entityWidth / 2.0);
+        double safeStep = Math.max(0.05, entityWidth / 2.0);
 
         if(dy > 0.0001)
         {
@@ -310,7 +310,6 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             }
         }
 
-        double sweepY = Math.max(y1, y2);
         if(hDist > 0.0001)
         {
             int hSteps = Math.max(1, (int) Math.ceil(hDist / safeStep));
@@ -322,24 +321,27 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             {
                 double cx = x1 + (stepX * i);
                 double cz = z1 + (stepZ * i);
-
-                if(!isBoxValidAtCached(cx, sweepY, cz))
-                    return false;
+                double testY = y1 + (dy * (i / (double) hSteps));
 
                 if(checkGround)
                 {
-                    FootSupport support = resolveFootSupport(cx, sweepY, cz);
+                    FootSupport support = resolveFootSupport(cx, testY, cz);
                     if(!support.valid())
                         return false;
 
+                    testY = support.feetY();
+
                     if(i > 0)
                     {
-                        double stepYDiff = support.feetY() - lastFeetY;
+                        double stepYDiff = testY - lastFeetY;
                         if(stepYDiff > maxJumpHeight || stepYDiff < -maxFallDistance)
                             return false;
                     }
-                    lastFeetY = support.feetY();
+                    lastFeetY = testY;
                 }
+
+                if(!isBoxValidAtCached(cx, testY, cz))
+                    return false;
             }
         }
 
@@ -559,42 +561,29 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         FootSupport startSupport = resolveFootSupport(start.getX(), start.getY(), start.getZ());
         FootSupport endSupport = resolveFootSupport(end.getX(), end.getY(), end.getZ());
 
-        double startFeetY = startSupport.valid ? startSupport.feetY : start.getY();
-        double endFeetY = endSupport.valid ? endSupport.feetY : end.getY();
-
         if(NpcApi.config.checkValidPath())
         {
-            if(!startSupport.valid)
-                throw new PathfindingUtils.PathfindingException("Start location has no valid floor support: " + start);
-            if(!endSupport.valid)
-                throw new PathfindingUtils.PathfindingException("End location has no valid floor support: " + end);
+            if(!startSupport.valid())
+                throw new PathfindingUtils.PathfindingException("Start location has no valid ground support: " + start);
+
+            if(!endSupport.valid())
+                throw new PathfindingUtils.PathfindingException("End location has no valid ground support: " + end);
         }
 
-        SubNode startNode = createSubNode(start.getX(), startFeetY, start.getZ(), null);
+        double startFeetY = startSupport.valid() ? startSupport.feetY() : start.getY();
+        double endFeetY = endSupport.valid() ? endSupport.feetY() : end.getY();
+
+        SubNode startNode = new SubNode(start.getX(), startFeetY, start.getZ(), gridStep);
         startNode.gCost = 0;
         startNode.calculateH(end);
 
         double startH = startNode.hCost;
+        double minH = startH;
 
         openSet.add(startNode);
         allNodes.put(startNode.id, startNode);
 
-        SubNode bestNode = startNode;
-        double bestHCost = startNode.hCost;
-
         int iterations = 0;
-        double[][] directions;
-        if(allowDiagonal)
-        {
-            directions = new double[][]{
-                    {1, 0}, {0, 1}, {-1, 0}, {0, -1},
-                    {0.7071, 0.7071}, {-0.7071, 0.7071}, {0.7071, -0.7071}, {-0.7071, -0.7071},
-                    {0.9238, 0.3826}, {0.3826, 0.9238}, {-0.3826, 0.9238}, {-0.9238, 0.3826},
-                    {-0.9238, -0.3826}, {-0.3826, -0.9238}, {0.3826, -0.9238}, {0.9238, -0.3826}
-            };
-        }
-        else
-            directions = new double[][]{{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
 
         while(!openSet.isEmpty())
         {
@@ -604,194 +593,328 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             iterations++;
 
             SubNode current = openSet.poll();
-            if(current.closed)
-                continue;
 
-            current.closed = true;
-            if(startH > 0 && current.hCost < bestHCost)
-            {
-                bestHCost = current.hCost;
-                bestNode = current;
-            }
+            if(startH > 0 && current.hCost < minH)
+                minH = current.hCost;
 
             if(progressListener != null)
-                progressListener.accept(Math.clamp(1.0 - (bestHCost / startH), 0.0, 1.0), iterations);
+                progressListener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
 
-            if(current.distanceSqTo(end) < (gridStep * gridStep * 1.5))
+
+            if(current.distanceSqTo(end.getX(), endFeetY, end.getZ()) <= (gridStep * 1.5) * (gridStep * 1.5))
             {
-                List<Location> rawPath = retracePath(current);
-                return simplifyPath(rawPath, end);
+                List<Location> rawPath = retracePath(current, end);
+                return postProcessAndGroundPath(rawPath);
             }
 
-            double endYDiff = endFeetY - current.y;
-            if(endYDiff <= maxJumpHeight && endYDiff >= -maxFallDistance && canSweepWalk(current.x, current.y, current.z, end.getX(), endFeetY, end.getZ()))
+            current.closed = true;
+
+            for(double dx = -gridStep; dx <= gridStep; dx += gridStep)
             {
-                SubNode endNode = createSubNode(end.getX(), endFeetY, end.getZ(), null);
-                double directCost = current.gCost + current.distanceTo(end.getX(), endFeetY, end.getZ());
-                if(directCost < endNode.gCost)
+                for(double dz = -gridStep; dz <= gridStep; dz += gridStep)
                 {
-                    endNode.gCost = directCost;
-                    endNode.parent = current;
+                    if(Math.abs(dx) < 0.001 && Math.abs(dz) < 0.001)
+                        continue;
+
+                    if(!allowDiagonal && Math.abs(dx) > 0.001 && Math.abs(dz) > 0.001)
+                        continue;
+
+                    double targetX = current.x + dx;
+                    double targetZ = current.z + dz;
+
+                    FootSupport supp = resolveFootSupport(targetX, current.y, targetZ);
+                    if(!supp.valid())
+                        continue;
+
+                    double targetY = supp.feetY();
+                    double dy = targetY - current.y;
+
+                    if(dy > maxJumpHeight || dy < -maxFallDistance)
+                        continue;
+
+                    if(!canSweepWalk(current.x, current.y, current.z, targetX, targetY, targetZ))
+                        continue;
+
+                    long id = SubNode.hash(targetX, targetY, targetZ, gridStep);
+                    SubNode neighbor = allNodes.get(id);
+
+                    if(neighbor == null)
+                    {
+                        neighbor = new SubNode(targetX, targetY, targetZ, gridStep);
+                        allNodes.put(id, neighbor);
+                    }
+
+                    if(neighbor.closed)
+                        continue;
+
+                    boolean shortcutUsed = false;
+                    // Prevent Theta* shortcuts across vertical height differences to keep jumps grounded
+                    if(current.parent != null && Math.abs(current.parent.y - targetY) < 0.01)
+                    {
+                        if(canSweepWalk(current.parent.x, current.parent.y, current.parent.z, targetX, targetY, targetZ))
+                        {
+                            double dist = distance(current.parent.x, current.parent.y, current.parent.z, targetX, targetY, targetZ);
+                            double newGCost = current.parent.gCost + dist + supp.hazardPenalty();
+                            if(newGCost < neighbor.gCost)
+                            {
+                                neighbor.gCost = newGCost;
+                                neighbor.parent = current.parent;
+                                neighbor.calculateH(end);
+                                shortcutUsed = true;
+
+                                if(!openSet.contains(neighbor))
+                                    openSet.add(neighbor);
+                            }
+                        }
+                    }
+
+                    if(!shortcutUsed)
+                    {
+                        double dist = distance(current.x, current.y, current.z, targetX, targetY, targetZ);
+                        double newGCost = current.gCost + dist + supp.hazardPenalty();
+                        if(newGCost < neighbor.gCost)
+                        {
+                            neighbor.gCost = newGCost;
+                            neighbor.parent = current;
+                            neighbor.calculateH(end);
+
+                            if(!openSet.contains(neighbor))
+                                openSet.add(neighbor);
+                        }
+                    }
+
+                    processClearanceOffsets(targetX, targetY, targetZ, current, end);
                 }
-                List<Location> rawPath = retracePath(endNode);
-                return simplifyPath(rawPath, end);
-            }
-
-            for(double[] dir : directions)
-            {
-                double targetX = current.x + (dir[0] * gridStep);
-                double targetZ = current.z + (dir[1] * gridStep);
-
-                evaluateCandidatePoint(targetX, targetZ, current, end);
-                if(!isBoxValidAtCached(targetX, current.y, targetZ))
-                    processClearanceOffsets(targetX, current.y, targetZ, current, end);
             }
         }
 
-        if(bestNode == startNode)
-            return null;
-
-        List<Location> rawPath = retracePath(bestNode);
-        return simplifyPath(rawPath, rawPath.isEmpty() ? end : rawPath.getLast());
+        return null;
     }
 
     /**
      * Evaluates a candidate point during path exploration, updating costs and parent nodes if optimal.
      *
-     * @param nextX   the target candidate X coordinate
-     * @param nextZ   the target candidate Z coordinate
+     * @param candX   the target candidate X coordinate
+     * @param candZ   the target candidate Z coordinate
      * @param current the current sub-node
      * @param end     the target end location
      */
-    private void evaluateCandidatePoint(double nextX, double nextZ, SubNode current, Location end)
+    private void evaluateCandidatePoint(double candX, double candZ, SubNode current, Location end)
     {
-        FootSupport footSupport = resolveFootSupport(nextX, current.y, nextZ);
-        if(!footSupport.valid())
+        FootSupport supp = resolveFootSupport(candX, current.y, candZ);
+        if(!supp.valid())
             return;
 
-        double nextFeetY = footSupport.feetY();
-        double yDiff = nextFeetY - current.y;
-
-        if(yDiff > maxJumpHeight || yDiff < -maxFallDistance)
+        double targetY = supp.feetY();
+        double dy = targetY - current.y;
+        if(dy > maxJumpHeight || dy < -maxFallDistance)
             return;
 
-        if(!canSweepMove(current.x, current.y, current.z, nextX, nextFeetY, nextZ))
+        if(!canSweepWalk(current.x, current.y, current.z, candX, targetY, candZ))
             return;
 
-        SubNode neighbor = createSubNode(nextX, nextFeetY, nextZ, null);
+        long id = SubNode.hash(candX, targetY, candZ, gridStep);
+        SubNode neighbor = allNodes.get(id);
+
+        if(neighbor == null)
+        {
+            neighbor = new SubNode(candX, targetY, candZ, gridStep);
+            allNodes.put(id, neighbor);
+        }
+
         if(neighbor.closed)
             return;
 
-        SubNode parentCandidate = (current.parent != null) ? current.parent : current;
-        boolean losFromParent = false;
-
-        if(parentCandidate != current)
-        {
-            double pYDiff = nextFeetY - parentCandidate.y;
-            if(Math.abs(pYDiff) <= 0.1)
-                losFromParent = canSweepWalk(parentCandidate.x, parentCandidate.y, parentCandidate.z, nextX, nextFeetY, nextZ);
-        }
-
-        SubNode selectedParent = losFromParent ? parentCandidate : current;
-        double stepDistance = selectedParent.distanceTo(nextX, nextFeetY, nextZ);
-        double newGCost = selectedParent.gCost + stepDistance + footSupport.hazardPenalty();
+        double dist = distance(current.x, current.y, current.z, candX, targetY, candZ);
+        double newGCost = current.gCost + dist + supp.hazardPenalty();
 
         if(newGCost < neighbor.gCost)
         {
             neighbor.gCost = newGCost;
+            neighbor.parent = current;
             neighbor.calculateH(end);
-            neighbor.parent = selectedParent;
-            openSet.add(neighbor);
+
+            if(!openSet.contains(neighbor))
+                openSet.add(neighbor);
         }
-    }
-
-    /**
-     * Creates or retrieves a sub-node for the given coordinates from the node registry.
-     *
-     * @param x          X coordinate
-     * @param y          Y coordinate
-     * @param z          Z coordinate
-     * @param explicitId explicit node identifier, or null to auto-generate
-     * @return the created or cached sub-node
-     */
-    private SubNode createSubNode(double x, double y, double z, @Nullable Long explicitId)
-    {
-        long id = (explicitId != null) ? explicitId : SubNode.hash(x, y, z, gridStep);
-        SubNode existing = allNodes.get(id);
-        if(existing != null)
-            return existing;
-
-        SubNode node = new SubNode(x, y, z, id);
-        allNodes.put(id, node);
-        return node;
     }
 
     /**
      * Retraces the path backwards from the given sub-node to construct a raw location list.
      *
-     * @param current the target sub-node
+     * @param endNode the target sub-node
+     * @param destination the final target destination
      * @return a list of locations representing the raw path
      */
-    private @NotNull List<Location> retracePath(@NotNull SubNode current)
+    private List<Location> retracePath(SubNode endNode, Location destination)
     {
         List<Location> path = new ArrayList<>();
+        SubNode current = endNode;
+
         while(current != null)
         {
             path.add(new Location(world, current.x, current.y, current.z));
             current = current.parent;
         }
+
         Collections.reverse(path);
+
+        if(!path.isEmpty())
+        {
+            if(path.getLast().distanceSquared(destination) > 0.001)
+            {
+                FootSupport endSupp = resolveFootSupport(destination.getX(), destination.getY(), destination.getZ());
+                double endFeetY = endSupp.valid() ? endSupp.feetY() : destination.getY();
+                path.add(new Location(world, destination.getX(), endFeetY, destination.getZ()));
+            }
+        }
+
         return path;
     }
 
     /**
-     * Simplifies and smooths a raw path using line-of-sight sweep checks.
+     * Post-processes a raw path by grounding every segment to the actual block floor surface,
+     * inserting explicit step/jump transition waypoints where elevation changes occur, and simplifying
+     * redundant collinear points while maintaining off-grid precision.
      *
-     * @param path      the raw path locations
-     * @param targetEnd the final target destination
-     * @return a smoothed list of path locations
+     * @param rawPath the initial path from graph search
+     * @return a clean, fully grounded list of locations with no floating segments
      */
-    private List<Location> simplifyPath(List<Location> path, Location targetEnd)
+    private List<Location> postProcessAndGroundPath(List<Location> rawPath)
     {
-        if(path.isEmpty())
-            return path;
+        if(rawPath == null || rawPath.size() < 2)
+            return rawPath;
 
-        List<Location> smoothPath = new ArrayList<>();
-        Location current = path.getFirst();
-        smoothPath.add(current);
+        List<Location> groundedDense = new ArrayList<>();
 
-        int i = 0;
-        while(i < path.size() - 1)
+        Location first = rawPath.getFirst();
+        FootSupport firstSupp = resolveFootSupport(first.getX(), first.getY(), first.getZ());
+        double currentFeetY = firstSupp.valid() ? firstSupp.feetY() : first.getY();
+
+        groundedDense.add(new Location(world, first.getX(), currentFeetY, first.getZ()));
+
+        double stepSize = Math.max(0.05, gridStep);
+
+        for(int i = 0; i < rawPath.size() - 1; i++)
         {
-            int furthestVisible = i + 1;
-            for(int j = i + 2; j < path.size(); j++)
+            Location p1 = rawPath.get(i);
+            Location p2 = rawPath.get(i + 1);
+
+            double dx = p2.getX() - p1.getX();
+            double dz = p2.getZ() - p1.getZ();
+            double hDist = Math.sqrt(dx * dx + dz * dz);
+
+            int steps = Math.max(1, (int) Math.ceil(hDist / stepSize));
+            double stepX = dx / steps;
+            double stepZ = dz / steps;
+
+            for(int s = 1; s <= steps; s++)
             {
-                Location target = path.get(j);
-                if(Math.abs(target.getY() - current.getY()) > 0.1)
+                double cx = p1.getX() + (stepX * s);
+                double cz = p1.getZ() + (stepZ * s);
+
+                FootSupport supp = resolveFootSupport(cx, currentFeetY, cz);
+                double targetFeetY = supp.valid() ? supp.feetY() : currentFeetY;
+
+                if(Math.abs(targetFeetY - currentFeetY) > 0.01)
+                {
+                    if(targetFeetY < currentFeetY)
+                    {
+                        groundedDense.add(new Location(world, cx, currentFeetY, cz));
+                        groundedDense.add(new Location(world, cx, targetFeetY, cz));
+                    }
+                    else
+                    {
+                        double edgeX = p1.getX() + (stepX * (s - 0.5));
+                        double edgeZ = p1.getZ() + (stepZ * (s - 0.5));
+                        groundedDense.add(new Location(world, edgeX, currentFeetY, edgeZ));
+                        groundedDense.add(new Location(world, edgeX, targetFeetY, edgeZ));
+                    }
+
+                    currentFeetY = targetFeetY;
+                }
+
+                groundedDense.add(new Location(world, cx, currentFeetY, cz));
+            }
+        }
+
+        return simplifyGroundedPath(groundedDense);
+    }
+
+    /**
+     * Simplifies a dense grounded path by removing redundant intermediate points on the same ground plane
+     * and combining straight-line horizontal moves that have clear line-of-sight and ground support.
+     */
+    private List<Location> simplifyGroundedPath(List<Location> densePath)
+    {
+        if(densePath.size() <= 2)
+            return densePath;
+
+        List<Location> simplified = new ArrayList<>();
+        simplified.add(densePath.getFirst());
+
+        int currentIdx = 0;
+
+        while(currentIdx < densePath.size() - 1)
+        {
+            int furthestIdx = currentIdx + 1;
+
+            for(int nextIdx = currentIdx + 2; nextIdx < densePath.size(); nextIdx++)
+            {
+                Location pStart = densePath.get(currentIdx);
+                Location pCandidate = densePath.get(nextIdx);
+
+                if(Math.abs(pCandidate.getY() - pStart.getY()) > 0.01)
                     break;
 
-                if(canSweepWalk(current.getX(), current.getY(), current.getZ(), target.getX(), target.getY(), target.getZ()))
-                    furthestVisible = j;
+                if(canSweepWalk(pStart.getX(), pStart.getY(), pStart.getZ(),
+                        pCandidate.getX(), pCandidate.getY(), pCandidate.getZ()))
+                {
+                    boolean validGroundContinuity = true;
+                    for(int k = currentIdx + 1; k < nextIdx; k++)
+                    {
+                        Location pMid = densePath.get(k);
+                        FootSupport supp = resolveFootSupport(pMid.getX(), pStart.getY(), pMid.getZ());
+                        if(!supp.valid() || Math.abs(supp.feetY() - pStart.getY()) > 0.1)
+                        {
+                            validGroundContinuity = false;
+                            break;
+                        }
+                    }
+
+                    if(validGroundContinuity)
+                        furthestIdx = nextIdx;
+                    else
+                        break;
+                }
                 else
                     break;
             }
 
-            current = path.get(furthestVisible);
-            smoothPath.add(current);
-            i = furthestVisible;
+            simplified.add(densePath.get(furthestIdx));
+            currentIdx = furthestIdx;
         }
 
-        Location lastPoint = smoothPath.getLast();
+        return simplified;
+    }
 
-        if(Math.abs(targetEnd.getY() - lastPoint.getY()) <= 0.1)
-        {
-            if(canSweepWalk(lastPoint.getX(), lastPoint.getY(), lastPoint.getZ(), targetEnd.getX(), targetEnd.getY(), targetEnd.getZ()))
-                smoothPath.add(targetEnd.clone());
-        }
-        else
-            smoothPath.add(targetEnd.clone());
-
-        return smoothPath;
+    /**
+     * Calculates the Euclidean distance between two points.
+     *
+     * @param x1 the start x coordinate.
+     * @param y1 the start y coordinate.
+     * @param z1 the start z coordinate.
+     * @param x2 the target x coordinate.
+     * @param y2 the target y coordinate.
+     * @param z2 the target z coordinate.
+     * @return the distance
+     */
+    private static double distance(double x1, double y1, double z1, double x2, double y2, double z2)
+    {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double dz = z2 - z1;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     /**
@@ -828,11 +951,10 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     {
         final double x, y, z;
         final long id;
-
         double gCost = Double.MAX_VALUE;
-        double hCost = 0;
-        SubNode parent = null;
-        boolean closed = false;
+        double hCost;
+        boolean closed;
+        SubNode parent;
 
         /**
          * Constructs a new SubNode.
@@ -840,14 +962,13 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
          * @param x  X coordinate
          * @param y  Y coordinate
          * @param z  Z coordinate
-         * @param id unique long identifier
          */
-        public SubNode(double x, double y, double z, long id)
+        SubNode(double x, double y, double z, double step)
         {
             this.x = x;
             this.y = y;
             this.z = z;
-            this.id = id;
+            this.id = hash(x, y, z, step);
         }
 
         /**
@@ -856,57 +977,43 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
          * @param x        X coordinate
          * @param y        Y coordinate
          * @param z        Z coordinate
-         * @param gridStep the grid step size
+         * @param step the grid step size
          * @return the packed coordinate hash
          */
-        public static long hash(double x, double y, double z, double gridStep)
+        static long hash(double x, double y, double z, double step)
         {
-            long gx = Math.round(x / gridStep);
-            long gy = Math.round(y / gridStep);
-            long gz = Math.round(z / gridStep);
-            return (gx & 0x1FFFFFFL) | ((gz & 0x1FFFFFFL) << 25) | ((gy & 0x3FFFL) << 50);
+            int ix = (int) Math.floor(x / step);
+            int iy = (int) Math.floor(y / step);
+            int iz = (int) Math.floor(z / step);
+            return packBlockCoord(ix, iy, iz);
         }
 
         /**
          * Calculates the heuristic cost (H-cost) to the destination location.
          *
-         * @param end the target destination location
+         * @param target the target destination location
          */
-        public void calculateH(@NotNull Location end)
+        void calculateH(Location target)
         {
-            double dx = x - end.getX();
-            double dy = y - end.getY();
-            double dz = z - end.getZ();
-            this.hCost = Math.sqrt(dx * dx + dy * dy + dz * dz) * 1.001;
+            double dx = Math.abs(x - target.getX());
+            double dy = Math.abs(y - target.getY());
+            double dz = Math.abs(z - target.getZ());
+            this.hCost = dx + dy + dz;
         }
 
         /**
-         * Calculates the Euclidean distance to specific target coordinates.
+         * Calculates the squared distance to a target coordinates.
          *
          * @param targetX target X
          * @param targetY target Y
          * @param targetZ target Z
          * @return the distance
          */
-        public double distanceTo(double targetX, double targetY, double targetZ)
+        public double distanceSqTo(double targetX, double targetY, double targetZ)
         {
             double dx = x - targetX;
             double dy = y - targetY;
             double dz = z - targetZ;
-            return Math.sqrt(dx * dx + dy * dy + dz * dz);
-        }
-
-        /**
-         * Calculates the squared distance to a target location.
-         *
-         * @param l the target location
-         * @return the squared distance
-         */
-        public double distanceSqTo(@NotNull Location l)
-        {
-            double dx = x - l.getX();
-            double dy = y - l.getY();
-            double dz = z - l.getZ();
             return dx * dx + dy * dy + dz * dz;
         }
 
@@ -915,7 +1022,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
          *
          * @return the F-cost
          */
-        public double getFCost()
+        double fCost()
         {
             return gCost + hCost;
         }
@@ -929,7 +1036,10 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         @Override
         public int compareTo(@NotNull SubNode other)
         {
-            return Double.compare(this.getFCost(), other.getFCost());
+            int cmp = Double.compare(this.fCost(), other.fCost());
+            if(cmp == 0)
+                return Double.compare(this.hCost, other.hCost);
+            return cmp;
         }
     }
 }

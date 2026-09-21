@@ -5,6 +5,7 @@ import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.events.NpcStopWalkingEvent;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
@@ -21,6 +22,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -326,7 +328,8 @@ public class PathTask extends BukkitRunnable
     {
         double horizontalDistSq = (toTarget.getX() * toTarget.getX()) + (toTarget.getZ() * toTarget.getZ());
         double verticalDiff = Math.abs(toTarget.getY());
-        return horizontalDistSq <= 0.04 && verticalDiff < 0.5;
+        double allowedVerticalDiff = (toTarget.getY() < -0.1) ? 0.15 : 0.5;
+        return horizontalDistSq <= 0.04 && verticalDiff < allowedVerticalDiff;
     }
 
     /**
@@ -356,7 +359,6 @@ public class PathTask extends BukkitRunnable
         {
             this.currentPos.setX(targetPoint.getX());
             this.currentPos.setZ(targetPoint.getZ());
-            index++;
             return new Vector(0, 0, 0);
         }
 
@@ -481,9 +483,6 @@ public class PathTask extends BukkitRunnable
         finished = true;
         forceCloseAllDoors();
 
-        if(callback != null)
-            callback.accept(WalkingResult.SUCCESS);
-
         NpcStopWalkingEvent event = new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation);
         Bukkit.getPluginManager().callEvent(event);
 
@@ -491,7 +490,12 @@ public class PathTask extends BukkitRunnable
         {
             Location loc = path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast();
             npc.changeRealLocation(loc, getViewers());
+            currentPos = loc.toVector();
+            ensureOnSolidGround();
         }
+
+        if(callback != null)
+            callback.accept(WalkingResult.SUCCESS);
 
         npc.clearWalkingTask(this);
         cancel();
@@ -728,9 +732,106 @@ public class PathTask extends BukkitRunnable
             World world = path.getWaypoints().isEmpty() ? pathPoints.getLast().getWorld() :
                     path.getWaypoints().getLast().getWorld();
             Location loc = new Location(world, currentPos.getX(), currentPos.getY(), currentPos.getZ());
-            npc.changeRealLocation(loc, getViewers());
+            if(!ensureOnSolidGround())
+                npc.changeRealLocation(loc, getViewers());
         }
         npc.clearWalkingTask(this);
+    }
+
+    /**
+     * Checks if the NPC is currently standing on solid ground. If not, finds the nearest solid floor beneath it and snaps the NPC there.
+     *
+     * @return true if the location was adjusted; false otherwise
+     */
+    public boolean ensureOnSolidGround()
+    {
+        Location location = getCurrentLocation();
+        if(location == null || location.getWorld() == null)
+            return false;
+
+        Location grounded = findSolidGroundBeneath(location);
+        if(grounded != null && Math.abs(grounded.getY() - location.getY()) > 0.001)
+        {
+            npc.changeRealLocation(grounded);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Finds the nearest solid floor beneath the given location.
+     *
+     * @param start          the starting search location
+     * @return grounded location, or null if no floor was found
+     */
+    public @Nullable Location findSolidGroundBeneath(@NotNull Location start)
+    {
+        World world = start.getWorld();
+        if(world == null)
+            return null;
+
+        BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(world, start.getX(), start.getY(), start.getZ(), entityWidth);
+        if(support.valid())
+        {
+            double targetY = support.feetY();
+            if(isLocationCollisionFree(world, start.getX(), targetY, start.getZ()))
+            {
+                Location grounded = start.clone();
+                grounded.setY(targetY);
+                return grounded;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Checks if a location is collision-free.
+     *
+     * @param world the world
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return true if the location is collision-free, false otherwise
+     */
+    private boolean isLocationCollisionFree(@NotNull World world, double x, double y, double z)
+    {
+        double scale = npc.getOption(NpcOption.SCALE);
+        double entityHeight = ((Entity) npc.getEntity()).getBoundingBox().getYsize() * scale;
+        double radius = entityWidth / 2.0;
+
+        BoundingBox box = new BoundingBox(
+                x - radius + 0.001, y + 0.001, z - radius + 0.001,
+                x + radius - 0.001, y + entityHeight - 0.001, z + radius - 0.001
+        );
+
+        int minX = (int) Math.floor(box.getMinX());
+        int maxX = (int) Math.floor(box.getMaxX());
+        int minY = (int) Math.floor(box.getMinY());
+        int maxY = (int) Math.floor(box.getMaxY());
+        int minZ = (int) Math.floor(box.getMinZ());
+        int maxZ = (int) Math.floor(box.getMaxZ());
+
+        for(int bx = minX; bx <= maxX; bx++)
+        {
+            for(int by = minY; by <= maxY; by++)
+            {
+                for(int bz = minZ; bz <= maxZ; bz++)
+                {
+                    Block block = world.getBlockAt(bx, by, bz);
+                    if(AbstractPathfinder.isSafeFloor(block))
+                    {
+                        for(BoundingBox bb : AbstractPathfinder.getBlockBoxes(block))
+                        {
+                            BoundingBox worldBB = bb.clone().shift(bx, by, bz);
+                            if(box.overlaps(worldBB))
+                                return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     /**

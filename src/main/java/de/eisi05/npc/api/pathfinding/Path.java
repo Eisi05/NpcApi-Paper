@@ -147,11 +147,19 @@ public class Path implements ConfigurationSerializable
         return Map.of("locations", new ArrayList<>(locations), "waypoints", new ArrayList<>(waypoints));
     }
 
+    /**
+     * Returns a serializable version of this path.
+     *
+     * @return a serializable version of this path
+     */
     public SerializablePath toSerializablePath()
     {
         return new SerializablePath(this);
     }
 
+    /**
+     * A serializable version of a path.
+     */
     public static class SerializablePath implements Serializable
     {
         @Serial
@@ -162,6 +170,11 @@ public class Path implements ConfigurationSerializable
 
         private final String name;
 
+        /**
+         * Constructs a new serializable path.
+         *
+         * @param path the path to serialize
+         */
         private SerializablePath(@NotNull Path path)
         {
             locations = new ArrayList<>(path.locations.stream().map(SerializableLocation::new).toList());
@@ -169,17 +182,34 @@ public class Path implements ConfigurationSerializable
             name = path.getName();
         }
 
-        public @NotNull Path toPath()
+        /**
+         * Returns the path represented by this serializable path.
+         *
+         * @param fallbackWorld the world to use if the path's world is null
+         * @return the path
+         */
+        public @NotNull Path toPath(World fallbackWorld)
         {
-            return new Path(locations.stream().map(SerializableLocation::toLocation).toList(),
-                    waypoints == null ? null : waypoints.stream().map(SerializableLocation::toLocation).toList()).setName(name);
+            return new Path(locations.stream().map(serializableLocation -> serializableLocation.toLocation(fallbackWorld))
+                    .filter(location -> location.getWorld() != null).toList(),
+                    waypoints == null ? null : waypoints.stream().map(serializableLocation -> serializableLocation.toLocation(fallbackWorld))
+                            .filter(location -> location.getWorld() != null).toList())
+                    .setName(name);
         }
 
+        /**
+         * Returns the name of the path.
+         *
+         * @return the name of the path
+         */
         public @NotNull String getName()
         {
             return name;
         }
 
+        /**
+         * A serializable version of a location.
+         */
         public static class SerializableLocation implements Serializable
         {
             @Serial
@@ -192,6 +222,11 @@ public class Path implements ConfigurationSerializable
             private final float yaw;
             private final UUID world;
 
+            /**
+             * Constructs a new serializable location.
+             *
+             * @param location the location to serialize
+             */
             public SerializableLocation(@NotNull Location location)
             {
                 this.x = location.getX();
@@ -202,9 +237,15 @@ public class Path implements ConfigurationSerializable
                 this.world = location.getWorld().getUID();
             }
 
-            public @NotNull Location toLocation()
+            /**
+             * Returns the location represented by this serializable location.
+             *
+             * @return the location
+             */
+            public @NotNull Location toLocation(World fallbackWorld)
             {
-                return new Location(Bukkit.getWorld(world), x, y, z, yaw, pitch);
+                World w = Bukkit.getWorld(world);
+                return new Location(w == null ? fallbackWorld : w, x, y, z, yaw, pitch);
             }
         }
     }

@@ -4,6 +4,7 @@ import de.eisi05.npc.api.listeners.*;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.*;
+import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.scheduler.Tasks;
 import de.eisi05.npc.api.utils.Metrics;
@@ -114,7 +115,16 @@ public final class NpcApi
      */
     public static void disable()
     {
-        List<NpcHolder> npcsToSave = new ArrayList<>(NpcManager.getList());
+        List<NPC> npcsToSave = new ArrayList<>(NpcManager.getList());
+        for (NPC npc : npcsToSave)
+        {
+            npc.stopGoals();
+            npc.cancelWalking();
+        }
+
+        Tasks.stop();
+        Bukkit.getScheduler().cancelTasks(plugin);
+
         npcsToSave.stream().filter(NpcHolder::hasUnsavedChanges).parallel().forEach(npc ->
         {
             if(npc instanceof NPC npc1 && !npc1.isSaved())
@@ -128,12 +138,13 @@ public final class NpcApi
             {
             }
         });
+
         NpcManager.getList().forEach(NPC::hideNpcFromAllPlayers);
         NpcManager.clear();
         PacketReader.uninjectAll();
-        Tasks.stop();
         TeamManager.clear();
         ConfigurationSerialization.unregisterClass(Path.class);
+        AbstractPathfinder.clearBoxCache();
 
         listeners.forEach(HandlerList::unregisterAll);
 

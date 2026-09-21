@@ -2,13 +2,15 @@ package de.eisi05.npc.api.ai.goals;
 
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.utils.LocationUtils;
+import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
+import de.eisi05.npc.api.pathfinding.Path;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.Serial;
-import java.util.OptionalInt;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -16,15 +18,19 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class WanderGoal extends Goal
 {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     public static final int DEFAULT_RADIUS = 10;
     public static final int DEFAULT_MIN_DELAY = 40; // 2 seconds
     public static final int DEFAULT_MAX_DELAY = 140; // 7 seconds
-    @Serial
-    private static final long serialVersionUID = 1L;
+    private static final int[] LOCAL_Y_OFFSETS = {0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5};
+
     private int radius;
     private int minDelay;
     private int maxDelay;
     private double speed;
+    private Path.SerializablePath.SerializableLocation centerLocation;
 
     private transient WalkToLocationGoal currentWalkGoal;
     private transient int delayTicks;
@@ -35,34 +41,37 @@ public class WanderGoal extends Goal
      */
     public WanderGoal()
     {
-        this(DEFAULT_RADIUS, DEFAULT_MIN_DELAY, DEFAULT_MAX_DELAY, WalkToLocationGoal.DEFAULT_SPEED);
+        this(DEFAULT_RADIUS, DEFAULT_MIN_DELAY, DEFAULT_MAX_DELAY, WalkToLocationGoal.DEFAULT_SPEED, null);
     }
 
     /**
      * Creates a WanderGoal with custom radius and default delay.
      *
-     * @param radius The maximum radius to wander (in blocks)
+     * @param radius         The maximum radius to wander (in blocks)
+     * @param centerLocation The center location for the wander goal or null to use the NPC's location
      */
-    public WanderGoal(int radius)
+    public WanderGoal(int radius, @Nullable Location centerLocation)
     {
-        this(radius, DEFAULT_MIN_DELAY, DEFAULT_MAX_DELAY, WalkToLocationGoal.DEFAULT_SPEED);
+        this(radius, DEFAULT_MIN_DELAY, DEFAULT_MAX_DELAY, WalkToLocationGoal.DEFAULT_SPEED, centerLocation);
     }
 
     /**
      * Creates a WanderGoal with full configuration.
      *
-     * @param radius   The maximum radius to wander (in blocks)
-     * @param minDelay Minimum delay between wander actions (in ticks)
-     * @param maxDelay Maximum delay between wander actions (in ticks)
-     * @param speed    The walking speed
+     * @param radius         The maximum radius to wander (in blocks)
+     * @param minDelay       Minimum delay between wander actions (in ticks)
+     * @param maxDelay       Maximum delay between wander actions (in ticks)
+     * @param speed          The walking speed
+     * @param centerLocation The center location for the wander goal or null to use the NPC's location
      */
-    public WanderGoal(int radius, int minDelay, int maxDelay, double speed)
+    public WanderGoal(int radius, int minDelay, int maxDelay, double speed, @Nullable Location centerLocation)
     {
         super(Priority.MEDIUM);
         this.radius = radius;
         this.minDelay = minDelay;
         this.maxDelay = maxDelay;
         this.speed = Math.clamp(speed, 0.1, 1.0);
+        this.centerLocation = centerLocation == null ? null : new Path.SerializablePath.SerializableLocation(centerLocation);
     }
 
     /**
@@ -160,6 +169,27 @@ public class WanderGoal extends Goal
     }
 
     /**
+     * Gets the center location for this goal.
+     *
+     * @param fallbackWorld the world to use if the center location is null
+     * @return the center location
+     */
+    public @Nullable Location getCenterLocation(@Nullable World fallbackWorld)
+    {
+        return centerLocation == null ? null : centerLocation.toLocation(fallbackWorld);
+    }
+
+    /**
+     * Sets the center location for this goal.
+     *
+     * @param location the new center location or null to use the NPC's location
+     */
+    public void setCenterLocation(@Nullable Location location)
+    {
+        this.centerLocation = location == null ? null : new Path.SerializablePath.SerializableLocation(location);
+    }
+
+    /**
      * Checks if this goal can be used by the NPC.
      *
      * @param npc the NPC to check
@@ -193,13 +223,6 @@ public class WanderGoal extends Goal
         if(currentWalkGoal != null)
         {
             currentWalkGoal.tick(npc);
-
-            if(!currentWalkGoal.canContinue(npc))
-            {
-                currentWalkGoal.stop(npc);
-                currentWalkGoal = null;
-                delayTicks = minDelay + ThreadLocalRandom.current().nextInt(maxDelay - minDelay);
-            }
             return;
         }
 
@@ -264,7 +287,7 @@ public class WanderGoal extends Goal
      */
     private void pickNewTarget(@NotNull NPC npc)
     {
-        Location currentLoc = npc.getLocation();
+        Location currentLoc = centerLocation == null ? npc.getLocation() : centerLocation.toLocation(npc.getLocation().getWorld());
         World world = currentLoc.getWorld();
 
         if(world == null)
@@ -279,14 +302,21 @@ public class WanderGoal extends Goal
             double x = currentLoc.getX() + Math.cos(angle) * distance;
             double z = currentLoc.getZ() + Math.sin(angle) * distance;
 
-            Location potentialLoc = new Location(world, x, currentLoc.getY(), z);
-            OptionalInt y = LocationUtils.findSafeY(potentialLoc);
-
-            if(y.isPresent())
+            Location safeSpot = findLocalSafeTarget(world, x, currentLoc.getY(), z);
+            if(safeSpot != null)
             {
-                targetLocation = new Location(world, x, y.getAsInt(), z, 0, 0);
+                targetLocation = safeSpot;
                 targetLocation.setYaw(calculateYaw(currentLoc, targetLocation));
-                currentWalkGoal = new WalkToLocationGoal.Builder(targetLocation).speed(speed).build();
+
+                currentWalkGoal = new WalkToLocationGoal.Builder(targetLocation)
+                        .speed(speed)
+                        .completionCallback(walkingResult ->
+                        {
+                            currentWalkGoal = null;
+                            delayTicks = minDelay + ThreadLocalRandom.current().nextInt(Math.max(1, maxDelay - minDelay));
+                        })
+                        .build();
+
                 currentWalkGoal.start(npc);
                 return;
             }
@@ -297,7 +327,42 @@ public class WanderGoal extends Goal
         delayTicks = maxDelay;
     }
 
-    public float calculateYaw(@NotNull Location current, @NotNull Location target)
+    /**
+     * Finds a safe location to move to by checking the blocks around the given location.
+     *
+     * @param world the world of the location
+     * @param x the x coordinate of the location
+     * @param startY the starting y value of the location
+     * @param z the z coordinate of the location
+     * @return the safe location or null if no safe location is found
+     */
+    private @Nullable Location findLocalSafeTarget(@NotNull World world, double x, double startY, double z)
+    {
+        int blockX = (int) Math.floor(x);
+        int blockZ = (int) Math.floor(z);
+        int baseY = (int) Math.floor(startY);
+
+        for(int dy : LOCAL_Y_OFFSETS)
+        {
+            int checkY = baseY + dy;
+            if(checkY < world.getMinHeight() + 1 || checkY >= world.getMaxHeight() - 2)
+                continue;
+
+            Block floor = world.getBlockAt(blockX, checkY - 1, blockZ);
+            Block feet = world.getBlockAt(blockX, checkY, blockZ);
+            Block head = world.getBlockAt(blockX, checkY + 1, blockZ);
+
+            if(AbstractPathfinder.isSafeFloor(floor) && feet.isPassable() && head.isPassable())
+            {
+                double exactY = AbstractPathfinder.getFloorSurfaceY(floor);
+                return new Location(world, x, exactY, z);
+            }
+        }
+
+        return null;
+    }
+
+    private float calculateYaw(@NotNull Location current, @NotNull Location target)
     {
         double dx = target.getX() - current.getX();
         double dz = target.getZ() - current.getZ();

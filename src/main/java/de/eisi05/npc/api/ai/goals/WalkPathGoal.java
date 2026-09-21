@@ -74,7 +74,7 @@ public class WalkPathGoal extends Goal
     public @Nullable Path getPath()
     {
         if(path == null && serializablePath != null)
-            path = serializablePath.toPath();
+            path = serializablePath.toPath(null);
 
         return path;
     }
@@ -155,7 +155,7 @@ public class WalkPathGoal extends Goal
     protected @Nullable Location getLocation()
     {
         if(path == null && serializablePath != null)
-            path = serializablePath.toPath();
+            path = serializablePath.toPath(null);
 
         return path != null ? path.asLocations().getLast() : null;
     }
@@ -176,7 +176,7 @@ public class WalkPathGoal extends Goal
             return false;
 
         if(path == null && serializablePath != null)
-            path = serializablePath.toPath();
+            path = serializablePath.toPath(null);
 
         if(path == null)
             return false;
@@ -202,7 +202,7 @@ public class WalkPathGoal extends Goal
     public void start(@NotNull NPC npc)
     {
         if(path == null && serializablePath != null)
-            path = serializablePath.toPath();
+            path = serializablePath.toPath(npc.getLocation().getWorld());
 
         if(path == null)
             return;
@@ -251,7 +251,7 @@ public class WalkPathGoal extends Goal
     private void walkPath(@NotNull NPC npc)
     {
         if(path == null && serializablePath != null)
-            path = serializablePath.toPath();
+            path = serializablePath.toPath(npc.getLocation().getWorld());
 
         if(path == null)
             return;

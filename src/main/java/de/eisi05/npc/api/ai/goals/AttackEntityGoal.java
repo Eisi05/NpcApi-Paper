@@ -275,7 +275,7 @@ public class AttackEntityGoal extends Goal
                 startMovement(npc, target.getLocation());
             else
             {
-                Location currentTarget = movementGoal.getTargetLocation();
+                Location currentTarget = movementGoal.getTargetLocation(npc.getLocation().getWorld());
                 boolean shouldRecalculate = currentTarget.distance(target.getLocation()) > 5.0;
 
                 if(!shouldRecalculate && pathRecalculationCooldown <= 0)
@@ -830,7 +830,7 @@ public class AttackEntityGoal extends Goal
     {
         stopMovement(npc);
 
-        OptionalInt safeY = LocationUtils.findSafeY(targetLoc);
+        OptionalInt safeY = LocationUtils.findSafeY(targetLoc, npc);
         if(safeY.isPresent())
             targetLoc = new Location(targetLoc.getWorld(), targetLoc.getX(), safeY.getAsInt(), targetLoc.getZ());
         movementGoal = new WalkToLocationGoal.Builder(targetLoc).speed(speed).build();
@@ -857,7 +857,7 @@ public class AttackEntityGoal extends Goal
 
         Location retreatLoc = new Location(npcLoc.getWorld(), retreatPos.getX(), npcLoc.getY(), retreatPos.getZ());
 
-        OptionalInt safeY = LocationUtils.findSafeY(retreatLoc);
+        OptionalInt safeY = LocationUtils.findSafeY(retreatLoc, npc);
         if(safeY.isPresent())
             retreatLoc = new Location(retreatLoc.getWorld(), retreatLoc.getX(), safeY.getAsInt(), retreatLoc.getZ());
 

@@ -250,7 +250,7 @@ public class FollowEntityGoal extends Goal
         targetLoc.setYaw(npc.getLocation().getYaw());
         targetLoc.setPitch(npc.getLocation().getPitch());
 
-        OptionalInt safeY = LocationUtils.findSafeY(targetLoc);
+        OptionalInt safeY = LocationUtils.findSafeY(targetLoc, npc);
         targetLoc.setY(safeY.isPresent() ? safeY.getAsInt() : targetLoc.getY());
 
         double distance = npc.getLocation().distance(targetLoc);
@@ -273,7 +273,7 @@ public class FollowEntityGoal extends Goal
         }
         else
         {
-            Location currentTarget = currentWalkGoal.getTargetLocation();
+            Location currentTarget = currentWalkGoal.getTargetLocation(npc.getLocation().getWorld());
             boolean shouldRecalculate = currentTarget.distance(targetLoc) > 2.0;
 
             if(!shouldRecalculate && lastTargetLocation != null)

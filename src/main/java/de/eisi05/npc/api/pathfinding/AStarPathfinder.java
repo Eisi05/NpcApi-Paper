@@ -40,7 +40,6 @@ public class AStarPathfinder extends AbstractPathfinder
     private final PriorityQueue<Node> openSet = new PriorityQueue<>();
     private final Set<Long> openSetIds = new HashSet<>();
     private final Long2ObjectOpenHashMap<Node> allNodes = new Long2ObjectOpenHashMap<>();
-    private final Long2ObjectOpenHashMap<Collection<BoundingBox>> boundingBoxCache = new Long2ObjectOpenHashMap<>();
     private World world;
 
     /**
@@ -69,14 +68,14 @@ public class AStarPathfinder extends AbstractPathfinder
      */
     public static boolean isPositionValid(@NotNull World world, double tx, double ty, double tz, double entityHeight, double entityWidth)
     {
-        double radius = entityWidth / 2.0;
+        double radius = Math.max(0.01, (entityWidth / 2.0) - 0.001);
         double minX = tx - radius;
         double maxX = tx + radius;
         double maxY = ty + entityHeight;
         double minZ = tz - radius;
         double maxZ = tz + radius;
 
-        BoundingBox entityBox = new BoundingBox(minX, ty, minZ, maxX, maxY, maxZ);
+        BoundingBox entityBox = new BoundingBox(minX, ty + 0.001, minZ, maxX, maxY, maxZ);
 
         int minBlockX = (int) Math.floor(minX);
         int maxBlockX = (int) Math.floor(maxX);
@@ -100,7 +99,7 @@ public class AStarPathfinder extends AbstractPathfinder
                     if(NpcApi.config.pathfindingPassableOverride().test(block))
                         continue;
 
-                    Collection<BoundingBox> blockBoxes = block.getCollisionShape().getBoundingBoxes();
+                    Collection<BoundingBox> blockBoxes = getBlockBoxes(block);
                     if(blockBoxes.isEmpty())
                         continue;
 
@@ -304,43 +303,17 @@ public class AStarPathfinder extends AbstractPathfinder
      */
     private int resolveFloorY(@NotNull Location loc)
     {
-        World w = loc.getWorld();
-        if(w == null)
-            return loc.getBlockY() - 1;
-
         int bx = loc.getBlockX();
+        int by = loc.getBlockY();
         int bz = loc.getBlockZ();
-        int startY = loc.getBlockY();
 
-        double lx = loc.getX() - bx;
-        double lz = loc.getZ() - bz;
-
-        for(int y = startY + 1; y >= startY - 6; y--)
+        for(int y = by; y >= by - 2 && y >= world.getMinHeight(); y--)
         {
-            Block block = w.getBlockAt(bx, y, bz);
-            if(block.getBlockData() instanceof Openable)
-                continue;
-
-            if(block.isLiquid())
-                continue;
-
-            if(!block.getType().isSolid() || block.isPassable() || NpcApi.config.pathfindingPassableOverride().test(block))
-                continue;
-
-            Collection<BoundingBox> boxes = getCachedCollisions(block);
-            if(boxes.isEmpty())
+            Block block = world.getBlockAt(bx, y, bz);
+            if(isSafeFloor(block))
                 return y;
-
-            for(BoundingBox bb : boxes)
-            {
-                if(lx >= bb.getMinX() && lx <= bb.getMaxX() && lz >= bb.getMinZ() && lz <= bb.getMaxZ())
-                    return y;
-            }
-
-            return y;
         }
-
-        return loc.getBlockY() - 1;
+        return by;
     }
 
     /**
@@ -373,61 +346,7 @@ public class AStarPathfinder extends AbstractPathfinder
     private double feetYAt(int x, int floorY, int z)
     {
         Block floor = world.getBlockAt(x, floorY, z);
-        return floorY + topSurfaceAt(floor, 0.5, 0.5);
-    }
-
-    /**
-     * Determines the top surface Y offset of a block's collision shape at a specific local coordinate.
-     *
-     * @param block the block to inspect
-     * @param lx    the local X coordinate within the block
-     * @param lz    the local Z coordinate within the block
-     * @return the highest surface Y offset
-     */
-    private double topSurfaceAt(@NotNull Block block, double lx, double lz)
-    {
-        Collection<BoundingBox> boxes = getCachedCollisions(block);
-        if(boxes.isEmpty())
-            return 1.0;
-
-        double bestTop = -1.0;
-
-        for(BoundingBox bb : boxes)
-        {
-            if(lx >= bb.getMinX() && lx <= bb.getMaxX() && lz >= bb.getMinZ() && lz <= bb.getMaxZ())
-                bestTop = Math.max(bestTop, bb.getMaxY());
-        }
-
-        if(bestTop < 0.0)
-        {
-            for(BoundingBox bb : boxes)
-                bestTop = Math.max(bestTop, bb.getMaxY());
-        }
-
-        if(bestTop <= 0.0)
-            return 1.0;
-
-        return bestTop;
-    }
-
-    /**
-     * Retrieves cached block collision.
-     *
-     * @param block the block to retrieve cached collisions for
-     * @return the corresponding collection of bounding boxes
-     */
-    private @NotNull Collection<BoundingBox> getCachedCollisions(@NotNull Block block)
-    {
-        long key = packBlockCoord(block.getX(), block.getY(), block.getZ());
-        Collection<BoundingBox> cached = boundingBoxCache.get(key);
-        if(cached != null)
-            return cached;
-
-        boolean bodyPassable = block.getBlockData() instanceof Openable || block.isEmpty() || block.isPassable() ||
-                NpcApi.config.pathfindingPassableOverride().test(block);
-        Collection<BoundingBox> boxes = bodyPassable ? Collections.emptyList() : block.getCollisionShape().getBoundingBoxes();
-        boundingBoxCache.put(key, boxes);
-        return boxes;
+        return getFloorSurfaceY(floor);
     }
 
     /**

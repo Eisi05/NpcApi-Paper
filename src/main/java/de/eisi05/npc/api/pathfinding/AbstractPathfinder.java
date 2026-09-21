@@ -1,13 +1,20 @@
 package de.eisi05.npc.api.pathfinding;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import de.eisi05.npc.api.NpcApi;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 /**
@@ -15,6 +22,11 @@ import java.util.function.BiConsumer;
  */
 public abstract class AbstractPathfinder
 {
+    private static final Cache<BlockData, Collection<BoundingBox>> BLOCK_BOX_CACHE = CacheBuilder.newBuilder()
+            .maximumSize(5000)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
+
     protected final int maxIterations;
     protected final boolean allowDiagonal;
     protected final double entityHeight;
@@ -52,6 +64,54 @@ public abstract class AbstractPathfinder
             return false;
 
         return !block.isPassable() && !NpcApi.config.pathfindingPassableOverride().test(block);
+    }
+
+    /**
+     * Retrieves bounding boxes for a block using Guava Cache to prevent heavy GC allocations during pathfinding searches.
+     *
+     * @param block the block to check
+     * @return bounding box collection for the block's current state
+     */
+    public static Collection<BoundingBox> getBlockBoxes(@NotNull Block block)
+    {
+        try
+        {
+            return BLOCK_BOX_CACHE.get(block.getBlockData(), () -> block.getCollisionShape().getBoundingBoxes());
+        }
+        catch (ExecutionException e)
+        {
+            return block.getCollisionShape().getBoundingBoxes();
+        }
+    }
+
+    /**
+     * Clears the block collision cache if memory needs to be freed or block states are reloaded.
+     */
+    public static void clearBoxCache()
+    {
+        BLOCK_BOX_CACHE.invalidateAll();
+    }
+
+    /**
+     * Computes the exact top surface Y-coordinate for a given block (supporting slabs, snow layers, path blocks).
+     *
+     * @param block the floor block
+     * @return the top surface Y coordinate
+     */
+    public static double getFloorSurfaceY(@NotNull Block block)
+    {
+        Collection<BoundingBox> boxes = getBlockBoxes(block);
+        if(boxes.isEmpty())
+            return block.getY() + 1.0;
+
+        double maxY = 0.0;
+        for(BoundingBox box : boxes)
+        {
+            if(box.getMaxY() > maxY)
+                maxY = box.getMaxY();
+        }
+
+        return block.getY() + maxY;
     }
 
     /**
