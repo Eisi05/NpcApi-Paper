@@ -10,6 +10,7 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.NpcVisibility;
 import de.eisi05.npc.api.enums.SkinParts;
+import de.eisi05.npc.api.manager.NpcCombatManager;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
@@ -828,6 +829,13 @@ public class NpcOption<T, S extends Serializable>
                 return visibilityManager;
             },
             (visibilityManager, npc, player) -> null).type(NpcVisibilityManager.class);
+
+    /**
+     * NPC option to store combat settings for the NPC.
+     */
+    static final NpcOption<NpcCombatManager, NpcCombatManager> COMBAT_MANAGER = new NpcOption<>("combat-manager", NpcCombatManager::new,
+            NpcCombatManager::copy, o -> o, o -> o, (o, npc, player) -> null)
+            .type(NpcCombatManager.class);
 
     private final String path;
     private final Supplier<T> defaultValue;

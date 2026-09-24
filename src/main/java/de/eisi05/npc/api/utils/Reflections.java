@@ -7,8 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -66,8 +65,8 @@ public class Reflections
         try
         {
             Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                                                                   .map(o -> o == null ? Object.class : o.getClass())
-                                                                   .toArray(Class<?>[]::new);
+                    .map(o -> o == null ? Object.class : o.getClass())
+                    .toArray(Class<?>[]::new);
 
             ConstructorKey key = new ConstructorKey(clazz, argTypes);
             Constructor<?> cachedCtor = CONSTRUCTOR_CACHE.get(key);
@@ -109,8 +108,8 @@ public class Reflections
         try
         {
             Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                                                                   .map(o -> o == null ? Object.class : o.getClass())
-                                                                   .toArray(Class<?>[]::new);
+                    .map(o -> o == null ? Object.class : o.getClass())
+                    .toArray(Class<?>[]::new);
 
             ConstructorKey key = new ConstructorKey(clazz, argTypes);
             Constructor<?> ctor = CONSTRUCTOR_CACHE.get(key);
@@ -152,13 +151,16 @@ public class Reflections
     private static @NotNull Method findMethod(@NotNull Class<?> clazz, @NotNull String name, @Nullable Object[] args) throws NoSuchMethodException
     {
         Class<?>[] argTypes = args == null ? new Class<?>[0] : Arrays.stream(args)
-                                                               .map(o -> o == null ? Object.class : o.getClass())
-                                                               .toArray(Class<?>[]::new);
+                .map(o -> o == null ? Object.class : o.getClass())
+                .toArray(Class<?>[]::new);
 
         MethodKey key = new MethodKey(clazz, name, argTypes);
         Method cached = METHOD_CACHE.get(key);
         if(cached != null)
             return cached;
+
+        Set<Class<?>> visitedInterfaces = new HashSet<>();
+        Queue<Class<?>> interfaceQueue = new ArrayDeque<>();
 
         Class<?> current = clazz;
         while(current != null)
@@ -178,7 +180,41 @@ public class Reflections
                     return method;
                 }
             }
+
+            for(Class<?> iface : current.getInterfaces())
+            {
+                if(visitedInterfaces.add(iface))
+                    interfaceQueue.add(iface);
+            }
+
             current = current.getSuperclass();
+        }
+
+        while(!interfaceQueue.isEmpty())
+        {
+            Class<?> iface = interfaceQueue.poll();
+
+            for(Method method : iface.getDeclaredMethods())
+            {
+                if(!method.getName().equals(name))
+                    continue;
+
+                Class<?>[] paramTypes = method.getParameterTypes();
+                boolean isVarArgs = method.isVarArgs();
+
+                if(isCompatible(argTypes, paramTypes, isVarArgs))
+                {
+                    method.setAccessible(true);
+                    METHOD_CACHE.put(key, method);
+                    return method;
+                }
+            }
+
+            for(Class<?> superIface : iface.getInterfaces())
+            {
+                if(visitedInterfaces.add(superIface))
+                    interfaceQueue.add(superIface);
+            }
         }
 
         throw new NoSuchMethodException("No compatible method " + name + " found in class " + clazz.getName() + "(" + Arrays.toString(args) + ")");

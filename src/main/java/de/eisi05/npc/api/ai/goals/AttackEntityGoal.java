@@ -48,6 +48,7 @@ import java.util.*;
  * Only activates when a valid target is in range and line of sight. Once a target is locked, the NPC continues attacking until the target becomes
  * unreachable or invalid.
  */
+@SuppressWarnings({"ScheduledForRemoval", "removal"})
 public class AttackEntityGoal extends Goal
 {
     @Serial
@@ -525,7 +526,17 @@ public class AttackEntityGoal extends Goal
         if(meta == null)
             return 5;
 
-        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.ATTACK_SPEED);
+        Collection<AttributeModifier> modifiers;
+        try
+        {
+            //noinspection UnstableApiUsage
+            modifiers = meta.getAttributeModifiers(Attribute.valueOf("GENERIC_ATTACK_SPEED"));
+        }
+        catch(Exception e)
+        {
+            modifiers = meta.getAttributeModifiers(Attribute.ATTACK_SPEED);
+        }
+
         if(modifiers == null)
             return 5;
 
@@ -759,7 +770,17 @@ public class AttackEntityGoal extends Goal
         if(meta == null)
             return 0.5;
 
-        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.ATTACK_DAMAGE);
+        Collection<AttributeModifier> modifiers;
+        try
+        {
+            //noinspection UnstableApiUsage
+            modifiers = meta.getAttributeModifiers(Attribute.valueOf("GENERIC_ATTACK_DAMAGE"));
+        }
+        catch(Exception e)
+        {
+            modifiers = meta.getAttributeModifiers(Attribute.ATTACK_DAMAGE);
+        }
+
         if(modifiers == null)
             return 0.5;
 
@@ -798,7 +819,17 @@ public class AttackEntityGoal extends Goal
         if(meta == null)
             return 0.5;
 
-        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.ATTACK_KNOCKBACK);
+        Collection<AttributeModifier> modifiers;
+        try
+        {
+            //noinspection UnstableApiUsage
+            modifiers = meta.getAttributeModifiers(Attribute.valueOf("GENERIC_ATTACK_KNOCKBACK"));
+        }
+        catch(Exception e)
+        {
+            modifiers = meta.getAttributeModifiers(Attribute.ATTACK_KNOCKBACK);
+        }
+
         if(modifiers == null)
             return 0.5;
 
@@ -817,10 +848,21 @@ public class AttackEntityGoal extends Goal
      */
     private double getKnockbackResistance(@NotNull LivingEntity target)
     {
-        if(target.getAttribute(Attribute.KNOCKBACK_RESISTANCE) == null)
+        Attribute attribute;
+        try
+        {
+            //noinspection UnstableApiUsage
+            attribute = Attribute.valueOf("GENERIC_KNOCKBACK_RESISTANCE");
+        }
+        catch(Exception e)
+        {
+            attribute = Attribute.KNOCKBACK_RESISTANCE;
+        }
+
+        if(target.getAttribute(attribute) == null)
             return 0;
 
-        return target.getAttribute(Attribute.KNOCKBACK_RESISTANCE).getValue();
+        return target.getAttribute(attribute).getValue();
     }
 
     /**

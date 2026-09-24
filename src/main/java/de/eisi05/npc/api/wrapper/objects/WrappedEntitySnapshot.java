@@ -193,7 +193,11 @@ public class WrappedEntitySnapshot implements Serializable
             {
                 try
                 {
-                    CompoundTag data = TagParser.parseCompoundFully(json.getAsString());
+                    CompoundTag data;
+                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_2))
+                        data = (CompoundTag) Reflections.invokeStaticMethod(TagParser.class,  Var.obfuscated ? "a" : "parseTag", json.getAsString()).get();
+                    else
+                        data = TagParser.parseCompoundFully(json.getAsString());
                     byte[] tempData;
                     try
                     {

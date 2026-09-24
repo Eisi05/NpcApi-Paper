@@ -1,6 +1,6 @@
 package de.eisi05.npc.api.interfaces;
 
-import de.eisi05.npc.api.events.NpcInteractEvent;
+import de.eisi05.npc.api.events.NpcPlayerEvent;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serial;
@@ -20,7 +20,7 @@ public interface NpcClickAction extends Serializable
      *
      * @param event the NpcInteractEvent containing interaction details
      */
-    void call(@NotNull NpcInteractEvent event);
+    void call(@NotNull NpcPlayerEvent event);
 
     /**
      * Returns a copy of this NpcClickAction. The default implementation returns the same instance.

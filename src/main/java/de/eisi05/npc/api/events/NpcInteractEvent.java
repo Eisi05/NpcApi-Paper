@@ -4,8 +4,6 @@ import de.eisi05.npc.api.enums.ClickActionType;
 import de.eisi05.npc.api.objects.NPC;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
-import org.bukkit.event.Event;
-import org.bukkit.event.HandlerList;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
@@ -13,13 +11,26 @@ import java.io.Serializable;
 /**
  * Event triggered when a player interacts with an NPC. Contains information about the player, the NPC, and the type of click action.
  */
-public class NpcInteractEvent extends Event implements Serializable, Cancellable
+public class NpcInteractEvent extends NpcPlayerEvent implements Serializable, Cancellable
 {
-    private static final HandlerList HANDLERS = new HandlerList();
-    private final Player player;
-    private final NPC npc;
     private final ClickActionType action;
+    private double damage;
     private boolean cancelled;
+
+    /**
+     * Creates a new NpcInteractEvent.
+     *
+     * @param player the player who interacted with the NPC
+     * @param npc    the NPC that was interacted with
+     * @param action the type of click action performed
+     * @param damage the damage dealt to the NPC
+     */
+    public NpcInteractEvent(@NotNull Player player, @NotNull NPC npc, @NotNull ClickActionType action, double damage)
+    {
+        super(npc, player);
+        this.action = action;
+        this.damage = damage;
+    }
 
     /**
      * Creates a new NpcInteractEvent.
@@ -30,39 +41,7 @@ public class NpcInteractEvent extends Event implements Serializable, Cancellable
      */
     public NpcInteractEvent(@NotNull Player player, @NotNull NPC npc, @NotNull ClickActionType action)
     {
-        this.player = player;
-        this.npc = npc;
-        this.action = action;
-    }
-
-    /**
-     * Returns the HandlerList for this event.
-     *
-     * @return the static HandlerList instance
-     */
-    public static HandlerList getHandlerList()
-    {
-        return HANDLERS;
-    }
-
-    /**
-     * Returns the player who triggered this event.
-     *
-     * @return the interacting player, never null
-     */
-    public @NotNull Player getPlayer()
-    {
-        return player;
-    }
-
-    /**
-     * Returns the NPC involved in this event.
-     *
-     * @return the interacted NPC, never null
-     */
-    public @NotNull NPC getNpc()
-    {
-        return npc;
+        this(player, npc, action, -1);
     }
 
     /**
@@ -75,10 +54,24 @@ public class NpcInteractEvent extends Event implements Serializable, Cancellable
         return action;
     }
 
-    @Override
-    public @NotNull HandlerList getHandlers()
+    /**
+     * Returns the damage dealt to the NPC.
+     *
+     * @return the damage amount, -1 if no damage was dealt
+     */
+    public double getDamage()
     {
-        return getHandlerList();
+        return damage;
+    }
+
+    /**
+     * Sets the damage dealt to the NPC.
+     *
+     * @param damage the damage amount, -1 if no damage was dealt
+     */
+    public void setDamage(double damage)
+    {
+        this.damage = damage;
     }
 
     @Override

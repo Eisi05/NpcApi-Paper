@@ -46,6 +46,8 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
@@ -247,7 +249,7 @@ public class NPC extends NpcHolder
             return;
 
         npcPath.toFile().getParentFile().mkdirs();
-        new ObjectSaver(npcPath.toFile()).write(SerializedNPC.serializedNPC(this), false);
+        new ObjectSaver(npcPath.toFile()).write(SerializedNPC.serializedNPC(this));
         super.save();
     }
 
@@ -934,11 +936,35 @@ public class NPC extends NpcHolder
      */
     public void lookAtPlayer(@NotNull Player viewer)
     {
-        Location npcLoc = this.location;
+        Pair<Float, Float> values = getLookAtPlayerValues(viewer);
+        if(values == null)
+            return;
+
+        byte yawByte = (byte) (values.getLeft() * 256 / 360);
+        byte pitchByte = (byte) (values.getRight() * 256 / 360);
+
+        ServerGamePacketListenerImpl connection = ((CraftPlayer) viewer).getHandle().connection;
+
+        connection.send(new ClientboundRotateHeadPacket(entity, yawByte));
+        connection.send(new ClientboundMoveEntityPacket.Rot(entity.getId(), yawByte, pitchByte, serverPlayer.onGround()));
+    }
+
+    /**
+     * Calculates the yaw and pitch values needed for the NPC to look at a specific player.
+     *
+     * @param viewer the player the NPC should look at. Must not be null.
+     * @return a pair of yaw and pitch values, or null if the NPC or player is null
+     */
+    private @Nullable Pair<Float, Float> getLookAtPlayerValues(@NotNull Player viewer)
+    {
+        if(entity == null)
+            return null;
+
+        Location npcLoc = location;
         Location playerLoc = viewer.getLocation();
 
         if(npcLoc.getWorld() != playerLoc.getWorld())
-            return;
+            return null;
 
         double dx = playerLoc.getX() - npcLoc.getX();
 
@@ -951,14 +977,7 @@ public class NPC extends NpcHolder
 
         if(getOption(NpcOption.POSE, viewer) == org.bukkit.entity.Pose.SLEEPING)
             yaw = 180.0F - yaw + 90.0F;
-
-        byte yawByte = (byte) (yaw * 256 / 360);
-        byte pitchByte = (byte) (pitch * 256 / 360);
-
-        ServerGamePacketListenerImpl connection = ((CraftPlayer) viewer).getHandle().connection;
-
-        connection.send(new ClientboundRotateHeadPacket(entity, yawByte));
-        connection.send(new ClientboundMoveEntityPacket.Rot(entity.getId(), yawByte, pitchByte, serverPlayer.onGround()));
+        return ImmutablePair.of(yaw, pitch);
     }
 
     /**
@@ -1411,6 +1430,12 @@ public class NPC extends NpcHolder
         Set<UUID> excluded = excludedPlayers == null ? Collections.emptySet() :
                 Arrays.stream(excludedPlayers).filter(Objects::nonNull).map(Player::getUniqueId).collect(Collectors.toSet());
 
+        if(getOption(NpcOption.LOOK_AT_PLAYER) != null && getOption(NpcOption.POSE) != org.bukkit.entity.Pose.SLEEPING)
+        {
+            changeRealLocationWithLookAt(location, excluded);
+            return;
+        }
+
         float baseYaw = location.getYaw() + 360F;
         float pitch = location.getPitch();
 
@@ -1459,6 +1484,52 @@ public class NPC extends NpcHolder
 
             if(rotPacket != null)
                 ((CraftPlayer) viewer).getHandle().connection.send(rotPacket);
+        }
+    }
+
+    /**
+     * Changes the NPC's location and ensures it looks at the viewer.
+     *
+     * @param location the new location of the NPC
+     * @param excluded a set of UUIDs of players who should not be affected by this change
+     */
+    private void changeRealLocationWithLookAt(@NotNull Location location, @Nullable Set<UUID> excluded)
+    {
+        for(UUID uuid : viewers)
+        {
+            Player viewer = Bukkit.getPlayer(uuid);
+            if(viewer == null)
+                continue;
+
+            if(excluded.contains(viewer.getUniqueId()))
+                continue;
+
+            Pair<Float, Float> values = null;
+            Double distance = getOption(NpcOption.LOOK_AT_PLAYER, viewer);
+            if(distance != null && getOption(NpcOption.POSE, viewer) != org.bukkit.entity.Pose.SLEEPING &&
+                    getLocation().distanceSquared(viewer.getLocation()) <= distance * distance)
+                values = getLookAtPlayerValues(viewer);
+
+            if(values == null)
+                values = ImmutablePair.of(location.getYaw() + 360F, location.getPitch());
+
+            ClientboundTeleportEntityPacket teleport1 = (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(serverPlayer,
+                    new Vec3(location.getX(), location.getY(), location.getZ()), new Vec3(0, 0, 0), values.getLeft(), values.getRight(), Set.of(), true);
+
+            ((CraftPlayer) viewer).getHandle().connection.send(teleport1);
+
+            ClientboundTeleportEntityPacket teleport2 = entity.equals(serverPlayer) ? null :
+                    (ClientboundTeleportEntityPacket) TeleportEntityPacket.create(entity, new Vec3(location.getX(), location.getY(), location.getZ()),
+                            new Vec3(0, 0, 0), values.getLeft(), values.getRight(), Set.of(), true);
+
+            if(teleport2 != null)
+                ((CraftPlayer) viewer).getHandle().connection.send(teleport2);
+
+            byte yawByte = (byte) (values.getLeft() * 256 / 360);
+            byte pitchByte = (byte) (values.getRight() * 256 / 360);
+
+            ((CraftPlayer) viewer).getHandle().connection.send(new ClientboundRotateHeadPacket(entity, yawByte));
+            ((CraftPlayer) viewer).getHandle().connection.send(new ClientboundMoveEntityPacket.Rot(entity.getId(), yawByte, pitchByte, serverPlayer.onGround()));
         }
     }
 

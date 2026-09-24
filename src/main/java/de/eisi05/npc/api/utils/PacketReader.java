@@ -11,12 +11,14 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -88,6 +90,7 @@ public class PacketReader
      * @param packet The raw packet object received from the Netty pipeline. Must not be {@code null}.
      * @param player The {@link Player} who sent the packet. Must not be {@code null}.
      */
+    @SuppressWarnings("UnstableApiUsage")
     private static void checkForPacket(@NotNull Object packet, @NotNull Player player)
     {
         if(!(packet instanceof Packet<?>))
@@ -119,6 +122,25 @@ public class PacketReader
 
             callNpc(player, npc, ClickActionType.LEFT);
             cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
+            return;
+        }
+
+        if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_11) && packet instanceof ServerboundPlayerActionPacket actionPacket &&
+                actionPacket.getAction() == ServerboundPlayerActionPacket.Action.STAB)
+        {
+            ItemStack mainItem = player.getInventory().getItemInMainHand();
+            io.papermc.paper.datacomponent.item.AttackRange component = mainItem.getData(io.papermc.paper.datacomponent.DataComponentTypes.ATTACK_RANGE);
+
+            float minRange = component.minReach();
+            float maxRange = component.maxReach();
+            float hitboxMargin = component.hitboxMargin();
+
+            NPC targetNpc = NpcHitboxUtil.getHitNpcAlongStab(player, minRange, maxRange, hitboxMargin);
+            if(targetNpc != null)
+            {
+                callNpc(player, targetNpc, ClickActionType.LEFT);
+                cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
+            }
             return;
         }
 

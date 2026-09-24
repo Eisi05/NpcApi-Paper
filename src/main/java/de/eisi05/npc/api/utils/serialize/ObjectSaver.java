@@ -18,6 +18,9 @@ import org.jetbrains.annotations.Nullable;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.*;
 
@@ -284,11 +287,34 @@ public class ObjectSaver
         }
     }
 
-    public <T> void write(T object, boolean append) throws IOException
+    public <T> void write(T object) throws IOException
     {
-        try(Writer writer = new OutputStreamWriter(new FileOutputStream(this.file, append), StandardCharsets.UTF_8))
+        File parentDir = file.getParentFile();
+        if (parentDir != null && !parentDir.exists())
+            parentDir.mkdirs();
+
+        File tempFile = new File(parentDir, file.getName() + ".tmp");
+        try
         {
-            GSON.toJson(object, writer);
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(tempFile), StandardCharsets.UTF_8))
+            {
+                GSON.toJson(object, writer);
+            }
+
+            try
+            {
+                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            }
+            catch (AtomicMoveNotSupportedException e)
+            {
+                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        catch (Exception e)
+        {
+            if (tempFile.exists())
+                tempFile.delete();
+            throw new IOException("Failed to save data to " + file.getName() + " (original file preserved)", e);
         }
     }
 

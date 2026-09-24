@@ -156,7 +156,7 @@ public class NpcManager
                     file1.delete();
 
                     File jsonFile = new File(file, file1.getName() + ".json");
-                    new ObjectSaver(jsonFile).write(serializedNPC, false);
+                    new ObjectSaver(jsonFile).write(serializedNPC);
                     migrations++;
                 }
                 else

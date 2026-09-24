@@ -2,19 +2,14 @@ package de.eisi05.npc.api.events;
 
 import de.eisi05.npc.api.objects.NPC;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Event;
-import org.bukkit.event.HandlerList;
 import org.jetbrains.annotations.NotNull;
 
 /**
  * Called after an NPC has been fully shown to a player and all packets have been sent. This event is called after the NPC is already visible to the player and
  * cannot be canceled.
  */
-public class NpcPostShowEvent extends Event
+public class NpcPostShowEvent extends NpcPlayerEvent
 {
-    private static final HandlerList HANDLERS = new HandlerList();
-    private final Player player;
-    private final NPC npc;
     private final boolean wasViewer;
 
     /**
@@ -27,45 +22,8 @@ public class NpcPostShowEvent extends Event
      */
     public NpcPostShowEvent(@NotNull Player player, @NotNull NPC npc, boolean wasViewer)
     {
-        this.player = player;
-        this.npc = npc;
+        super(npc, player);
         this.wasViewer = wasViewer;
-    }
-
-    /**
-     * Returns the HandlerList for this event.
-     *
-     * @return the static HandlerList instance
-     */
-    public static HandlerList getHandlerList()
-    {
-        return HANDLERS;
-    }
-
-    @Override
-    public @NotNull HandlerList getHandlers()
-    {
-        return getHandlerList();
-    }
-
-    /**
-     * Gets the NPC that was shown.
-     *
-     * @return the NPC that was shown, never null
-     */
-    public @NotNull NPC getNpc()
-    {
-        return npc;
-    }
-
-    /**
-     * Gets the player to whom the NPC was shown.
-     *
-     * @return the player, never null
-     */
-    public @NotNull Player getPlayer()
-    {
-        return player;
     }
 
     /**

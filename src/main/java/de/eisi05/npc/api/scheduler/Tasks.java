@@ -1,6 +1,7 @@
 package de.eisi05.npc.api.scheduler;
 
 import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.listeners.NpcDamageListener;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
@@ -41,6 +42,7 @@ public class Tasks
     private static BukkitTask lookAtTask;
     private static BukkitTask placeholderTask;
     private static BukkitTask queueProcessorTask;
+    private static BukkitTask projectileTask;
 
     /**
      * Starts all defined NPC-related tasks, including the skin fetch queue processor. This method should be called when the plugin is enabled to ensure that
@@ -51,6 +53,7 @@ public class Tasks
         lookAtTask();
         placeholderTask();
         startQueueProcessor();
+        projectileTask = NpcDamageListener.startProjectileTracker();
     }
 
     /**
@@ -67,9 +70,13 @@ public class Tasks
         if(queueProcessorTask != null && !queueProcessorTask.isCancelled())
             queueProcessorTask.cancel();
 
+        if(projectileTask != null && !projectileTask.isCancelled())
+            projectileTask.cancel();
+
         lookAtTask = null;
         placeholderTask = null;
         queueProcessorTask = null;
+        projectileTask = null;
 
         List<CompletableFuture<?>> futuresToCancel;
         synchronized(activeFutures)

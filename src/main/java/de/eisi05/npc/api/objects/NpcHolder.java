@@ -3,6 +3,7 @@ package de.eisi05.npc.api.objects;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.ai.GoalSelector;
+import de.eisi05.npc.api.manager.NpcCombatManager;
 import net.kyori.adventure.text.Component;
 import net.minecraft.network.protocol.Packet;
 import org.bukkit.Bukkit;
@@ -347,6 +348,16 @@ public abstract class NpcHolder implements InventoryHolder
                 return true;
             return !goalSelector.isGoalQueuedForRemoval(goal);
         }).toList();
+    }
+
+    /**
+     * Gets the combat manager for this NPC.
+     *
+     * @return the {@link NpcCombatManager} for this NPC. Will not be null.
+     */
+    public @NotNull NpcCombatManager getCombatManager()
+    {
+        return getOption(NpcOption.COMBAT_MANAGER, GLOBAL_UUID);
     }
 
     /**
