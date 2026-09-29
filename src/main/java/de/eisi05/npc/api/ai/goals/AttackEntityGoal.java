@@ -2,10 +2,10 @@ package de.eisi05.npc.api.ai.goals;
 
 import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.LocationUtils;
 import de.eisi05.npc.api.utils.RegistryPredicate;
 import de.eisi05.npc.api.utils.SerializableBiPredicate;
@@ -34,6 +34,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.io.Serial;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Type;
 import java.util.*;
 
@@ -72,7 +73,7 @@ public class AttackEntityGoal extends Goal
     private transient boolean isAttacking;
     private transient WalkToLocationGoal movementGoal;
     private transient boolean isUsing;
-    private transient List<Player> cachedViewers;
+    private transient List<WeakReference<Player>> cachedViewers;
     private transient int lineOfSightCheckCooldown;
     private transient int pathRecalculationCooldown;
     private transient boolean isKiting;
@@ -251,8 +252,8 @@ public class AttackEntityGoal extends Goal
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
             updateCachedViewers(npc);
 
-        for(Player viewer : cachedViewers)
-            npc.lookAtEntity(target, viewer, true);
+        for(WeakReference<Player> viewer : cachedViewers)
+            npc.lookAtEntity(target, viewer.get(), true);
 
         if(lineOfSightCheckCooldown > 0)
             lineOfSightCheckCooldown--;
@@ -609,7 +610,12 @@ public class AttackEntityGoal extends Goal
         }
         catch(NoClassDefFoundError | Exception e)
         {
-            target.damage(getAttackDamage(npc), npcPlayer);
+            double damage = getAttackDamage(npc);
+            SchedulerProvider.get().runSyncForEntity(target, () ->
+            {
+                if(target.isValid())
+                    target.damage(damage, npcPlayer);
+            });
         }
     }
 
@@ -637,7 +643,7 @@ public class AttackEntityGoal extends Goal
             setUsingItemState(npc, true);
             isUsing = true;
 
-            Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () ->
+            SchedulerProvider.get().runLaterForEntity(((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity(), () ->
             {
                 setUsingItemState(npc, false);
 
@@ -654,7 +660,8 @@ public class AttackEntityGoal extends Goal
                     arrow = npcLoc.getWorld().spawnArrow(npcLoc, direction, speed, 0, Trident.class);
                 else
                     arrow = npcLoc.getWorld().spawnArrow(npcLoc, direction, speed, 0, Arrow.class);
-                arrow.setShooter(((ServerPlayer) npc.getServerPlayer()).getBukkitEntity());
+                if(npc.getServerPlayer() != null)
+                    arrow.setShooter(((ServerPlayer) npc.getServerPlayer()).getBukkitEntity());
                 arrow.setDamage(getAttackDamage(npc));
                 arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
                 arrow.setWeapon(mainHand);
@@ -691,8 +698,8 @@ public class AttackEntityGoal extends Goal
             updateCachedViewers(npc);
 
         ClientboundSetEntityDataPacket packet = new ClientboundSetEntityDataPacket(serverPlayer.getId(), data.packAll());
-        for(Player viewer : cachedViewers)
-            ((CraftPlayer) viewer).getHandle().connection.send(packet);
+        for(WeakReference<Player> viewer : cachedViewers)
+            ((CraftPlayer) viewer.get()).getHandle().connection.send(packet);
     }
 
     /**
@@ -706,11 +713,10 @@ public class AttackEntityGoal extends Goal
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
             updateCachedViewers(npc);
 
-        for(Player viewer : cachedViewers)
-            npc.playAnimation(viewer, AnimatePacket.Animation.SWING_MAIN_HAND);
+        for(WeakReference<Player> viewer : cachedViewers)
+            npc.playAnimation(viewer.get(), AnimatePacket.Animation.SWING_MAIN_HAND);
 
-        target.damage(getAttackDamage(npc));
-
+        double damage = getAttackDamage(npc);
         Location npcLoc = npc.getLocation();
         Location targetLoc = target.getLocation();
 
@@ -724,7 +730,15 @@ public class AttackEntityGoal extends Goal
 
         Vector knockback = direction.multiply(effectiveKnockback);
         knockback.setY(effectiveKnockback * 0.4);
-        target.setVelocity(knockback);
+
+        SchedulerProvider.get().runSyncForEntity(target, () ->
+        {
+            if(target.isValid())
+            {
+                target.damage(damage);
+                target.setVelocity(knockback);
+            }
+        });
     }
 
     /**
@@ -938,6 +952,7 @@ public class AttackEntityGoal extends Goal
         cachedViewers = npc.getViewers().stream()
                 .map(Bukkit::getPlayer)
                 .filter(Objects::nonNull)
+                .map(WeakReference::new)
                 .toList();
     }
 

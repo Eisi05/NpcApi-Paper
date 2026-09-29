@@ -12,6 +12,8 @@ import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import net.minecraft.world.phys.AABB;
@@ -56,67 +58,67 @@ public class NpcDamageListener implements Listener
     private static final Map<UUID, Integer> lastAttackTicks = new HashMap<>();
 
     private static final Map<Projectile, Location> activeProjectiles = new ConcurrentHashMap<>();
-    private static BukkitTask projectileTask;
+    private static PluginTask projectileTask;
 
-    public static BukkitTask startProjectileTracker()
+    public static PluginTask startProjectileTracker()
     {
         if(projectileTask != null)
             return projectileTask;
 
-        return projectileTask = new BukkitRunnable()
+        return projectileTask = SchedulerProvider.get().runTimer(() ->
         {
-            @Override
-            public void run()
+            if(activeProjectiles.isEmpty())
+                return;
+
+            Iterator<Map.Entry<Projectile, Location>> iterator = activeProjectiles.entrySet().iterator();
+            while(iterator.hasNext())
             {
-                if(activeProjectiles.isEmpty())
-                    return;
+                Map.Entry<Projectile, Location> entry = iterator.next();
+                Projectile projectile = entry.getKey();
+                Location lastLoc = entry.getValue();
 
-                Iterator<Map.Entry<Projectile, Location>> iterator = activeProjectiles.entrySet().iterator();
-                while(iterator.hasNext())
+                if(!projectile.isValid() || projectile.isDead())
                 {
-                    Map.Entry<Projectile, Location> entry = iterator.next();
-                    Projectile projectile = entry.getKey();
-                    Location lastLoc = entry.getValue();
-
-                    if(!projectile.isValid() || projectile.isDead())
-                    {
-                        iterator.remove();
-                        continue;
-                    }
-
-                    Location currentLoc = projectile.getLocation();
-                    if(!currentLoc.getWorld().equals(lastLoc.getWorld()))
-                    {
-                        entry.setValue(currentLoc);
-                        continue;
-                    }
-
-                    Vector travelVector = currentLoc.toVector().subtract(lastLoc.toVector());
-                    double distance = travelVector.length();
-                    if(distance > 1.0E-4)
-                    {
-                        Vector direction = travelVector.clone().normalize();
-                        NPC hitNpc = rayTraceNpcs(lastLoc, direction, distance);
-
-                        if(hitNpc != null)
-                        {
-                            iterator.remove();
-                            handleProjectileHit(hitNpc, projectile);
-                            projectile.remove();
-                            continue;
-                        }
-                    }
-
-                    if(projectile.isOnGround())
-                    {
-                        iterator.remove();
-                        continue;
-                    }
-
-                    entry.setValue(currentLoc);
+                    iterator.remove();
+                    continue;
                 }
+
+                Location currentLoc = projectile.getLocation();
+                if(!currentLoc.getWorld().equals(lastLoc.getWorld()))
+                {
+                    entry.setValue(currentLoc);
+                    continue;
+                }
+
+                Vector travelVector = currentLoc.toVector().subtract(lastLoc.toVector());
+                double distance = travelVector.length();
+                if(distance > 1.0E-4)
+                {
+                    Vector direction = travelVector.clone().normalize();
+                    NPC hitNpc = rayTraceNpcs(lastLoc, direction, distance);
+
+                    if(hitNpc != null)
+                    {
+                        iterator.remove();
+                        handleProjectileHit(hitNpc, projectile);
+                        SchedulerProvider.get().runSyncForEntity(projectile, () ->
+                        {
+                            if(projectile.isValid())
+                                projectile.remove();
+                        });
+                        continue;
+                    }
+                }
+
+                if(projectile.isOnGround())
+                {
+                    iterator.remove();
+                    continue;
+                }
+
+                entry.setValue(currentLoc);
             }
-        }.runTaskTimer(NpcApi.plugin, 1L, 1L);
+        }, 1L, 1L);
     }
 
     private static void applyProjectileKnockback(NPC npc, Vector velocity, CombatState state, double knockbackMultiplier)
@@ -754,7 +756,11 @@ public class NpcDamageListener implements Listener
                     double power = (radius - dist) * 0.7 * heavyMultiplier * (1.0 - kbRes);
                     Vector push = dir.multiply(power);
 
-                    living.setVelocity(living.getVelocity().add(new Vector(push.getX(), 0.7, push.getZ())));
+                    SchedulerProvider.get().runSyncForEntity(living, () ->
+                    {
+                        if(living.isValid())
+                            living.setVelocity(living.getVelocity().add(new Vector(push.getX(), 0.7, push.getZ())));
+                    });
                 }
             }
         }

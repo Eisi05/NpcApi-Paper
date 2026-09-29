@@ -2,7 +2,7 @@ package de.eisi05.npc.api.objects;
 
 import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
-import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.SerializableBiFunction;
 import de.eisi05.npc.api.utils.TriFunction;

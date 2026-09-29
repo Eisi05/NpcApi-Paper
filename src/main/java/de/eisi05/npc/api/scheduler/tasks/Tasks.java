@@ -1,4 +1,4 @@
-package de.eisi05.npc.api.scheduler;
+package de.eisi05.npc.api.scheduler.tasks;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.listeners.NpcDamageListener;
@@ -7,17 +7,18 @@ import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.objects.NpcSkin;
 import de.eisi05.npc.api.objects.Skin;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.Reflections;
 import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -29,7 +30,7 @@ import java.util.function.Supplier;
 public class Tasks
 {
     public static final Map<UUID, Map<UUID, String>> placeholderCache = new ConcurrentHashMap<>();
-    private static final List<CompletableFuture<?>> activeFutures = new ArrayList<>();
+    private static final List<CompletableFuture<?>> activeFutures = new CopyOnWriteArrayList<>();
 
     // --- Skin Queue & Rate Limiting Constants ---
     private static final Map<String, Long> negativeCache = new ConcurrentHashMap<>();
@@ -39,10 +40,10 @@ public class Tasks
     private static final int MAX_TOKENS = 180;
     private static final AtomicInteger tokens = new AtomicInteger(MAX_TOKENS);
 
-    private static BukkitTask lookAtTask;
-    private static BukkitTask placeholderTask;
-    private static BukkitTask queueProcessorTask;
-    private static BukkitTask projectileTask;
+    private static PluginTask lookAtTask;
+    private static PluginTask placeholderTask;
+    private static PluginTask queueProcessorTask;
+    private static PluginTask projectileTask;
 
     /**
      * Starts all defined NPC-related tasks, including the skin fetch queue processor. This method should be called when the plugin is enabled to ensure that
@@ -94,10 +95,10 @@ public class Tasks
      */
     private static void startQueueProcessor()
     {
-        Bukkit.getScheduler().runTaskTimerAsynchronously(NpcApi.plugin, () ->
+        SchedulerProvider.get().runTimerAsync(() ->
                 tokens.updateAndGet(current -> current < MAX_TOKENS ? Math.min(MAX_TOKENS, current + 3) : current), 20L, 20L);
 
-        queueProcessorTask = Bukkit.getScheduler().runTaskTimerAsynchronously(NpcApi.plugin, () ->
+        queueProcessorTask = SchedulerProvider.get().runTimerAsync(() ->
         {
             SkinRequest request = fetchQueue.peek();
             if(request == null)
@@ -185,11 +186,7 @@ public class Tasks
      */
     private static void lookAtTask()
     {
-        lookAtTask = new BukkitRunnable()
-        {
-            @Override
-            public void run()
-            {
+        lookAtTask = SchedulerProvider.get().runTimer(() -> {
                 for(NPC npc : NpcManager.getList())
                 {
                     double range = npc.getOption(NpcOption.LOOK_AT_PLAYER);
@@ -201,8 +198,7 @@ public class Tasks
                             .stream().filter(entity -> entity instanceof Player)
                             .forEach(entity -> npc.lookAtPlayer((Player) entity));
                 }
-            }
-        }.runTaskTimer(NpcApi.plugin, 0, NpcApi.config.lookAtTimer());
+            }, 0L, NpcApi.config.lookAtTimer());
     }
 
     /**
@@ -210,11 +206,8 @@ public class Tasks
      */
     private static void placeholderTask()
     {
-        placeholderTask = new BukkitRunnable()
-        {
-            @Override
-            public void run()
-            {
+        placeholderTask = SchedulerProvider.get().runTimer(() -> {
+
                 Collection<NPC> npcs = NpcManager.getList();
                 for(NPC npc : npcs)
                 {
@@ -243,8 +236,7 @@ public class Tasks
                         updateSkin(player, npc, npcSkin);
                     }
                 }
-            }
-        }.runTaskTimer(NpcApi.plugin, 10, NpcApi.config.placeholderTimer());
+        }, 10, NpcApi.config.placeholderTimer());
     }
 
     /**
@@ -275,12 +267,12 @@ public class Tasks
         {
             UUID skinUuid = UUID.fromString(newPlaceholder);
             fetchSkinAsync(skinUuid).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
-                    Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
+                    SchedulerProvider.get().runDelayed(() -> npc.updateSkin(player), 1L)));
         }
         catch(IllegalArgumentException e)
         {
             fetchSkinAsync(newPlaceholder).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
-                    Bukkit.getScheduler().runTaskLater(NpcApi.plugin, () -> npc.updateSkin(player), 1)));
+                    SchedulerProvider.get().runDelayed(() -> npc.updateSkin(player), 1L)));
         }
     }
 

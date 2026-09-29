@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages the collection and lifecycle of NPC instances.
@@ -28,14 +29,14 @@ public class NpcManager
      * Stores serialized NPCs that should be loaded once their world becomes available. The key is the world UUID, and the value is a list of NPCs waiting to be
      * deserialized.
      */
-    private static final Map<UUID, List<NPC.SerializedNPC>> toLoadNPCs = new HashMap<>();
+    private static final Map<UUID, List<NPC.SerializedNPC>> toLoadNPCs = new ConcurrentHashMap<>();
 
-    private static final Map<Integer, NPC> npcById = new HashMap<>();
+    private static final Map<Integer, NPC> npcById = new ConcurrentHashMap<>();
 
     /**
      * Map storing the file name and the exception that occurred during loading.
      */
-    public static Map<String, Exception> loadExceptions = new HashMap<>();
+    public static Map<String, Exception> loadExceptions = new ConcurrentHashMap<>();
 
     /**
      * Adds an NPC to the manager's list.

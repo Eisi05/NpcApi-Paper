@@ -6,14 +6,15 @@ import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.objects.NpcSkin;
-import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.PacketReader;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 
@@ -29,26 +30,26 @@ public class ConnectionListener implements Listener
         if(!NpcApi.config.autoManageVisibility())
             return;
 
-        new BukkitRunnable()
+        SchedulerProvider.get().runLaterForEntity(event.getPlayer(), () ->
         {
-            @Override
-            public void run()
+            Player player = event.getPlayer();
+            if (player == null || !player.isOnline())
+                return;
+
+            for(NPC npc : new ArrayList<>(NpcManager.getList()))
             {
-                for(NPC npc : new ArrayList<>(NpcManager.getList()))
-                {
-                    if(!npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
-                        continue;
+                if(!npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
+                    continue;
 
-                    npc.showNPCToPlayer(event.getPlayer());
-                    npc.addWalkingViewer(event.getPlayer());
-                    NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, event.getPlayer());
-                    if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, event.getPlayer()))
-                        continue;
+                npc.showNPCToPlayer(event.getPlayer());
+                npc.addWalkingViewer(event.getPlayer());
+                NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, event.getPlayer());
+                if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, event.getPlayer()))
+                    continue;
 
-                    Tasks.updateSkin(event.getPlayer(), npc, npcSkin);
-                }
+                Tasks.updateSkin(event.getPlayer(), npc, npcSkin);
             }
-        }.runTaskLater(NpcApi.plugin, 10L);
+        }, 10L);
     }
 
     @EventHandler

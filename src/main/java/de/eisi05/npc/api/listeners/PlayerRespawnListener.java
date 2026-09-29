@@ -1,12 +1,11 @@
 package de.eisi05.npc.api.listeners;
 
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 
 public class PlayerRespawnListener implements Listener
 {
@@ -15,17 +14,16 @@ public class PlayerRespawnListener implements Listener
     {
         Player player = event.getPlayer();
 
-        new BukkitRunnable()
+        SchedulerProvider.get().runLaterForEntity(player, () ->
         {
-            @Override
-            public void run()
+            if (player == null || !player.isOnline())
+                return;
+
+            NpcManager.getList().forEach(npc ->
             {
-                NpcManager.getList().forEach(npc ->
-                {
-                    npc.hideNpcFromPlayer(player);
-                    npc.showNPCToPlayer(player);
-                });
-            }
-        }.runTaskLater(NpcApi.plugin, 10L);
+                npc.hideNpcFromPlayer(player);
+                npc.showNPCToPlayer(player);
+            });
+        }, 10L);
     }
 }

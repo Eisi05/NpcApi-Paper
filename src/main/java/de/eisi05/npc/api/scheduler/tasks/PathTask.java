@@ -1,4 +1,4 @@
-package de.eisi05.npc.api.scheduler;
+package de.eisi05.npc.api.scheduler.tasks;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.WalkingResult;
@@ -8,6 +8,8 @@ import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
@@ -21,7 +23,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Openable;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
@@ -31,10 +32,10 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * A task that handles the movement of an NPC along a calculated path. This class extends BukkitRunnable to handle the movement in a scheduled task, providing
- * smooth movement, physics, and door interaction capabilities.
+ * A task that handles the movement of an NPC along a calculated path. This class implements Runnable to handle the movement in a scheduled task compatible with
+ * both Paper and Folia, providing smooth movement, physics, and door interaction capabilities.
  */
-public class PathTask extends BukkitRunnable
+public class PathTask implements Runnable
 {
     private static final double GRAVITY = -0.08;
     private static final double JUMP_VELOCITY = 0.42;
@@ -57,6 +58,7 @@ public class PathTask extends BukkitRunnable
     private final Set<Block> openedDoors = new HashSet<>();
     private final Vector previousMoveDir;
 
+    private PluginTask task;
     private boolean finished = false;
     private int index = 0;
     private Vector currentPos;
@@ -101,7 +103,18 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * The main execution method called by the Bukkit scheduler. Handles the NPC's movement along the path, including physics and door interactions.
+     * Starts the path task using the cross-compatible SchedulerProvider.
+     *
+     * @param delayTicks  The delay before the first execution
+     * @param periodTicks The period between executions
+     */
+    public void start(long delayTicks, long periodTicks)
+    {
+        this.task = SchedulerProvider.get().runTimerForEntity(serverEntity.getBukkitEntity(), this, delayTicks, periodTicks);
+    }
+
+    /**
+     * The main execution method called by the Bukkit/Folia scheduler. Handles the NPC's movement along the path, including physics and door interactions.
      */
     @Override
     public void run()
@@ -214,15 +227,14 @@ public class PathTask extends BukkitRunnable
     }
 
     /**
-     * Handles the logic when an NPC encounters an unloaded chunk.
+     * Handles the logic when an NPC encounters an unloaded chunk. Uses Folia-compatible asynchronous chunk loading.
      */
     private void handleUnloadedChunk(World world, int chunkX, int chunkZ)
     {
         if(NpcApi.config.loadChunksOnPath() && !isWaitingForChunkLoad)
         {
             isWaitingForChunkLoad = true;
-            world.getChunkAt(chunkX, chunkZ);
-            isWaitingForChunkLoad = false;
+            world.getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> isWaitingForChunkLoad = false);
         }
     }
 
@@ -708,18 +720,26 @@ public class PathTask extends BukkitRunnable
      *
      * @throws IllegalStateException if the task was already canceled
      */
-    @Override
     public synchronized void cancel() throws IllegalStateException
     {
         if(finished)
         {
-            super.cancel();
+            if(task != null)
+            {
+                task.cancel();
+                task = null;
+            }
             return;
         }
 
         finished = true;
         forceCloseAllDoors();
-        super.cancel();
+
+        if(task != null)
+        {
+            task.cancel();
+            task = null;
+        }
 
         if(callback != null)
             callback.accept(WalkingResult.CANCELLED);
@@ -761,7 +781,7 @@ public class PathTask extends BukkitRunnable
     /**
      * Finds the nearest solid floor beneath the given location.
      *
-     * @param start          the starting search location
+     * @param start the starting search location
      * @return grounded location, or null if no floor was found
      */
     public @Nullable Location findSolidGroundBeneath(@NotNull Location start)
@@ -789,9 +809,9 @@ public class PathTask extends BukkitRunnable
      * Checks if a location is collision-free.
      *
      * @param world the world
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param z the z coordinate
+     * @param x     the x coordinate
+     * @param y     the y coordinate
+     * @param z     the z coordinate
      * @return true if the location is collision-free, false otherwise
      */
     private boolean isLocationCollisionFree(@NotNull World world, double x, double y, double z)

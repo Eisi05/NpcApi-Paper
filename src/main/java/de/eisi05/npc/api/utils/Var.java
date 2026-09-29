@@ -1,11 +1,14 @@
 package de.eisi05.npc.api.utils;
 
+import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -187,6 +190,27 @@ public class Var
         if(o instanceof Optional<?> optional)
             return optional.map(o1 -> (boolean) o1).orElse(false);
         return (boolean) o;
+    }
+
+    /**
+     * Safely iterates over all online players using a Folia-compatible approach.
+     * On Folia, this schedules the action on each player's EntityScheduler.
+     * On Paper, this simply iterates over Bukkit.getOnlinePlayers().
+     *
+     * @param action the action to perform on each player
+     */
+    public static void safeForEachOnlinePlayer(@NotNull Consumer<Player> action)
+    {
+        if(SchedulerProvider.isFolia())
+        {
+            Bukkit.getGlobalRegionScheduler().run(NpcApi.plugin, task ->
+            {
+                for(Player player : Bukkit.getOnlinePlayers())
+                    player.getScheduler().run(NpcApi.plugin, scheduledTask -> action.accept(player), null);
+            });
+        }
+        else
+            Bukkit.getOnlinePlayers().forEach(action);
     }
 
     /**

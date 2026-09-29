@@ -5,6 +5,7 @@ import de.eisi05.npc.api.enums.ClickActionType;
 import de.eisi05.npc.api.events.NpcInteractEvent;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
@@ -23,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
 /**
@@ -32,8 +34,8 @@ import java.util.function.BiConsumer;
  */
 public class PacketReader
 {
-    private static final Map<UUID, Channel> channels = new HashMap<>();
-    private static final List<BiConsumer<Player, Object>> readers = new ArrayList<>();
+    private static final Map<UUID, Channel> channels = new ConcurrentHashMap<>();
+    private static final List<BiConsumer<Player, Object>> readers = new CopyOnWriteArrayList<>();
     private static final Map<UUID, Integer> cancelUseUntilTick = new ConcurrentHashMap<>();
 
     /**
@@ -104,7 +106,7 @@ public class PacketReader
             if(until == null || currentTick > until)
                 return;
 
-            Bukkit.getScheduler().runTask(NpcApi.plugin, () ->
+            SchedulerProvider.get().run(() ->
             {
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
                 serverPlayer.stopUsingItem();
@@ -193,7 +195,7 @@ public class PacketReader
      */
     public static void callNpc(@NotNull Player player, @NotNull NPC npc, @NotNull ClickActionType type)
     {
-        Bukkit.getScheduler().runTask(NpcApi.plugin, () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, type)));
+        SchedulerProvider.get().run(() -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, type)));
     }
 
     /**
@@ -217,8 +219,7 @@ public class PacketReader
      */
     public static void uninjectAll()
     {
-        for(Player player : Bukkit.getOnlinePlayers())
-            uninject(player);
+        Var.safeForEachOnlinePlayer(PacketReader::uninject);
     }
 
     /**
@@ -226,7 +227,6 @@ public class PacketReader
      */
     public static void injectAll()
     {
-        for(Player player : Bukkit.getOnlinePlayers())
-            inject(player);
+        Var.safeForEachOnlinePlayer(PacketReader::inject);
     }
 }

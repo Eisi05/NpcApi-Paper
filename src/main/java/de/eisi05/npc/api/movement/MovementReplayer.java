@@ -1,7 +1,8 @@
 package de.eisi05.npc.api.movement;
 
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
@@ -11,8 +12,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -133,7 +132,7 @@ public class MovementReplayer
         private final long startTime;
         private final Player[] viewers;
 
-        private BukkitTask replayTask;
+        private PluginTask replayTask;
         private int currentIndex;
         private long lastTimestamp;
 
@@ -198,40 +197,36 @@ public class MovementReplayer
             activeReplays.put(npc.getUUID(), this);
 
             // Start replay task
-            replayTask = new BukkitRunnable()
+            replayTask = SchedulerProvider.get().runTimer(() ->
             {
-                @Override
-                public void run()
+                if(currentIndex >= recording.getMovementCount())
                 {
-                    if(currentIndex >= recording.getMovementCount())
-                    {
-                        if(!recording.movements().isEmpty())
-                            executeMovement(recording.getLastMovement());
+                    if(!recording.movements().isEmpty())
+                        executeMovement(recording.getLastMovement());
 
-                        complete(ReplayResult.COMPLETED);
-                        return;
-                    }
-
-                    // Calculate timing based on mode - process multiple movements per tick for high speed multipliers
-                    long elapsedTime = System.currentTimeMillis() - startTime;
-                    int movementsProcessed = 0;
-
-                    while(currentIndex < recording.movements().size() && movementsProcessed < speedMultiplier)
-                    {
-                        MovementData currentMovement = recording.movements().get(currentIndex);
-                        long scaledTime = (long) (currentMovement.getTimestamp() / speedMultiplier);
-
-                        if(elapsedTime >= scaledTime)
-                        {
-                            executeMovement(currentMovement);
-                            currentIndex++;
-                            movementsProcessed++;
-                        }
-                        else
-                            break;
-                    }
+                    complete(ReplayResult.COMPLETED);
+                    return;
                 }
-            }.runTaskTimer(NpcApi.plugin, 1L, 1L);
+
+                // Calculate timing based on mode - process multiple movements per tick for high speed multipliers
+                long elapsedTime = System.currentTimeMillis() - startTime;
+                int movementsProcessed = 0;
+
+                while(currentIndex < recording.movements().size() && movementsProcessed < speedMultiplier)
+                {
+                    MovementData currentMovement = recording.movements().get(currentIndex);
+                    long scaledTime = (long) (currentMovement.getTimestamp() / speedMultiplier);
+
+                    if(elapsedTime >= scaledTime)
+                    {
+                        executeMovement(currentMovement);
+                        currentIndex++;
+                        movementsProcessed++;
+                    }
+                    else
+                        break;
+                }
+            }, 1L, 1L);
         }
 
         private void executeMovement(@NotNull MovementData movement)

@@ -1,9 +1,9 @@
 package de.eisi05.npc.api.ai;
 
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
-import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitTask;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,7 +21,7 @@ public class GoalSelector
     private final NPC npc;
     private final Set<Goal> removalQueue = new HashSet<>();
     private Goal currentGoal;
-    private BukkitTask task;
+    private PluginTask task;
     private boolean running;
     private long tickInterval;
 
@@ -142,7 +142,7 @@ public class GoalSelector
             return;
 
         running = true;
-        task = Bukkit.getScheduler().runTaskTimer(NpcApi.plugin, this::tick, 0L, tickInterval);
+        task = SchedulerProvider.get().runTimerForEntity(((Entity) npc.getEntity()).getBukkitEntity(), this::tick, 0L, tickInterval);
     }
 
     /**

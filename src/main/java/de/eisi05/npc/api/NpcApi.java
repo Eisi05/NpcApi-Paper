@@ -6,7 +6,8 @@ import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.*;
 import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
-import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.Metrics;
 import de.eisi05.npc.api.utils.PacketReader;
 import net.kyori.adventure.text.Component;
@@ -123,7 +124,7 @@ public final class NpcApi
         }
 
         Tasks.stop();
-        Bukkit.getScheduler().cancelTasks(plugin);
+        SchedulerProvider.get().cancelAllTasks();
 
         npcsToSave.stream().filter(NpcHolder::hasUnsavedChanges).parallel().forEach(npc ->
         {

@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.Serial;
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalInt;
@@ -35,7 +36,7 @@ public class FollowEntityGoal extends Goal
     private transient LivingEntity target;
     private transient int pathRecalculationCooldown;
     private transient Location lastTargetLocation;
-    private transient List<Player> cachedViewers;
+    private transient List<WeakReference<Player>> cachedViewers;
 
     /**
      * Creates a FollowEntityGoal with a fixed target entity ID and default distances.
@@ -244,8 +245,8 @@ public class FollowEntityGoal extends Goal
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
             updateCachedViewers(npc);
 
-        for(Player viewer : cachedViewers)
-            npc.lookAtEntity(target, viewer, true);
+        for(WeakReference<Player> viewer : cachedViewers)
+            npc.lookAtEntity(target, viewer.get(), true);
 
         targetLoc.setYaw(npc.getLocation().getYaw());
         targetLoc.setPitch(npc.getLocation().getPitch());
@@ -322,8 +323,8 @@ public class FollowEntityGoal extends Goal
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
             updateCachedViewers(npc);
 
-        for(Player viewer : cachedViewers)
-            npc.lookAtEntity(target, viewer, true);
+        for(WeakReference<Player> viewer : cachedViewers)
+            npc.lookAtEntity(target, viewer.get(), true);
 
         target = null;
         lastTargetLocation = null;
@@ -385,6 +386,7 @@ public class FollowEntityGoal extends Goal
         cachedViewers = npc.getViewers().stream()
                 .map(Bukkit::getPlayer)
                 .filter(Objects::nonNull)
+                .map(WeakReference::new)
                 .toList();
     }
 }

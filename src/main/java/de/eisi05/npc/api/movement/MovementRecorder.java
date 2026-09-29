@@ -1,9 +1,8 @@
 package de.eisi05.npc.api.movement;
 
-import de.eisi05.npc.api.NpcApi;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -105,7 +104,7 @@ public class MovementRecorder
         private final int intervalTicks;
         private final ArrayList<MovementData> movements;
         private final long startTime;
-        private BukkitTask recordingTask;
+        private PluginTask recordingTask;
 
         private RecordingSession(@NotNull Player player, long sessionId, int intervalTicks)
         {
@@ -120,21 +119,17 @@ public class MovementRecorder
         {
             movements.add(new MovementData(player.getLocation(), 0));
 
-            recordingTask = new BukkitRunnable()
+            recordingTask = SchedulerProvider.get().runTimerForEntity(player, () ->
             {
-                @Override
-                public void run()
+                if(!player.isOnline())
                 {
-                    if (!player.isOnline())
-                    {
-                        stop();
-                        return;
-                    }
-
-                    long timestamp = System.currentTimeMillis() - startTime;
-                    movements.add(new MovementData(player.getLocation(), timestamp));
+                    stop();
+                    return;
                 }
-            }.runTaskTimer(NpcApi.plugin, intervalTicks, intervalTicks);
+
+                long timestamp = System.currentTimeMillis() - startTime;
+                movements.add(new MovementData(player.getLocation(), timestamp));
+            }, intervalTicks, intervalTicks);
         }
 
         private @NotNull MovementRecording stop()

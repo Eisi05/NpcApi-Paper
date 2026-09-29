@@ -2,10 +2,11 @@ package de.eisi05.npc.api.listeners;
 
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 
 public class ChangeWorldListener implements Listener
 {
@@ -15,20 +16,20 @@ public class ChangeWorldListener implements Listener
         if(!NpcApi.config.autoManageVisibility())
             return;
 
-        new BukkitRunnable()
+        SchedulerProvider.get().runLaterForEntity(event.getPlayer(), () ->
         {
-            @Override
-            public void run()
+            Player player = event.getPlayer();
+            if(player == null || !player.isOnline())
+                return;
+
+            NpcManager.getList().forEach(npc ->
             {
-                NpcManager.getList().forEach(npc ->
+                if(npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
                 {
-                    if(npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
-                    {
-                        npc.showNPCToPlayer(event.getPlayer());
-                        npc.addWalkingViewer(event.getPlayer());
-                    }
-                });
-            }
-        }.runTaskLater(NpcApi.plugin, 10L);
+                    npc.showNPCToPlayer(event.getPlayer());
+                    npc.addWalkingViewer(event.getPlayer());
+                }
+            });
+        }, 10L);
     }
 }

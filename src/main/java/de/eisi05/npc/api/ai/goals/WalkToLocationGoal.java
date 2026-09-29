@@ -1,13 +1,13 @@
 package de.eisi05.npc.api.ai.goals;
 
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.pathfinding.AStarPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
-import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.SerializableConsumer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
@@ -31,12 +31,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public class WalkToLocationGoal extends Goal
 {
-    @Serial
-    private static final long serialVersionUID = 1L;
-
     public static final int DEFAULT_MAX_ITERATIONS = 5000;
     public static final double DEFAULT_SPEED = 0.25;
     static final int RECALCULATION_COOLDOWN = 20;
+    @Serial
+    private static final long serialVersionUID = 1L;
     private static final int STUCK_THRESHOLD_TICKS = 30;
     private static final double MIN_MOVEMENT_DISTANCE_SQ = 0.0025;
     private static final int PATH_CHECK_AHEAD = 5;
@@ -415,7 +414,8 @@ public class WalkToLocationGoal extends Goal
 
         CompletableFuture<Path> future = npc.findPathAsync(null, List.of(start, end), maxIterations, allowDiagonal, null);
         Tasks.trackFuture(future);
-        future.thenAcceptAsync(path -> pathable = path != null, task -> Bukkit.getScheduler().runTask(NpcApi.plugin, task))
+        future.thenAcceptAsync(path -> pathable = path != null,
+                        task -> SchedulerProvider.get().runSyncForEntity(((Entity) npc.getEntity()).getBukkitEntity(), task))
                 .exceptionally(e ->
                 {
                     pathable = false;
@@ -460,13 +460,13 @@ public class WalkToLocationGoal extends Goal
                         if(completionCallback != null)
                             completionCallback.accept(WalkingResult.CANCELLED);
                     }
-                }, task -> Bukkit.getScheduler().runTask(NpcApi.plugin, task))
+                }, task -> SchedulerProvider.get().runSyncForEntity(((Entity) npc.getEntity()).getBukkitEntity(), task))
                 .exceptionally(e ->
                 {
                     if(isWalking)
                         return null;
 
-                    Bukkit.getScheduler().runTask(NpcApi.plugin, () ->
+                    SchedulerProvider.get().runSyncForEntity(((Entity) npc.getEntity()).getBukkitEntity(), () ->
                     {
                         if(completionCallback != null)
                             completionCallback.accept(WalkingResult.CANCELLED);

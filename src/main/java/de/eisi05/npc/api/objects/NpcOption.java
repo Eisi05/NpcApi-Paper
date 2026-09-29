@@ -14,7 +14,9 @@ import de.eisi05.npc.api.manager.NpcCombatManager;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
-import de.eisi05.npc.api.scheduler.Tasks;
+import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.*;
 import de.eisi05.npc.api.utils.serialize.ItemSerializer;
 import de.eisi05.npc.api.wrapper.enums.ChatFormat;
@@ -205,15 +207,11 @@ public class NpcOption<T, S extends Serializable>
             {
                 if(!show || !npc.name.isStatic())
                 {
-                    new BukkitRunnable()
+                    SchedulerProvider.get().runLaterForEntity(player, () ->
                     {
-                        @Override
-                        public void run()
-                        {
-                            if(npc.getUUID() != null)
-                                ((CraftPlayer) player).getHandle().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(npc.getUUID())));
-                        }
-                    }.runTaskLater(NpcApi.plugin, 50);
+                        if(npc.getUUID() != null)
+                            ((CraftPlayer) player).getHandle().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(npc.getUUID())));
+                    }, 50);
                 }
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, (ServerPlayer) npc.getServerPlayer());
             }).loadBefore(true);
@@ -510,35 +508,31 @@ public class NpcOption<T, S extends Serializable>
 
                 if(pose == Pose.SLEEPING)
                 {
-                    new BukkitRunnable()
+                    final Location startLocation = npc.getLocation().clone();
+                    final float startYaw = startLocation.getYaw();
+
+                    PluginTask[] taskHolder = new PluginTask[1];
+                    taskHolder[0] = SchedulerProvider.get().runTimerForEntity(player, new Runnable()
                     {
                         int counter = 255;
-                        final Location startLocation = npc.getLocation().clone();
-                        final float startYaw = startLocation.getYaw();
 
                         @Override
                         public void run()
                         {
                             startLocation.setYaw((startYaw + counter) % 360);
                             npc.updateLocationForPlayer(startLocation, player);
-                            if(counter == 360)
-                                cancel();
-
+                            if(counter >= 360)
+                            {
+                                if(taskHolder[0] != null)
+                                    taskHolder[0].cancel();
+                                return;
+                            }
                             counter += 35;
                         }
-                    }.runTaskTimer(NpcApi.plugin, 20, 5);
+                    }, 20, 5);
                 }
                 else
-                {
-                    new BukkitRunnable()
-                    {
-                        @Override
-                        public void run()
-                        {
-                            npc.updateLocationForPlayer(npc.getLocation(), player);
-                        }
-                    }.runTaskLater(NpcApi.plugin, 1);
-                }
+                    SchedulerProvider.get().runLaterForEntity(player, () -> npc.updateLocationForPlayer(npc.getLocation(), player), 1);
 
                 Map<String, Integer> playerEntities = npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
                 Integer oldId = playerEntities.remove("sit");
