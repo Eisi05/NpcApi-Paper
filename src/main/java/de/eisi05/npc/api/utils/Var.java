@@ -201,6 +201,13 @@ public class Var
      */
     public static void safeForEachOnlinePlayer(@NotNull Consumer<Player> action)
     {
+        if(NpcApi.plugin != null && !NpcApi.plugin.isEnabled())
+        {
+            for (Player player : Bukkit.getOnlinePlayers())
+                action.accept(player);
+            return;
+        }
+
         if(SchedulerProvider.isFolia())
         {
             Bukkit.getGlobalRegionScheduler().run(NpcApi.plugin, task ->

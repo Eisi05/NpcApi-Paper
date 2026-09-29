@@ -1,7 +1,6 @@
 package de.eisi05.npc.api.listeners;
 
 import com.google.common.collect.Multimap;
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.ClickActionType;
 import de.eisi05.npc.api.events.NpcDamageEvent;
 import de.eisi05.npc.api.events.NpcDeathEvent;
@@ -33,8 +32,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
@@ -75,7 +72,6 @@ public class NpcDamageListener implements Listener
             {
                 Map.Entry<Projectile, Location> entry = iterator.next();
                 Projectile projectile = entry.getKey();
-                Location lastLoc = entry.getValue();
 
                 if(!projectile.isValid() || projectile.isDead())
                 {
@@ -83,40 +79,50 @@ public class NpcDamageListener implements Listener
                     continue;
                 }
 
-                Location currentLoc = projectile.getLocation();
-                if(!currentLoc.getWorld().equals(lastLoc.getWorld()))
+                SchedulerProvider.get().runSyncForEntity(projectile, () ->
                 {
-                    entry.setValue(currentLoc);
-                    continue;
-                }
-
-                Vector travelVector = currentLoc.toVector().subtract(lastLoc.toVector());
-                double distance = travelVector.length();
-                if(distance > 1.0E-4)
-                {
-                    Vector direction = travelVector.clone().normalize();
-                    NPC hitNpc = rayTraceNpcs(lastLoc, direction, distance);
-
-                    if(hitNpc != null)
+                    if(!projectile.isValid() || projectile.isDead())
                     {
-                        iterator.remove();
-                        handleProjectileHit(hitNpc, projectile);
-                        SchedulerProvider.get().runSyncForEntity(projectile, () ->
+                        activeProjectiles.remove(projectile);
+                        return;
+                    }
+
+                    Location lastLoc = activeProjectiles.get(projectile);
+                    if(lastLoc == null)
+                        return;
+
+                    Location currentLoc = projectile.getLocation();
+                    if(!currentLoc.getWorld().equals(lastLoc.getWorld()))
+                    {
+                        activeProjectiles.put(projectile, currentLoc);
+                        return;
+                    }
+
+                    Vector travelVector = currentLoc.toVector().subtract(lastLoc.toVector());
+                    double distance = travelVector.length();
+                    if(distance > 1.0E-4)
+                    {
+                        Vector direction = travelVector.clone().normalize();
+                        NPC hitNpc = rayTraceNpcs(lastLoc, direction, distance);
+
+                        if(hitNpc != null)
                         {
+                            activeProjectiles.remove(projectile);
+                            handleProjectileHit(hitNpc, projectile);
                             if(projectile.isValid())
                                 projectile.remove();
-                        });
-                        continue;
+                            return;
+                        }
                     }
-                }
 
-                if(projectile.isOnGround())
-                {
-                    iterator.remove();
-                    continue;
-                }
+                    if(projectile.isOnGround())
+                    {
+                        activeProjectiles.remove(projectile);
+                        return;
+                    }
 
-                entry.setValue(currentLoc);
+                    activeProjectiles.put(projectile, currentLoc);
+                });
             }
         }, 1L, 1L);
     }
@@ -154,100 +160,107 @@ public class NpcDamageListener implements Listener
         if(wasRunningGoals)
             npc.stopGoals();
 
-        state.task = new BukkitRunnable()
+        state.physicsRunning = true;
+        runPhysicsTick(npc, state, width, height, wasRunningGoals);
+    }
+
+    private static void runPhysicsTick(NPC npc, CombatState state, double width, double height, boolean wasRunningGoals)
+    {
+        if(!state.physicsRunning)
+            return;
+
+        state.task = SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), () ->
         {
-            int tick = 0;
+            if(!state.physicsRunning)
+                return;
 
-            @Override
-            public void run()
+            state.vy -= GRAVITY;
+
+            Location current = npc.getLocation();
+            World world = current.getWorld();
+
+            double cx = current.getX(), cy = current.getY(), cz = current.getZ();
+            double targetX = cx + state.vx, targetZ = cz + state.vz;
+
+            double resolvedX = cx, resolvedZ = cz;
+            if(isBoxClear(world, targetX, cy, targetZ, width, height))
             {
-                tick++;
-                state.vy -= GRAVITY;
+                resolvedX = targetX;
+                resolvedZ = targetZ;
+            }
+            else if(isBoxClear(world, targetX, cy, cz, width, height))
+            {
+                resolvedX = targetX;
+                state.vz = 0;
+            }
+            else if(isBoxClear(world, cx, cy, targetZ, width, height))
+            {
+                resolvedZ = targetZ;
+                state.vx = 0;
+            }
+            else
+            {
+                state.vx = 0;
+                state.vz = 0;
+            }
 
-                Location current = npc.getLocation();
-                World world = current.getWorld();
+            double resolvedY;
+            state.grounded = false;
 
-                double cx = current.getX(), cy = current.getY(), cz = current.getZ();
-                double targetX = cx + state.vx, targetZ = cz + state.vz;
-
-                double resolvedX = cx, resolvedZ = cz;
-                if(isBoxClear(world, targetX, cy, targetZ, width, height))
-                {
-                    resolvedX = targetX;
-                    resolvedZ = targetZ;
-                }
-                else if(isBoxClear(world, targetX, cy, cz, width, height))
-                {
-                    resolvedX = targetX;
-                    state.vz = 0;
-                }
-                else if(isBoxClear(world, cx, cy, targetZ, width, height))
-                {
-                    resolvedZ = targetZ;
-                    state.vx = 0;
-                }
+            if(state.vy > 0)
+            {
+                if(isBoxClear(world, resolvedX, cy + state.vy, resolvedZ, width, height))
+                    resolvedY = cy + state.vy;
                 else
                 {
-                    state.vx = 0;
-                    state.vz = 0;
-                }
-
-                double resolvedY;
-                state.grounded = false;
-
-                if(state.vy > 0)
-                {
-                    if(isBoxClear(world, resolvedX, cy + state.vy, resolvedZ, width, height))
-                        resolvedY = cy + state.vy;
-                    else
-                    {
-                        resolvedY = cy;
-                        state.vy = 0;
-                    }
-                }
-                else
-                {
-                    double fallTargetY = cy + state.vy;
-                    BoundingBoxPathfinder.FootSupport support =
-                            BoundingBoxPathfinder.resolveGroundSupport(world, resolvedX, cy, resolvedZ, width, 0.1, 10.0);
-
-                    if(support.valid() && fallTargetY <= support.feetY())
-                    {
-                        resolvedY = support.feetY();
-                        state.vy = 0;
-                        state.grounded = true;
-                    }
-                    else
-                        resolvedY = fallTargetY;
-                }
-
-                npc.changeRealLocation(new Location(world, resolvedX, resolvedY, resolvedZ, current.getYaw(), current.getPitch()));
-
-                double drag = HORIZONTAL_DRAG;
-                if(state.grounded)
-                {
-                    Block blockBelow = world.getBlockAt((int) Math.floor(resolvedX), (int) Math.floor(resolvedY - 0.1), (int) Math.floor(resolvedZ));
-                    drag *= blockBelow.getType().isAir() ? 0.6F : blockBelow.getType().getSlipperiness();
-                }
-
-                state.vx *= drag;
-                state.vz *= drag;
-
-                double speed = Math.sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
-
-                boolean settled = state.grounded && speed < SETTLE_THRESHOLD;
-                boolean outOfBounds = cy < world.getMinHeight();
-
-                if(settled || outOfBounds)
-                {
-                    cancel();
-                    state.task = null;
-                    state.vx = state.vy = state.vz = 0;
-                    if(wasRunningGoals)
-                        npc.startGoals();
+                    resolvedY = cy;
+                    state.vy = 0;
                 }
             }
-        }.runTaskTimer(NpcApi.plugin, 1L, 1L);
+            else
+            {
+                double fallTargetY = cy + state.vy;
+                BoundingBoxPathfinder.FootSupport support =
+                        BoundingBoxPathfinder.resolveGroundSupport(world, resolvedX, cy, resolvedZ, width, 0.1, 10.0);
+
+                if(support.valid() && fallTargetY <= support.feetY())
+                {
+                    resolvedY = support.feetY();
+                    state.vy = 0;
+                    state.grounded = true;
+                }
+                else
+                    resolvedY = fallTargetY;
+            }
+
+            npc.changeRealLocation(new Location(world, resolvedX, resolvedY, resolvedZ, current.getYaw(), current.getPitch()));
+
+            double drag = HORIZONTAL_DRAG;
+            if(state.grounded)
+            {
+                Block blockBelow = world.getBlockAt((int) Math.floor(resolvedX), (int) Math.floor(resolvedY - 0.1), (int) Math.floor(resolvedZ));
+                drag *= blockBelow.getType().isAir() ? 0.6F : blockBelow.getType().getSlipperiness();
+            }
+
+            state.vx *= drag;
+            state.vz *= drag;
+
+            double speed = Math.sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
+
+            boolean settled = state.grounded && speed < SETTLE_THRESHOLD;
+            boolean outOfBounds = cy < world.getMinHeight();
+
+            if(settled || outOfBounds)
+            {
+                state.physicsRunning = false;
+                state.task = null;
+                state.vx = state.vy = state.vz = 0;
+                if(wasRunningGoals)
+                    npc.startGoals();
+            }
+            else
+                runPhysicsTick(npc, state, width, height, wasRunningGoals);
+        }, 1L);
     }
 
     private static boolean isBoxClear(World world, double x, double y, double z, double width, double height)
@@ -267,6 +280,9 @@ public class NpcDamageListener implements Listener
             {
                 for(int bz = minBZ; bz <= maxBZ; bz++)
                 {
+                    if(!world.isChunkLoaded(bx >> 4, bz >> 4))
+                        return false;
+
                     Block block = world.getBlockAt(bx, by, bz);
                     Collection<BoundingBox> blockBoxes = AbstractPathfinder.getBlockBoxes(block);
                     if(blockBoxes.isEmpty())
@@ -372,34 +388,41 @@ public class NpcDamageListener implements Listener
         state.absorption = 8.0;
         state.absorptionExpireTick = currentTick + 100;
 
-        if (state.regenTask != null)
-            state.regenTask.cancel();
+        state.cancelRegen();
+        state.regenTicksPassed = 0;
+        state.regenRunning = true;
 
-        state.regenTask = new BukkitRunnable()
-        {
-            int ticksPassed = 0;
-
-            @Override
-            public void run()
-            {
-                ticksPassed += 25;
-                if (ticksPassed > 900)
-                {
-                    cancel();
-                    state.regenTask = null;
-                    return;
-                }
-
-                NpcCombatManager combatManager = npc.getCombatManager();
-                double currentHp = combatManager.getCurrentHealth();
-                double maxHp = combatManager.getMaxHealth();
-
-                if (currentHp > 0 && currentHp < maxHp)
-                    combatManager.setCurrentHealth(Math.min(maxHp, currentHp + 1.0));
-            }
-        }.runTaskTimer(NpcApi.plugin, 25L, 25L);
-
+        scheduleRegenTick(npc, state);
         return true;
+    }
+
+    private static void scheduleRegenTick(NPC npc, CombatState state)
+    {
+        if(!state.regenRunning)
+            return;
+
+        state.regenTask = SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), () ->
+        {
+            if(!state.regenRunning)
+                return;
+
+            state.regenTicksPassed += 25;
+            if(state.regenTicksPassed > 900)
+            {
+                state.regenRunning = false;
+                state.regenTask = null;
+                return;
+            }
+
+            NpcCombatManager combatManager = npc.getCombatManager();
+            double currentHp = combatManager.getCurrentHealth();
+            double maxHp = combatManager.getMaxHealth();
+
+            if(currentHp > 0 && currentHp < maxHp)
+                combatManager.setCurrentHealth(Math.min(maxHp, currentHp + 1.0));
+
+            scheduleRegenTick(npc, state);
+        }, 25L);
     }
 
     private static void handleProjectileHit(NPC npc, Projectile projectile)
@@ -481,8 +504,15 @@ public class NpcDamageListener implements Listener
             }
         }
 
-        attacker.playSound(attacker.getLocation(), Sound.ENTITY_ARROW_HIT_PLAYER, 1.0F, 1.0F);
-        attacker.playSound(attacker.getLocation(), dying ? Sound.ENTITY_PLAYER_DEATH : Sound.ENTITY_PLAYER_HURT, 1.0F, 1.0F);
+        final boolean finalDying = dying;
+        SchedulerProvider.get().runSyncForEntity(attacker, () ->
+        {
+            if(attacker.isOnline())
+            {
+                attacker.playSound(attacker.getLocation(), Sound.ENTITY_ARROW_HIT_PLAYER, 1.0F, 1.0F);
+                attacker.playSound(attacker.getLocation(), finalDying ? Sound.ENTITY_PLAYER_DEATH : Sound.ENTITY_PLAYER_HURT, 1.0F, 1.0F);
+            }
+        });
 
         npc.playAnimation(attacker, AnimatePacket.Animation.HURT);
         if(isCrit)
@@ -493,8 +523,11 @@ public class NpcDamageListener implements Listener
         if(dying)
         {
             CombatState removedState = states.remove(npc);
-            if (removedState != null && removedState.regenTask != null)
-                removedState.regenTask.cancel();
+            if(removedState != null)
+            {
+                removedState.cancelRegen();
+                removedState.cancelPhysics();
+            }
             combatManager.setCurrentHealth(Math.max(0, combatManager.getCurrentHealth()));
         }
         else
@@ -671,8 +704,11 @@ public class NpcDamageListener implements Listener
         if(dying)
         {
             CombatState removedState = states.remove(npc);
-            if (removedState != null && removedState.regenTask != null)
-                removedState.regenTask.cancel();
+            if(removedState != null)
+            {
+                removedState.cancelRegen();
+                removedState.cancelPhysics();
+            }
             combatManager.setCurrentHealth(Math.max(0, combatManager.getCurrentHealth()));
         }
         else
@@ -705,20 +741,24 @@ public class NpcDamageListener implements Listener
             double dist = otherNpc.getLocation().distance(center);
             if (dist <= radius && dist > 1.0E-4)
             {
-                CombatState state = states.computeIfAbsent(otherNpc, n -> new CombatState());
-                Vector dir = otherNpc.getLocation().toVector().subtract(center.toVector()).setY(0);
-                if(dir.lengthSquared() < 1.0E-4)
-                    dir = new Vector(1, 0, 0);
-                dir.normalize();
+                SchedulerProvider.get().runSyncAtLocation(otherNpc.getLocation(), () ->
+                {
+                    CombatState state = states.computeIfAbsent(otherNpc, n -> new CombatState());
+                    Vector dir = otherNpc.getLocation().toVector().subtract(center.toVector()).setY(0);
+                    if(dir.lengthSquared() < 1.0E-4)
+                        dir = new Vector(1, 0, 0);
+                    dir.normalize();
 
-                double power = (radius - dist) * 0.7 * heavyMultiplier;
-                Vector push = dir.multiply(power);
+                    double power = (radius - dist) * 0.7 * heavyMultiplier;
+                    Vector push = dir.multiply(power);
 
-                state.vx += push.getX();
-                state.vz += push.getZ();
-                state.vy = 0.7;
+                    state.vx += push.getX();
+                    state.vz += push.getZ();
+                    state.vy = 0.7;
 
-                if (state.task == null) startPhysicsTask(otherNpc, state);
+                    if (state.task == null)
+                        startPhysicsTask(otherNpc, state);
+                });
             }
         }
 
@@ -1067,13 +1107,36 @@ public class NpcDamageListener implements Listener
     {
         double vx, vy, vz;
         boolean grounded = true;
-        BukkitTask task;
+        PluginTask task;
+        boolean physicsRunning = false;
 
         double lastHurt = -1;
         int invulnerableUntilTick = 0;
 
         double absorption = 0;
         int absorptionExpireTick = 0;
-        BukkitTask regenTask;
+        PluginTask regenTask;
+        boolean regenRunning = false;
+        int regenTicksPassed = 0;
+
+        public void cancelRegen()
+        {
+            regenRunning = false;
+            if(regenTask != null)
+            {
+                regenTask.cancel();
+                regenTask = null;
+            }
+        }
+
+        public void cancelPhysics()
+        {
+            physicsRunning = false;
+            if(task != null)
+            {
+                task.cancel();
+                task = null;
+            }
+        }
     }
 }

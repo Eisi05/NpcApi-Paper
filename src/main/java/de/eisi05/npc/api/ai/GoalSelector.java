@@ -142,7 +142,20 @@ public class GoalSelector
             return;
 
         running = true;
-        task = SchedulerProvider.get().runTimerForEntity(((Entity) npc.getEntity()).getBukkitEntity(), this::tick, 0L, tickInterval);
+        scheduleNextTick(0L);
+    }
+
+    /**
+     * Schedules the next tick of the goal selector.
+     *
+     * @param delayTicks The delay in ticks before the next tick
+     */
+    private void scheduleNextTick(long delayTicks)
+    {
+        if(!running)
+            return;
+
+        task = SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), this::tick, delayTicks);
     }
 
     /**
@@ -246,94 +259,102 @@ public class GoalSelector
      */
     private void tick()
     {
-        processRemovalQueue();
-
-        List<Goal> usableGoals = getGoals().stream()
-                .filter(goal -> goal.canUse(npc))
-                .toList();
-
-        if(usableGoals.isEmpty())
+        try
         {
-            if(currentGoal != null)
-            {
-                currentGoal.stop(npc);
-                currentGoal = null;
-            }
-            return;
-        }
+            processRemovalQueue();
 
-        List<Goal> alwaysGoals = usableGoals.stream()
-                .filter(goal -> goal.getPriority() == Goal.Priority.ALWAYS)
-                .toList();
+            List<Goal> usableGoals = getGoals().stream()
+                    .filter(goal -> goal.canUse(npc))
+                    .toList();
 
-        Goal selectedGoal;
-        if(!alwaysGoals.isEmpty())
-            selectedGoal = alwaysGoals.get(ThreadLocalRandom.current().nextInt(alwaysGoals.size()));
-        else
-        {
             if(usableGoals.isEmpty())
-                selectedGoal = null;
-            else if(usableGoals.size() == 1)
-                selectedGoal = usableGoals.getFirst();
-            else
             {
-                int totalWeight = usableGoals.stream()
-                        .mapToInt(goal -> goal.getPriority().weight)
-                        .sum();
-
-                if(totalWeight == 0)
-                    selectedGoal = usableGoals.get(ThreadLocalRandom.current().nextInt(usableGoals.size()));
-                else
-                {
-                    int randomWeight = ThreadLocalRandom.current().nextInt(totalWeight);
-                    int currentWeight = 0;
-
-                    selectedGoal = null;
-                    for(Goal goal : usableGoals)
-                    {
-                        currentWeight += goal.getPriority().weight;
-                        if(randomWeight < currentWeight)
-                        {
-                            selectedGoal = goal;
-                            break;
-                        }
-                    }
-
-                    if(selectedGoal == null)
-                        selectedGoal = usableGoals.getLast();
-                }
-            }
-        }
-
-        if(currentGoal != null)
-        {
-            if(selectedGoal != null && selectedGoal != currentGoal)
-            {
-                if(selectedGoal.getPriority() == Goal.Priority.ALWAYS || currentGoal.canBeInterrupted(npc))
+                if(currentGoal != null)
                 {
                     currentGoal.stop(npc);
-                    currentGoal = selectedGoal;
-                    currentGoal.start(npc);
-                    return;
+                    currentGoal = null;
+                }
+                return;
+            }
+
+            List<Goal> alwaysGoals = usableGoals.stream()
+                    .filter(goal -> goal.getPriority() == Goal.Priority.ALWAYS)
+                    .toList();
+
+            Goal selectedGoal;
+            if(!alwaysGoals.isEmpty())
+                selectedGoal = alwaysGoals.get(ThreadLocalRandom.current().nextInt(alwaysGoals.size()));
+            else
+            {
+                if(usableGoals.isEmpty())
+                    selectedGoal = null;
+                else if(usableGoals.size() == 1)
+                    selectedGoal = usableGoals.getFirst();
+                else
+                {
+                    int totalWeight = usableGoals.stream()
+                            .mapToInt(goal -> goal.getPriority().weight)
+                            .sum();
+
+                    if(totalWeight == 0)
+                        selectedGoal = usableGoals.get(ThreadLocalRandom.current().nextInt(usableGoals.size()));
+                    else
+                    {
+                        int randomWeight = ThreadLocalRandom.current().nextInt(totalWeight);
+                        int currentWeight = 0;
+
+                        selectedGoal = null;
+                        for(Goal goal : usableGoals)
+                        {
+                            currentWeight += goal.getPriority().weight;
+                            if(randomWeight < currentWeight)
+                            {
+                                selectedGoal = goal;
+                                break;
+                            }
+                        }
+
+                        if(selectedGoal == null)
+                            selectedGoal = usableGoals.getLast();
+                    }
                 }
             }
 
-            if(currentGoal.canContinue(npc))
+            if(currentGoal != null)
             {
-                currentGoal.tick(npc);
-                return;
+                if(selectedGoal != null && selectedGoal != currentGoal)
+                {
+                    if(selectedGoal.getPriority() == Goal.Priority.ALWAYS || currentGoal.canBeInterrupted(npc))
+                    {
+                        currentGoal.stop(npc);
+                        currentGoal = selectedGoal;
+                        currentGoal.start(npc);
+                        return;
+                    }
+                }
+
+                if(currentGoal.canContinue(npc))
+                {
+                    currentGoal.tick(npc);
+                    return;
+                }
+                else
+                {
+                    currentGoal.stop(npc);
+                    currentGoal = null;
+                }
             }
-            else
+
+            if(selectedGoal != null)
             {
-                currentGoal.stop(npc);
-                currentGoal = null;
+                currentGoal = selectedGoal;
+                currentGoal.start(npc);
             }
         }
-
-        if(selectedGoal != null)
+        finally
         {
-            currentGoal = selectedGoal;
-            currentGoal.start(npc);
+            if(running)
+                scheduleNextTick(tickInterval);
         }
     }
 }

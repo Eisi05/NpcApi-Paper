@@ -36,7 +36,7 @@ public class PacketReader
 {
     private static final Map<UUID, Channel> channels = new ConcurrentHashMap<>();
     private static final List<BiConsumer<Player, Object>> readers = new CopyOnWriteArrayList<>();
-    private static final Map<UUID, Integer> cancelUseUntilTick = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> cancelUseUntilTick = new ConcurrentHashMap<>();
 
     /**
      * Adds a custom packet reader to the list of readers. This reader will be called for every incoming packet processed by the injected handler.
@@ -100,13 +100,13 @@ public class PacketReader
 
         if(packet instanceof ServerboundUseItemPacket)
         {
-            int currentTick = Bukkit.getCurrentTick();
-            Integer until = cancelUseUntilTick.remove(player.getUniqueId());
+            long currentTick = SchedulerProvider.isFolia() ? System.currentTimeMillis() : Bukkit.getCurrentTick();
+            Long until = cancelUseUntilTick.remove(player.getUniqueId());
 
             if(until == null || currentTick > until)
                 return;
 
-            SchedulerProvider.get().run(() ->
+            SchedulerProvider.get().runSyncForEntity(player, () ->
             {
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
                 serverPlayer.stopUsingItem();
@@ -115,7 +115,7 @@ public class PacketReader
             });
         }
 
-        int currentTick = Bukkit.getCurrentTick();
+        long currentTick = SchedulerProvider.isFolia() ? System.currentTimeMillis() : Bukkit.getCurrentTick();
         if(!Versions.isCurrentVersionSmallerThan(Versions.V26_1) && packet.getClass().getSimpleName().equals("ServerboundAttackPacket"))
         {
             NPC npc = NpcManager.fromId((int) Reflections.invokeMethod(packet, "entityId").get()).orElse(null);
@@ -123,26 +123,29 @@ public class PacketReader
                 return;
 
             callNpc(player, npc, ClickActionType.LEFT);
-            cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
+            cancelUseUntilTick.put(player.getUniqueId(), SchedulerProvider.isFolia() ? currentTick + 500 : currentTick + 10);
             return;
         }
 
         if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_11) && packet instanceof ServerboundPlayerActionPacket actionPacket &&
                 actionPacket.getAction() == ServerboundPlayerActionPacket.Action.STAB)
         {
-            ItemStack mainItem = player.getInventory().getItemInMainHand();
-            io.papermc.paper.datacomponent.item.AttackRange component = mainItem.getData(io.papermc.paper.datacomponent.DataComponentTypes.ATTACK_RANGE);
-
-            float minRange = component.minReach();
-            float maxRange = component.maxReach();
-            float hitboxMargin = component.hitboxMargin();
-
-            NPC targetNpc = NpcHitboxUtil.getHitNpcAlongStab(player, minRange, maxRange, hitboxMargin);
-            if(targetNpc != null)
+            SchedulerProvider.get().runSyncForEntity(player, () ->
             {
-                callNpc(player, targetNpc, ClickActionType.LEFT);
-                cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
-            }
+                ItemStack mainItem = player.getInventory().getItemInMainHand();
+                io.papermc.paper.datacomponent.item.AttackRange component = mainItem.getData(io.papermc.paper.datacomponent.DataComponentTypes.ATTACK_RANGE);
+
+                float minRange = component.minReach();
+                float maxRange = component.maxReach();
+                float hitboxMargin = component.hitboxMargin();
+
+                NPC targetNpc = NpcHitboxUtil.getHitNpcAlongStab(player, minRange, maxRange, hitboxMargin);
+                if(targetNpc != null)
+                {
+                    callNpc(player, targetNpc, ClickActionType.LEFT);
+                    cancelUseUntilTick.put(player.getUniqueId(), SchedulerProvider.isFolia() ? currentTick + 500 : currentTick + 10);
+                }
+            });
             return;
         }
 
@@ -162,7 +165,7 @@ public class PacketReader
                 return;
 
             callNpc(player, npc, ClickActionType.LEFT);
-            cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
+            cancelUseUntilTick.put(player.getUniqueId(), SchedulerProvider.isFolia() ? currentTick + 500 : currentTick + 10);
             return;
         }
 
@@ -174,7 +177,7 @@ public class PacketReader
             if(action.get().getClass().getDeclaredFields().length == 2)
                 return;
 
-            hand = (InteractionHand) action.thanGetField(Var.obfuscated ? "a" : "hand").get();
+            hand = (InteractionHand) action.thenGetField(Var.obfuscated ? "a" : "hand").get();
         }
         else
             hand = (InteractionHand) Reflections.invokeMethod(interactPacket, "hand").get();
@@ -182,7 +185,7 @@ public class PacketReader
         if(hand == InteractionHand.MAIN_HAND)
         {
             callNpc(player, npc, ClickActionType.RIGHT);
-            cancelUseUntilTick.put(player.getUniqueId(), currentTick + 10);
+            cancelUseUntilTick.put(player.getUniqueId(), SchedulerProvider.isFolia() ? currentTick + 500 : currentTick + 10);
         }
     }
 
@@ -195,7 +198,7 @@ public class PacketReader
      */
     public static void callNpc(@NotNull Player player, @NotNull NPC npc, @NotNull ClickActionType type)
     {
-        SchedulerProvider.get().run(() -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, type)));
+        SchedulerProvider.get().runSyncForEntity(player, () -> Bukkit.getPluginManager().callEvent(new NpcInteractEvent(player, npc, type)));
     }
 
     /**

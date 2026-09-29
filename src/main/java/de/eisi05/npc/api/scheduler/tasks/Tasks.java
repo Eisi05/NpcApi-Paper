@@ -10,8 +10,8 @@ import de.eisi05.npc.api.objects.Skin;
 import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.Reflections;
-import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -186,19 +186,27 @@ public class Tasks
      */
     private static void lookAtTask()
     {
-        lookAtTask = SchedulerProvider.get().runTimer(() -> {
-                for(NPC npc : NpcManager.getList())
-                {
-                    double range = npc.getOption(NpcOption.LOOK_AT_PLAYER);
+        lookAtTask = SchedulerProvider.get().runTimer(() ->
+        {
+            for(NPC npc : NpcManager.getList())
+            {
+                double range = npc.getOption(NpcOption.LOOK_AT_PLAYER);
 
-                    if(range <= 0)
-                        continue;
+                if(range <= 0)
+                    continue;
 
-                    ((ServerPlayer) npc.getServerPlayer()).getBukkitEntity().getNearbyEntities(range, range, range)
-                            .stream().filter(entity -> entity instanceof Player)
-                            .forEach(entity -> npc.lookAtPlayer((Player) entity));
-                }
-            }, 0L, NpcApi.config.lookAtTimer());
+                Location loc = npc.getLocation();
+
+                if(loc == null || loc.getWorld() == null)
+                    continue;
+
+                SchedulerProvider.get().runSyncAtLocation(loc, () ->
+                        loc.getNearbyEntities(range, range, range)
+                                .stream()
+                                .filter(entity -> entity instanceof Player)
+                                .forEach(entity -> npc.lookAtPlayer((Player) entity)));
+            }
+        }, 0L, NpcApi.config.lookAtTimer());
     }
 
     /**
@@ -206,36 +214,37 @@ public class Tasks
      */
     private static void placeholderTask()
     {
-        placeholderTask = SchedulerProvider.get().runTimer(() -> {
+        placeholderTask = SchedulerProvider.get().runTimer(() ->
+        {
 
-                Collection<NPC> npcs = NpcManager.getList();
-                for(NPC npc : npcs)
+            Collection<NPC> npcs = NpcManager.getList();
+            for(NPC npc : npcs)
+            {
+                if(!npc.getNpcName().isStatic())
+                    npc.updateNameForAll();
+            }
+
+            if(!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
+                return;
+
+            for(NPC npc : npcs)
+            {
+                for(UUID viewerId : npc.getViewers())
                 {
-                    if(!npc.getNpcName().isStatic())
-                        npc.updateNameForAll();
+                    if(viewerId == null)
+                        continue;
+
+                    Player player = Bukkit.getPlayer(viewerId);
+                    if(player == null)
+                        continue;
+
+                    NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, player);
+                    if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, player))
+                        continue;
+
+                    updateSkin(player, npc, npcSkin);
                 }
-
-                if(!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI"))
-                    return;
-
-                for(NPC npc : npcs)
-                {
-                    for(UUID viewerId : npc.getViewers())
-                    {
-                        if(viewerId == null)
-                            continue;
-
-                        Player player = Bukkit.getPlayer(viewerId);
-                        if(player == null)
-                            continue;
-
-                        NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, player);
-                        if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, player))
-                            continue;
-
-                        updateSkin(player, npc, npcSkin);
-                    }
-                }
+            }
         }, 10, NpcApi.config.placeholderTimer());
     }
 

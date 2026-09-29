@@ -33,6 +33,16 @@ public interface ServerScheduler
     PluginTask runSyncAtLocation(Location location, Runnable runnable);
 
     /**
+     * Schedules a task to run at the specified location after a delay.
+     *
+     * @param location   the location at which the task should execute
+     * @param runnable   the task to execute
+     * @param delayTicks the delay before execution, in server ticks
+     * @return a handle for managing the scheduled task
+     */
+    PluginTask runLaterAtLocation(Location location, Runnable runnable, long delayTicks);
+
+    /**
      * Schedules a task to run synchronously on the thread responsible for the specified entity.
      *
      * @param entity   the entity associated with the task

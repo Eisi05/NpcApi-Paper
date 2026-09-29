@@ -5,6 +5,7 @@ import com.google.gson.annotations.JsonAdapter;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.AStarPathfinder;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.LocationUtils;
 import de.eisi05.npc.api.utils.RegistryPredicate;
@@ -22,6 +23,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
+import org.bukkit.block.BlockFace;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.*;
 import org.bukkit.inventory.EquipmentSlot;
@@ -188,6 +190,27 @@ public class AttackEntityGoal extends Goal
     }
 
     /**
+     * Gets the current target location for this goal.
+     *
+     * @return the current target location, or null if no target is set
+     */
+    private @Nullable Location getTargetLocation()
+    {
+        if(target == null)
+            return null;
+
+        Location location = target.getLocation();
+        while(!AStarPathfinder.isSafeFloor(location.getBlock().getRelative(BlockFace.DOWN)))
+        {
+            if(location.getY() < 64)
+                return target.getLocation();
+            location = location.subtract(0, 1, 0);
+        }
+
+        return location;
+    }
+
+    /**
      * Checks if this goal can be used by the NPC.
      *
      * @param npc the NPC to check
@@ -258,7 +281,8 @@ public class AttackEntityGoal extends Goal
         if(lineOfSightCheckCooldown > 0)
             lineOfSightCheckCooldown--;
 
-        double distance = npcLoc.distance(target.getLocation());
+        Location targetLocation = getTargetLocation();
+        double distance = npcLoc.distance(targetLocation);
         double attackRange = getAttackRange(npc);
 
         if(distance > attackRange)
@@ -274,11 +298,11 @@ public class AttackEntityGoal extends Goal
             }
 
             if(movementGoal == null)
-                startMovement(npc, target.getLocation());
+                startMovement(npc, targetLocation);
             else
             {
                 Location currentTarget = movementGoal.getTargetLocation(npc.getLocation().getWorld());
-                boolean shouldRecalculate = currentTarget.distance(target.getLocation()) > 5.0;
+                boolean shouldRecalculate = currentTarget.distance(targetLocation) > 5.0;
 
                 if(!shouldRecalculate && pathRecalculationCooldown <= 0)
                 {
@@ -288,7 +312,7 @@ public class AttackEntityGoal extends Goal
 
                 if(shouldRecalculate)
                 {
-                    startMovement(npc, target.getLocation());
+                    startMovement(npc, targetLocation);
                     pathRecalculationCooldown = WalkToLocationGoal.RECALCULATION_COOLDOWN;
                 }
                 else
@@ -297,7 +321,7 @@ public class AttackEntityGoal extends Goal
                     pathRecalculationCooldown--;
                 }
 
-                distance = npc.getLocation().distance(target.getLocation());
+                distance = npc.getLocation().distance(targetLocation);
                 if(distance <= attackRange)
                     stopMovement(npc);
                 else
@@ -377,7 +401,7 @@ public class AttackEntityGoal extends Goal
             return false;
 
         Location npcLoc = npc.getLocation();
-        Location targetLoc = target.getLocation();
+        Location targetLoc = getTargetLocation();
 
         if(!npcLoc.getWorld().equals(targetLoc.getWorld()))
             return false;
@@ -643,7 +667,7 @@ public class AttackEntityGoal extends Goal
             setUsingItemState(npc, true);
             isUsing = true;
 
-            SchedulerProvider.get().runLaterForEntity(((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity(), () ->
+            SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), () ->
             {
                 setUsingItemState(npc, false);
 

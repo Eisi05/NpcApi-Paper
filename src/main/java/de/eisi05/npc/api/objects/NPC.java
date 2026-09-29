@@ -781,7 +781,11 @@ public class NPC extends NpcHolder
             markChange();
         }
 
-        Var.safeForEachOnlinePlayer(this::hideNpcFromPlayer);
+        final int serverPlayerId = serverPlayer.getId();
+        final int entityId = entity.getId();
+        final UUID uuid = getUUID();
+        final String gameProfileName = getGameProfileName();
+        Var.safeForEachOnlinePlayer(player -> hideNpcFromPlayer(player, serverPlayerId, entityId, uuid, gameProfileName));
         toDeleteEntities.clear();
     }
 
@@ -793,6 +797,19 @@ public class NPC extends NpcHolder
      */
     public void hideNpcFromPlayer(@NotNull Player player)
     {
+        hideNpcFromPlayer(player, serverPlayer.getId(), entity.getId(), getUUID(), getGameProfileName());
+    }
+
+    /**
+     * Hides the NPC from a specific player. This method sends packets to remove the NPC and its associated entities from the player's view. If the NPC is not
+     * set to show to all players, the player will also be removed from the specific players list.
+     *
+     * @param player the player to hide the NPC from. Must not be null.
+     * @param serverPlayerId the entity ID of the server player. Must not be null.
+     * @param entityId the entity ID of the NPC. Must not be null.
+     */
+    private void hideNpcFromPlayer(@NotNull Player player, int serverPlayerId, int entityId, @NotNull UUID uuid, @NotNull String gameProfileName)
+    {
         if(!viewers.contains(player.getUniqueId()))
             return;
 
@@ -803,20 +820,20 @@ public class NPC extends NpcHolder
         }
 
         ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
-        connection.send(new ClientboundRemoveEntitiesPacket(serverPlayer.getId(), entity.getId(), ((Display.TextDisplay) nameTag.getDisplay()).getId()));
+        connection.send(new ClientboundRemoveEntitiesPacket(serverPlayerId, entityId, ((Display.TextDisplay) nameTag.getDisplay()).getId()));
 
-        if(TeamManager.exists(player, getGameProfileName()))
+        if(TeamManager.exists(player, gameProfileName))
         {
-            PlayerTeam team = (PlayerTeam) TeamManager.create(player, getGameProfileName());
+            PlayerTeam team = (PlayerTeam) TeamManager.create(player, gameProfileName);
             connection.send((Packet<?>) SetPlayerTeamPacket.createRemovePacket(team));
-            TeamManager.clear(player.getUniqueId(), getGameProfileName());
+            TeamManager.clear(player.getUniqueId(), gameProfileName);
         }
 
         var values = toDeleteEntities.remove(player.getUniqueId());
         if(values != null)
             values.values().forEach(integer -> connection.send(new ClientboundRemoveEntitiesPacket(integer)));
 
-        connection.send(new ClientboundPlayerInfoRemovePacket(List.of(getUUID())));
+        connection.send(new ClientboundPlayerInfoRemovePacket(List.of(uuid)));
 
         viewers.remove(player.getUniqueId());
 
@@ -1000,17 +1017,30 @@ public class NPC extends NpcHolder
                                                                                         boolean allowDiagonalMovement,
                                                                                         @Nullable BiConsumer<Double, Integer> progressListener)
     {
-        return CompletableFuture.supplyAsync(() ->
+        if(waypoints.isEmpty())
+            return CompletableFuture.failedFuture(new RuntimeException("Waypoints list is empty"));
+
+        Location firstLocation = waypoints.getFirst();
+        CompletableFuture<de.eisi05.npc.api.pathfinding.Path> future = new CompletableFuture<>();
+
+        SchedulerProvider.get().runSyncAtLocation(firstLocation, () ->
         {
             try
             {
-                return findPath(pathfinderFactory, waypoints, maxIterations, allowDiagonalMovement, progressListener);
+                de.eisi05.npc.api.pathfinding.Path path = findPath(pathfinderFactory, waypoints, maxIterations, allowDiagonalMovement, progressListener);
+                future.complete(path);
             }
             catch(PathfindingUtils.PathfindingException e)
             {
-                throw new RuntimeException(e);
+                future.completeExceptionally(new RuntimeException(e));
             }
-        }, runnable -> SchedulerProvider.get().runAsync(runnable));
+            catch(Exception e)
+            {
+                future.completeExceptionally(e);
+            }
+        });
+
+        return future;
     }
 
     /**
@@ -1125,7 +1155,7 @@ public class NPC extends NpcHolder
         for(Player player : viewers)
             pathTasks.put(player.getUniqueId(), pathTask);
 
-        return SchedulerProvider.get().runTimerForEntity((org.bukkit.entity.Entity) entity.getBukkitEntity(), pathTask, 1L, 1L);
+        return pathTask.start(1L, 1L);
     }
 
     /**

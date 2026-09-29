@@ -415,7 +415,7 @@ public class WalkToLocationGoal extends Goal
         CompletableFuture<Path> future = npc.findPathAsync(null, List.of(start, end), maxIterations, allowDiagonal, null);
         Tasks.trackFuture(future);
         future.thenAcceptAsync(path -> pathable = path != null,
-                        task -> SchedulerProvider.get().runSyncForEntity(((Entity) npc.getEntity()).getBukkitEntity(), task))
+                        task -> SchedulerProvider.get().runSyncAtLocation(npc.getLocation(), task))
                 .exceptionally(e ->
                 {
                     pathable = false;
@@ -460,13 +460,13 @@ public class WalkToLocationGoal extends Goal
                         if(completionCallback != null)
                             completionCallback.accept(WalkingResult.CANCELLED);
                     }
-                }, task -> SchedulerProvider.get().runSyncForEntity(((Entity) npc.getEntity()).getBukkitEntity(), task))
+                }, task -> SchedulerProvider.get().runSyncAtLocation(npc.getLocation(), task))
                 .exceptionally(e ->
                 {
                     if(isWalking)
                         return null;
 
-                    SchedulerProvider.get().runSyncForEntity(((Entity) npc.getEntity()).getBukkitEntity(), () ->
+                    SchedulerProvider.get().runSyncAtLocation(npc.getLocation(), () ->
                     {
                         if(completionCallback != null)
                             completionCallback.accept(WalkingResult.CANCELLED);

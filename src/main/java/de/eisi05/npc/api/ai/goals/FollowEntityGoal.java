@@ -2,9 +2,11 @@ package de.eisi05.npc.api.ai.goals;
 
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.pathfinding.AStarPathfinder;
 import de.eisi05.npc.api.utils.LocationUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -160,6 +162,27 @@ public class FollowEntityGoal extends Goal
     }
 
     /**
+     * Gets the current target location for this goal.
+     *
+     * @return the current target location, or null if no target is set
+     */
+    private @Nullable Location getTargetLocation()
+    {
+        if(target == null)
+            return null;
+
+        Location location = target.getLocation().clone();
+        while(!AStarPathfinder.isSafeFloor(location.getBlock().getRelative(BlockFace.DOWN)))
+        {
+            if(location.getY() < 64)
+                return target.getLocation();
+            location = location.subtract(0, 1, 0);
+        }
+
+        return location;
+    }
+
+    /**
      * Checks if this goal can be used by the NPC.
      *
      * @param npc the NPC to check
@@ -211,10 +234,11 @@ public class FollowEntityGoal extends Goal
 
         this.target = le;
         this.pathRecalculationCooldown = 0;
-        this.lastTargetLocation = target.getLocation().clone();
+        Location targetLoc = getTargetLocation();
+        this.lastTargetLocation = targetLoc.clone();
         if(target != null && target.isValid())
         {
-            currentWalkGoal = new WalkToLocationGoal.Builder(target.getLocation()).speed(speed).withRotation(false).build();
+            currentWalkGoal = new WalkToLocationGoal.Builder(targetLoc).speed(speed).withRotation(false).build();
             currentWalkGoal.start(npc);
         }
 
@@ -241,7 +265,7 @@ public class FollowEntityGoal extends Goal
             }
         }
 
-        Location targetLoc = target.getLocation().clone();
+        Location targetLoc = getTargetLocation().clone();
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
             updateCachedViewers(npc);
 

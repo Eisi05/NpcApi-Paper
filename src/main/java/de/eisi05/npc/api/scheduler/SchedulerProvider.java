@@ -8,6 +8,7 @@ package de.eisi05.npc.api.scheduler;
 public class SchedulerProvider
 {
     private static ServerScheduler scheduler;
+    private static Boolean isFolia = null;
 
     /**
      * Gets the server scheduler, initializing it if necessary.
@@ -35,14 +36,18 @@ public class SchedulerProvider
      */
     public static boolean isFolia()
     {
-        try
+        if(isFolia == null)
         {
-            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
-            return true;
+            try
+            {
+                Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+                isFolia = true;
+            }
+            catch(ClassNotFoundException e)
+            {
+                isFolia = false;
+            }
         }
-        catch(ClassNotFoundException e)
-        {
-            return false;
-        }
+        return isFolia;
     }
 }

@@ -559,7 +559,7 @@ public class Reflections
          * @param args       method arguments
          * @return new ReflectionChain wrapping the method's result, or null if error
          */
-        public @NotNull ReflectionChain<V> thanInvoke(@NotNull String methodName, @Nullable Object... args)
+        public @NotNull ReflectionChain<V> thenInvoke(@NotNull String methodName, @Nullable Object... args)
         {
             if(value == null)
                 return new ReflectionChain<>(null);
@@ -582,7 +582,7 @@ public class Reflections
          * @param fieldName name of the field
          * @return new ReflectionChain wrapping the field's value, or null if error
          */
-        public @NotNull ReflectionChain<V> thanGetField(@NotNull String fieldName)
+        public @NotNull ReflectionChain<V> thenGetField(@NotNull String fieldName)
         {
             if(value == null)
                 return new ReflectionChain<>(null);

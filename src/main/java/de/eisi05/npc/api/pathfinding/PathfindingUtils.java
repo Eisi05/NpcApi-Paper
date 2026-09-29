@@ -50,17 +50,30 @@ public class PathfindingUtils
                                                                  int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
                                                                  @Nullable BiConsumer<Double, Integer> progressListener)
     {
-        return CompletableFuture.supplyAsync(() ->
+        if(waypoints.isEmpty())
+            return CompletableFuture.failedFuture(new PathfindingException("Waypoints list is empty"));
+
+        Location firstLocation = waypoints.getFirst();
+        CompletableFuture<Path> future = new CompletableFuture<>();
+
+        SchedulerProvider.get().runSyncAtLocation(firstLocation, () ->
         {
             try
             {
-                return findPath(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, progressListener);
+                Path path = findPath(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, progressListener);
+                future.complete(path);
             }
             catch(PathfindingException e)
             {
-                throw new CompletionException(e);
+                future.completeExceptionally(new CompletionException(e));
             }
-        }, runnable -> SchedulerProvider.get().runAsync(runnable));
+            catch(Exception e)
+            {
+                future.completeExceptionally(e);
+            }
+        });
+
+        return future;
     }
 
     /**

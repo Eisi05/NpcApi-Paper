@@ -23,16 +23,18 @@ public class ConnectionListener implements Listener
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event)
     {
-        PacketReader.inject(event.getPlayer());
-
-        TeamManager.clear(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        SchedulerProvider.get().runSyncForEntity(player, () ->
+        {
+            PacketReader.inject(player);
+            TeamManager.clear(player.getUniqueId());
+        });
 
         if(!NpcApi.config.autoManageVisibility())
             return;
 
-        SchedulerProvider.get().runLaterForEntity(event.getPlayer(), () ->
+        SchedulerProvider.get().runLaterForEntity(player, () ->
         {
-            Player player = event.getPlayer();
             if (player == null || !player.isOnline())
                 return;
 
@@ -55,9 +57,12 @@ public class ConnectionListener implements Listener
     @EventHandler
     public void onLeave(PlayerQuitEvent event)
     {
-        PacketReader.uninject(event.getPlayer());
-
-        Tasks.placeholderCache.remove(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        SchedulerProvider.get().runSyncForEntity(player, () ->
+        {
+            PacketReader.inject(player);
+            TeamManager.clear(player.getUniqueId());
+        });
 
         for(NPC npc : NpcManager.getList())
         {

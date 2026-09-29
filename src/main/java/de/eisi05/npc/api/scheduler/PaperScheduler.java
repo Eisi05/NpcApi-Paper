@@ -57,6 +57,12 @@ public class PaperScheduler implements ServerScheduler
     }
 
     @Override
+    public PluginTask runLaterAtLocation(Location location, Runnable runnable, long delayTicks)
+    {
+        return runDelayed(runnable, delayTicks);
+    }
+
+    @Override
     public PluginTask runSyncForEntity(Entity entity, Runnable runnable)
     {
         return runSync(runnable);

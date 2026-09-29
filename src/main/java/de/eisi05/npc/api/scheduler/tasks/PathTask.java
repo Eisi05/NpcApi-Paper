@@ -68,6 +68,8 @@ public class PathTask implements Runnable
     private int viewerRefreshTicks = 0;
     private boolean isWaitingForChunkLoad = false;
 
+    private long periodTicks = 1L;
+
     /**
      * Private constructor used by the Builder pattern.
      *
@@ -107,10 +109,12 @@ public class PathTask implements Runnable
      *
      * @param delayTicks  The delay before the first execution
      * @param periodTicks The period between executions
+     * @return The PluginTask instance
      */
-    public void start(long delayTicks, long periodTicks)
+    public PluginTask start(long delayTicks, long periodTicks)
     {
-        this.task = SchedulerProvider.get().runTimerForEntity(serverEntity.getBukkitEntity(), this, delayTicks, periodTicks);
+        this.periodTicks = periodTicks;
+        return this.task = SchedulerProvider.get().runLaterAtLocation(getCurrentLocation(), this, delayTicks);
     }
 
     /**
@@ -165,6 +169,7 @@ public class PathTask implements Runnable
         if(hasReachedWaypoint(toTarget))
         {
             index++;
+            scheduleNextTick(periodTicks);
             return;
         }
 
@@ -180,7 +185,11 @@ public class PathTask implements Runnable
             Vector movement = calculateHorizontalMovement(toTarget, target);
 
             if(movement.lengthSquared() < 1e-6 && index < pathPoints.size() && currentPos.equals(target))
+            {
+                index++;
+                scheduleNextTick(periodTicks);
                 return;
+            }
 
             PhysicsResult physics = applyPhysics(movement);
             movement.setY(physics.yChange);
@@ -224,6 +233,19 @@ public class PathTask implements Runnable
             if(updateRealLocation)
                 npc.setLocation(currentPos.toLocation(world));
         }
+
+        scheduleNextTick(periodTicks);
+    }
+
+    /**
+     * Schedules the next tick of the path task.
+     *
+     * @param delayTicks The delay in ticks before the next execution
+     */
+    private void scheduleNextTick(long delayTicks)
+    {
+        if(!finished)
+            this.task = SchedulerProvider.get().runLaterAtLocation(getCurrentLocation(), this, delayTicks);
     }
 
     /**
@@ -234,8 +256,14 @@ public class PathTask implements Runnable
         if(NpcApi.config.loadChunksOnPath() && !isWaitingForChunkLoad)
         {
             isWaitingForChunkLoad = true;
-            world.getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> isWaitingForChunkLoad = false);
+            world.getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk ->
+            {
+                isWaitingForChunkLoad = false;
+                scheduleNextTick(1L);
+            });
         }
+        else if(!isWaitingForChunkLoad)
+            scheduleNextTick(10L);
     }
 
     /**
@@ -744,6 +772,12 @@ public class PathTask implements Runnable
         if(callback != null)
             callback.accept(WalkingResult.CANCELLED);
 
+        if(!NpcApi.plugin.isEnabled())
+        {
+            npc.clearWalkingTask(this);
+            return;
+        }
+
         NpcStopWalkingEvent event = new NpcStopWalkingEvent(npc, WalkingResult.CANCELLED, updateRealLocation);
         Bukkit.getPluginManager().callEvent(event);
 
@@ -790,16 +824,24 @@ public class PathTask implements Runnable
         if(world == null)
             return null;
 
-        BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(world, start.getX(), start.getY(), start.getZ(), entityWidth);
-        if(support.valid())
+        try
         {
-            double targetY = support.feetY();
-            if(isLocationCollisionFree(world, start.getX(), targetY, start.getZ()))
+            BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(world, start.getX(), start.getY(), start.getZ(),
+                    entityWidth);
+            if(support.valid())
             {
-                Location grounded = start.clone();
-                grounded.setY(targetY);
-                return grounded;
+                double targetY = support.feetY();
+                if(isLocationCollisionFree(world, start.getX(), targetY, start.getZ()))
+                {
+                    Location grounded = start.clone();
+                    grounded.setY(targetY);
+                    return grounded;
+                }
             }
+        }
+        catch(Exception e)
+        {
+            return null;
         }
 
         return null;

@@ -76,6 +76,12 @@ public class FoliaScheduler implements ServerScheduler
     }
 
     @Override
+    public PluginTask runLaterAtLocation(Location location, Runnable runnable, long delayTicks)
+    {
+        return wrapTask(Bukkit.getRegionScheduler().runDelayed(NpcApi.plugin, location, t -> runnable.run(), Math.max(1, delayTicks)));
+    }
+
+    @Override
     public PluginTask runSyncForEntity(Entity entity, Runnable runnable)
     {
         return wrapTask(entity.getScheduler().run(NpcApi.plugin, t -> runnable.run(), null));
@@ -84,13 +90,13 @@ public class FoliaScheduler implements ServerScheduler
     @Override
     public PluginTask runLaterForEntity(Entity entity, Runnable runnable, long delayTicks)
     {
-        return wrapTask(entity.getScheduler().runDelayed(NpcApi.plugin, t -> runnable.run(), null, delayTicks));
+        return wrapTask(entity.getScheduler().runDelayed(NpcApi.plugin, t -> runnable.run(), null, Math.max(1, delayTicks)));
     }
 
     @Override
     public PluginTask runTimerForEntity(Entity entity, Runnable runnable, long delayTicks, long periodTicks)
     {
-        return wrapTask(entity.getScheduler().runAtFixedRate(NpcApi.plugin, t -> runnable.run(), null, delayTicks, periodTicks));
+        return wrapTask(entity.getScheduler().runAtFixedRate(NpcApi.plugin, t -> runnable.run(), null, Math.max(1, delayTicks), periodTicks));
     }
 
     @Override
@@ -108,19 +114,19 @@ public class FoliaScheduler implements ServerScheduler
     @Override
     public PluginTask runDelayed(Runnable runnable, long delayTicks)
     {
-        return wrapTask(Bukkit.getGlobalRegionScheduler().runDelayed(NpcApi.plugin, t -> runnable.run(), delayTicks));
+        return wrapTask(Bukkit.getGlobalRegionScheduler().runDelayed(NpcApi.plugin, t -> runnable.run(), Math.max(1, delayTicks)));
     }
 
     @Override
     public PluginTask runTimer(Runnable runnable, long delayTicks, long periodTicks)
     {
-        return wrapTask(Bukkit.getGlobalRegionScheduler().runAtFixedRate(NpcApi.plugin, t -> runnable.run(), delayTicks, periodTicks));
+        return wrapTask(Bukkit.getGlobalRegionScheduler().runAtFixedRate(NpcApi.plugin, t -> runnable.run(), Math.max(1, delayTicks), periodTicks));
     }
 
     @Override
     public PluginTask runTimerAsync(Runnable runnable, long delayTicks, long periodTicks)
     {
-        return wrapTask(
-                Bukkit.getAsyncScheduler().runAtFixedRate(NpcApi.plugin, t -> runnable.run(), delayTicks * 50L, periodTicks * 50L, TimeUnit.MILLISECONDS));
+        return wrapTask(Bukkit.getAsyncScheduler()
+                .runAtFixedRate(NpcApi.plugin, t -> runnable.run(), Math.max(1, delayTicks * 50L), periodTicks * 50L, TimeUnit.MILLISECONDS));
     }
 }
