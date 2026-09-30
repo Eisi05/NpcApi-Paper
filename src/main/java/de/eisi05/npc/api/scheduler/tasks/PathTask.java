@@ -39,12 +39,14 @@ public class PathTask implements Runnable
 {
     private static final double GRAVITY = -0.08;
     private static final double JUMP_VELOCITY = 0.42;
-    private static final double TERMINAL_VELOCITY = -0.5;
+    private static final double TERMINAL_VELOCITY = -3.92;
     private static final double STEP_HEIGHT = 0.55;
+    private static final int STUCK_DETECTION_TICKS = 10;
+    private static final double STUCK_THRESHOLD = 0.05;
 
     private final NPC npc;
     private final double entityWidth;
-    private final Path path;
+    private Path path;
     private final List<Location> pathPoints;
     private final Set<UUID> viewerIds = new HashSet<>();
     private final boolean autoManageWalkingViewers;
@@ -67,6 +69,10 @@ public class PathTask implements Runnable
     private double verticalVelocity = 0.0;
     private int viewerRefreshTicks = 0;
     private boolean isWaitingForChunkLoad = false;
+
+    private final LinkedList<Vector> positionHistory = new LinkedList<>();
+    private int stuckCounter = 0;
+    private boolean bypassCollisionChecks = false;
 
     private long periodTicks = 1L;
 
@@ -102,6 +108,83 @@ public class PathTask implements Runnable
         this.previousYaw = npc.getLocation().getYaw();
         this.previousMoveDir = npc.getLocation().getDirection();
         this.serverEntity = (Entity) npc.getEntity();
+
+        positionHistory.add(currentPos.clone());
+    }
+
+    /**
+     * Dynamically updates the active path while the NPC is moving.
+     *
+     * @param newPath the new calculated path
+     */
+    public synchronized void updatePath(@NotNull Path newPath)
+    {
+        List<Location> newLocations = newPath.asLocations();
+        if(newLocations.isEmpty())
+            return;
+
+        this.path = newPath;
+        this.pathPoints.clear();
+        this.pathPoints.addAll(newLocations);
+        this.stuckCounter = 0;
+        this.bypassCollisionChecks = false;
+
+        this.index = calculateBestStartingIndex(newLocations);
+    }
+
+    /**
+     * Calculates the most appropriate starting waypoint index when updating the path mid-movement,
+     * preventing the NPC from walking backwards to an outdated start position.
+     *
+     * @param locations The list of locations in the new path
+     * @return The optimal index to resume movement from
+     */
+    private int calculateBestStartingIndex(@NotNull List<Location> locations)
+    {
+        int size = locations.size();
+        if(size <= 1)
+            return 0;
+
+        int bestIndex = 1;
+        double minDistanceSq = Double.MAX_VALUE;
+
+        for(int i = 0; i < size - 1; i++)
+        {
+            Vector p1 = locations.get(i).toVector();
+            Vector p2 = locations.get(i + 1).toVector();
+
+            Vector segment = p2.clone().subtract(p1);
+            segment.setY(0);
+            double segLenSq = segment.lengthSquared();
+
+            if(segLenSq < 1e-6)
+                continue;
+
+            Vector toCurrent = currentPos.clone().subtract(p1);
+            toCurrent.setY(0);
+
+            double t = Math.clamp(toCurrent.dot(segment) / segLenSq, 0.0, 1.0);
+            Vector proj = p1.clone().add(segment.clone().multiply(t));
+
+            double distSq = currentPos.clone().setY(0).distanceSquared(proj);
+            if(distSq < minDistanceSq)
+            {
+                minDistanceSq = distSq;
+                bestIndex = Math.min(i + 1, size - 1);
+            }
+        }
+
+        return bestIndex;
+    }
+
+    /**
+     * Gets the current index of the path task.
+     *
+     * @return the current index
+     */
+    public int getIndex()
+    {
+        return index;
     }
 
     /**
@@ -157,21 +240,25 @@ public class PathTask implements Runnable
             npc.refreshWalkingViewers();
         }
 
-        if(index >= pathPoints.size())
+        while (index < pathPoints.size())
         {
-            if(finishPath())
+            Vector target = pathPoints.get(index).toVector();
+            Vector toTarget = target.clone().subtract(currentPos);
+
+            if (hasReachedWaypoint(toTarget))
+                index++;
+            else
+                break;
+        }
+
+        if (index >= pathPoints.size())
+        {
+            if (finishPath())
                 return;
         }
 
-        Vector target = pathPoints.get(index).toVector();
+        Vector target = pathPoints.get(Math.min(index, pathPoints.size() - 1)).toVector();
         Vector toTarget = target.clone().subtract(currentPos);
-
-        if(hasReachedWaypoint(toTarget))
-        {
-            index++;
-            scheduleNextTick(periodTicks);
-            return;
-        }
 
         int chunkX = currentPos.getBlockX() >> 4;
         int chunkZ = currentPos.getBlockZ() >> 4;
@@ -183,17 +270,11 @@ public class PathTask implements Runnable
             cleanupDoors();
 
             Vector movement = calculateHorizontalMovement(toTarget, target);
-
-            if(movement.lengthSquared() < 1e-6 && index < pathPoints.size() && currentPos.equals(target))
-            {
-                index++;
-                scheduleNextTick(periodTicks);
-                return;
-            }
-
             PhysicsResult physics = applyPhysics(movement);
             movement.setY(physics.yChange);
             currentPos.add(movement);
+
+            detectAndHandleStuck();
 
             float yaw, pitch;
             if(withRotation)
@@ -367,9 +448,13 @@ public class PathTask implements Runnable
     private boolean hasReachedWaypoint(@NotNull Vector toTarget)
     {
         double horizontalDistSq = (toTarget.getX() * toTarget.getX()) + (toTarget.getZ() * toTarget.getZ());
-        double verticalDiff = Math.abs(toTarget.getY());
-        double allowedVerticalDiff = (toTarget.getY() < -0.1) ? 0.15 : 0.5;
-        return horizontalDistSq <= 0.04 && verticalDiff < allowedVerticalDiff;
+        if (horizontalDistSq > 0.04)
+            return false;
+
+        if (toTarget.getY() <= 0)
+            return true;
+
+        return toTarget.getY() < 0.5;
     }
 
     /**
@@ -397,9 +482,15 @@ public class PathTask implements Runnable
 
         if(Math.abs(moveDistance - dist) < 1e-6)
         {
-            this.currentPos.setX(targetPoint.getX());
-            this.currentPos.setZ(targetPoint.getZ());
-            return new Vector(0, 0, 0);
+            double currentGroundY = getGroundY(npc.getLocation().getWorld(), currentPos);
+            boolean onGround = currentPos.getY() <= currentGroundY + 1e-5;
+
+            if(onGround)
+            {
+                this.currentPos.setX(targetPoint.getX());
+                this.currentPos.setZ(targetPoint.getZ());
+                return new Vector(0, 0, 0);
+            }
         }
 
         return moveStep;
@@ -417,40 +508,91 @@ public class PathTask implements Runnable
         if(world == null)
             return new PhysicsResult(0, false);
 
+        double effectiveStepHeight = bypassCollisionChecks ? STEP_HEIGHT * 2.0 : STEP_HEIGHT;
+
         Vector stepTarget = currentPos.clone().add(movement);
         double targetGroundY = getGroundY(world, stepTarget);
 
+        double futureGroundY = targetGroundY;
+        if(movement.lengthSquared() > 1e-6)
+        {
+            double minLookAhead = (entityWidth / 2.0) + 0.1;
+            double desiredLookAhead = Math.clamp(movement.length() * 4.5, minLookAhead, 0.8);
+
+            Vector tracePos = currentPos.clone();
+            double remainingDist = desiredLookAhead;
+
+            for(int i = index; i < pathPoints.size(); i++)
+            {
+                Vector wp = pathPoints.get(i).toVector();
+                Vector toWp = wp.clone().subtract(tracePos);
+                toWp.setY(0);
+
+                double distToWp = toWp.length();
+
+                if(distToWp >= remainingDist)
+                {
+                    if(distToWp > 0)
+                        tracePos.add(toWp.normalize().multiply(remainingDist));
+                    remainingDist = 0;
+                    break;
+                }
+                else
+                {
+                    tracePos.add(toWp);
+                    remainingDist -= distToWp;
+                }
+            }
+
+            if(remainingDist > 0)
+            {
+                Vector horizontalMove = movement.clone();
+                horizontalMove.setY(0);
+                if(horizontalMove.lengthSquared() > 0)
+                    tracePos.add(horizontalMove.normalize().multiply(remainingDist));
+            }
+
+            futureGroundY = getGroundY(world, tracePos);
+        }
+
         Location targetWaypoint = pathPoints.get(Math.min(index, pathPoints.size() - 1));
-        if(targetGroundY < targetWaypoint.getY() - STEP_HEIGHT)
+
+        if(targetGroundY < targetWaypoint.getY() - effectiveStepHeight)
             targetGroundY = targetWaypoint.getY();
 
+        if(futureGroundY < targetWaypoint.getY() - effectiveStepHeight)
+            futureGroundY = targetWaypoint.getY();
+
         double currentGroundY = getGroundY(world, currentPos);
-        boolean onGround = currentPos.getY() <= currentGroundY + 1e-5;
+        boolean onGround = (currentPos.getY() <= currentGroundY + 1e-5) && (currentGroundY - currentPos.getY() <= effectiveStepHeight);
         double yChange;
 
         if(onGround)
         {
             double yDiff = targetGroundY - currentPos.getY();
+            double futureYDiff = futureGroundY - currentPos.getY();
 
-            if(yDiff <= 0 && yDiff >= -STEP_HEIGHT)
-            {
-                verticalVelocity = 0;
-                return new PhysicsResult(yDiff, true);
-            }
-
-            if(yDiff > 0 && yDiff <= STEP_HEIGHT)
-            {
-                verticalVelocity = 0;
-                return new PhysicsResult(yDiff, true);
-            }
-
-            if(yDiff > STEP_HEIGHT)
+            if(yDiff > effectiveStepHeight || futureYDiff > effectiveStepHeight)
             {
                 verticalVelocity = JUMP_VELOCITY;
                 return new PhysicsResult(JUMP_VELOCITY, false);
             }
 
+            if(yDiff <= 0 && yDiff >= -effectiveStepHeight)
+            {
+                verticalVelocity = 0;
+                return new PhysicsResult(yDiff, true);
+            }
+
+            if(yDiff > 0 && yDiff <= effectiveStepHeight)
+            {
+                verticalVelocity = 0;
+                return new PhysicsResult(yDiff, true);
+            }
+
             verticalVelocity += GRAVITY;
+            verticalVelocity *= 0.98;
+
             if(verticalVelocity < TERMINAL_VELOCITY)
                 verticalVelocity = TERMINAL_VELOCITY;
 
@@ -459,13 +601,20 @@ public class PathTask implements Runnable
         else
         {
             verticalVelocity += GRAVITY;
+            verticalVelocity *= 0.98;
+
             if(verticalVelocity < TERMINAL_VELOCITY)
                 verticalVelocity = TERMINAL_VELOCITY;
 
             yChange = verticalVelocity;
-            if(currentPos.getY() + yChange <= targetGroundY + 1e-5)
+
+            double landingY = targetGroundY;
+            if(currentPos.getY() < targetGroundY - effectiveStepHeight)
+                landingY = getGroundY(world, currentPos);
+
+            if(verticalVelocity <= 0 && currentPos.getY() + yChange <= landingY + 1e-5)
             {
-                yChange = targetGroundY - currentPos.getY();
+                yChange = landingY - currentPos.getY();
                 verticalVelocity = 0;
                 onGround = true;
             }
@@ -484,21 +633,21 @@ public class PathTask implements Runnable
      */
     private double getGroundY(@NotNull World world, @NotNull Vector pos)
     {
+        Location currentWaypoint = pathPoints.get(Math.min(index, pathPoints.size() - 1));
+        double waypointY = currentWaypoint.getY();
+
+        if (bypassCollisionChecks)
+            return waypointY;
+
         BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(world, pos.getX(), pos.getY(), pos.getZ(), entityWidth);
 
-        if(support.valid())
-            return support.feetY();
-
-        Location currentWaypoint = pathPoints.get(Math.min(index, pathPoints.size() - 1));
-        double highestY = world.getHighestBlockYAt(pos.getBlockX(), pos.getBlockZ());
-
-        if(Math.abs(currentWaypoint.getX() - pos.getX()) < 1.0 && Math.abs(currentWaypoint.getZ() - pos.getZ()) < 1.0)
+        if (support.valid())
         {
-            if(highestY < currentWaypoint.getY() - 1.0)
-                return currentWaypoint.getY();
+            if (Math.abs(support.feetY() - waypointY) <= 1.5)
+                return support.feetY();
         }
 
-        return highestY;
+        return waypointY;
     }
 
     /**
@@ -508,14 +657,11 @@ public class PathTask implements Runnable
      */
     private boolean finishPath()
     {
-        Location last = path.getWaypoints().isEmpty() ? null : path.getWaypoints().getLast();
-        if(last != null)
+        if(!pathPoints.isEmpty())
         {
+            Location last = pathPoints.getLast();
             if(currentPos.distanceSquared(last.toVector()) > 0.04)
-            {
-                pathPoints.add(last);
                 return false;
-            }
 
             smoothEndRotation(last);
         }
@@ -526,9 +672,9 @@ public class PathTask implements Runnable
         NpcStopWalkingEvent event = new NpcStopWalkingEvent(npc, WalkingResult.SUCCESS, updateRealLocation);
         Bukkit.getPluginManager().callEvent(event);
 
-        if(event.changeRealLocation())
+        if(event.changeRealLocation()  && !pathPoints.isEmpty())
         {
-            Location loc = path.getWaypoints().isEmpty() ? pathPoints.getLast() : path.getWaypoints().getLast();
+            Location loc = pathPoints.getLast();
             npc.changeRealLocation(loc, getViewers());
             currentPos = loc.toVector();
             ensureOnSolidGround();
@@ -634,8 +780,7 @@ public class PathTask implements Runnable
      */
     public @NotNull Location getCurrentLocation()
     {
-        World world = npc.getLocation().getWorld();
-        return currentPos.toLocation(world);
+        return currentPos.toLocation(npc.getLocation().getWorld());
     }
 
     /**
@@ -803,11 +948,15 @@ public class PathTask implements Runnable
         if(location == null || location.getWorld() == null)
             return false;
 
-        Location grounded = findSolidGroundBeneath(location);
-        if(grounded != null && Math.abs(grounded.getY() - location.getY()) > 0.001)
+        BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(location.getWorld(), location.getX(), location.getY(), location.getZ(), entityWidth);
+        if(support.valid())
         {
-            npc.changeRealLocation(grounded);
-            return true;
+            Location grounded = findSolidGroundBeneath(location);
+            if(grounded != null)
+            {
+                npc.changeRealLocation(grounded);
+                return true;
+            }
         }
         return false;
     }
@@ -858,13 +1007,16 @@ public class PathTask implements Runnable
      */
     private boolean isLocationCollisionFree(@NotNull World world, double x, double y, double z)
     {
+        if(bypassCollisionChecks)
+            return true;
+
         double scale = npc.getOption(NpcOption.SCALE);
-        double entityHeight = ((Entity) npc.getEntity()).getBoundingBox().getYsize() * scale;
+        double entityHeight = serverEntity.getBoundingBox().getYsize() * scale;
         double radius = entityWidth / 2.0;
 
         BoundingBox box = new BoundingBox(
                 x - radius + 0.001, y + 0.001, z - radius + 0.001,
-                x + radius - 0.001, y + entityHeight - 0.001, z + radius - 0.001
+                x + radius - 0.001, y + entityHeight - 0.001, x + radius - 0.001
         );
 
         int minX = (int) Math.floor(box.getMinX());
@@ -881,7 +1033,7 @@ public class PathTask implements Runnable
                 for(int bz = minZ; bz <= maxZ; bz++)
                 {
                     Block block = world.getBlockAt(bx, by, bz);
-                    if(AbstractPathfinder.isSafeFloor(block))
+                    if(!block.isEmpty() && !block.isPassable())
                     {
                         for(BoundingBox bb : AbstractPathfinder.getBlockBoxes(block))
                         {
@@ -894,6 +1046,101 @@ public class PathTask implements Runnable
             }
         }
         return true;
+    }
+
+    /**
+     * Checks if the NPC is inside a block.
+     *
+     * @return true if the NPC is inside a block
+     */
+    private boolean isInsideBlock()
+    {
+        World world = npc.getLocation().getWorld();
+        if(world == null)
+            return false;
+
+        double scale = npc.getOption(NpcOption.SCALE);
+        double entityHeight = serverEntity.getBoundingBox().getYsize() * scale;
+        double radius = entityWidth / 2.0;
+
+        BoundingBox box = new BoundingBox(
+                currentPos.getX() - radius + 0.001, currentPos.getY() + 0.001, currentPos.getZ() - radius + 0.001,
+                currentPos.getX() + radius - 0.001, currentPos.getY() + entityHeight - 0.001, currentPos.getZ() + radius - 0.001
+        );
+
+        int minX = (int) Math.floor(box.getMinX());
+        int maxX = (int) Math.floor(box.getMaxX());
+        int minY = (int) Math.floor(box.getMinY());
+        int maxY = (int) Math.floor(box.getMaxY());
+        int minZ = (int) Math.floor(box.getMinZ());
+        int maxZ = (int) Math.floor(box.getMaxZ());
+
+        for(int bx = minX; bx <= maxX; bx++)
+        {
+            for(int by = minY; by <= maxY; by++)
+            {
+                for(int bz = minZ; bz <= maxZ; bz++)
+                {
+                    Block block = world.getBlockAt(bx, by, bz);
+                    if(!block.isEmpty() && !block.isPassable())
+                    {
+                        for(BoundingBox bb : AbstractPathfinder.getBlockBoxes(block))
+                        {
+                            BoundingBox worldBB = bb.clone().shift(bx, by, bz);
+                            if(box.overlaps(worldBB))
+                                return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Detects if the NPC is stuck and handles recovery by temporarily bypassing collision checks.
+     *
+     */
+    private void detectAndHandleStuck()
+    {
+        positionHistory.addLast(currentPos.clone());
+        if(positionHistory.size() > STUCK_DETECTION_TICKS)
+            positionHistory.removeFirst();
+
+        boolean insideBlock = isInsideBlock();
+
+        if(insideBlock)
+        {
+            bypassCollisionChecks = true;
+            stuckCounter = 0;
+            return;
+        }
+
+        if(positionHistory.size() < STUCK_DETECTION_TICKS)
+            return;
+
+        Vector oldestPos = positionHistory.getFirst();
+        double distanceMoved = currentPos.distance(oldestPos);
+
+        if(distanceMoved < STUCK_THRESHOLD)
+        {
+            stuckCounter++;
+            if(stuckCounter >= 3)
+                bypassCollisionChecks = true;
+        }
+        else
+        {
+            if(bypassCollisionChecks)
+            {
+                if(!insideBlock && distanceMoved > STUCK_THRESHOLD * 4)
+                {
+                    stuckCounter = 0;
+                    bypassCollisionChecks = false;
+                }
+            }
+            else
+                stuckCounter = 0;
+        }
     }
 
     /**
@@ -1026,5 +1273,12 @@ public class PathTask implements Runnable
         {
             return new PathTask(this);
         }
+    }
+
+    /**
+     * A record containing the PathTask and BukkitTask.
+     */
+    public record WalkToResult(@NotNull PathTask pathTask, @NotNull PluginTask movementTask)
+    {
     }
 }

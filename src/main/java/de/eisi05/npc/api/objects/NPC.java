@@ -16,7 +16,6 @@ import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.PathfindingUtils;
-import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.scheduler.tasks.PathTask;
 import de.eisi05.npc.api.utils.Reflections;
@@ -1073,9 +1072,9 @@ public class NPC extends NpcHolder
      * @param walkSpeed          The walking speed of the NPC (clamped between 0.1 and 1).
      * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
      * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
-     * @return The {@link PluginTask} representing the movement task.
+     * @return The {@link de.eisi05.npc.api.scheduler.tasks.PathTask.WalkToResult} representing the walk-to task.
      */
-    public @NotNull PluginTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
+    public @NotNull PathTask.WalkToResult walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
                                       @Nullable Consumer<WalkingResult> onEnd)
     {
         return walkTo(path, walkSpeed, changeRealLocation, onEnd, true, null);
@@ -1090,9 +1089,9 @@ public class NPC extends NpcHolder
      * @param changeRealLocation If true, the NPC's actual server-side location will be updated; otherwise only packets are sent.
      * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
      * @param withRotation       If true, includes rotation packets in the movement; otherwise only position packets are sent.
-     * @return The {@link PluginTask} representing the movement task.
+     * @return The {@link de.eisi05.npc.api.scheduler.tasks.PathTask.WalkToResult} representing the walk-to task.
      */
-    public @NotNull PluginTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
+    public @NotNull PathTask.WalkToResult walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed, boolean changeRealLocation,
                                       @Nullable Consumer<WalkingResult> onEnd, boolean withRotation)
     {
         return walkTo(path, walkSpeed, changeRealLocation, onEnd, withRotation, null);
@@ -1108,9 +1107,9 @@ public class NPC extends NpcHolder
      * @param onEnd              A {@link Runnable} to be executed when the NPC reaches the end of the path.
      * @param withRotation       If true, includes rotation packets in the movement; otherwise only position packets are sent.
      * @param viewers            The players who should see the NPC move. If null, updates all viewers in the `viewers` set.
-     * @return The {@link PluginTask} representing the movement task.
+     * @return The {@link de.eisi05.npc.api.scheduler.tasks.PathTask.WalkToResult} representing the walk-to task.
      */
-    public @NotNull PluginTask walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
+    public @NotNull PathTask.WalkToResult walkTo(@NotNull de.eisi05.npc.api.pathfinding.Path path, double walkSpeed,
                                       boolean changeRealLocation, @Nullable Consumer<WalkingResult> onEnd,
                                       boolean withRotation, @Nullable List<Player> viewers)
     {
@@ -1155,7 +1154,7 @@ public class NPC extends NpcHolder
         for(Player player : viewers)
             pathTasks.put(player.getUniqueId(), pathTask);
 
-        return pathTask.start(1L, 1L);
+        return new PathTask.WalkToResult(pathTask, pathTask.start(1L, 1L));
     }
 
     /**

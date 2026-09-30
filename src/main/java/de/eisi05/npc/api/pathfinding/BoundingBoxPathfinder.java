@@ -303,7 +303,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         {
             int vSteps = Math.max(1, (int) Math.ceil(dy / safeStep));
             double vStepY = dy / vSteps;
-            for(int i = 0; i <= vSteps; i++)
+            for(int i = 1; i <= vSteps; i++)
             {
                 if(!isBoxValidAtCached(x1, y1 + (vStepY * i), z1))
                     return false;
@@ -317,7 +317,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
             double stepZ = dz / hSteps;
             double lastFeetY = y1;
 
-            for(int i = 0; i <= hSteps; i++)
+            for(int i = 1; i <= hSteps; i++)
             {
                 double cx = x1 + (stepX * i);
                 double cz = z1 + (stepZ * i);
@@ -349,7 +349,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         {
             int vSteps = Math.max(1, (int) Math.ceil(Math.abs(dy) / safeStep));
             double vStepY = Math.abs(dy) / vSteps;
-            for(int i = 0; i <= vSteps; i++)
+            for(int i = 1; i <= vSteps; i++)
             {
                 if(!isBoxValidAtCached(x2, y1 - (vStepY * i), z2))
                     return false;
@@ -521,8 +521,11 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
                                 double top = bb.getMaxY() + by;
                                 if(top <= currentY + maxJumpHeight && top > highestTopY)
                                 {
-                                    highestTopY = top;
-                                    foundSolid = true;
+                                    if(isBoxValidAtCached(x, top, z))
+                                    {
+                                        highestTopY = top;
+                                        foundSolid = true;
+                                    }
                                 }
                             }
                         }
@@ -563,9 +566,6 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
 
         if(NpcApi.config.checkValidPath())
         {
-            if(!startSupport.valid())
-                throw new PathfindingUtils.PathfindingException("Start location has no valid ground support: " + start);
-
             if(!endSupport.valid())
                 throw new PathfindingUtils.PathfindingException("End location has no valid ground support: " + end);
         }

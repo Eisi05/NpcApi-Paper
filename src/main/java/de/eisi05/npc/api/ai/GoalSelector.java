@@ -267,16 +267,6 @@ public class GoalSelector
                     .filter(goal -> goal.canUse(npc))
                     .toList();
 
-            if(usableGoals.isEmpty())
-            {
-                if(currentGoal != null)
-                {
-                    currentGoal.stop(npc);
-                    currentGoal = null;
-                }
-                return;
-            }
-
             List<Goal> alwaysGoals = usableGoals.stream()
                     .filter(goal -> goal.getPriority() == Goal.Priority.ALWAYS)
                     .toList();

@@ -75,14 +75,12 @@ public class AStarPathfinder extends AbstractPathfinder
         double minZ = tz - radius;
         double maxZ = tz + radius;
 
-        BoundingBox entityBox = new BoundingBox(minX, ty + 0.001, minZ, maxX, maxY, maxZ);
+        BoundingBox entityBox = new BoundingBox(minX, ty + 0.001, minZ, maxX, maxY - 0.001, maxZ);
 
         int minBlockX = (int) Math.floor(minX);
         int maxBlockX = (int) Math.floor(maxX);
-        int minBlockY = (int) Math.floor(ty);
-        int maxBlockY = (int) Math.floor(maxY);
-        if(maxY > maxBlockY && maxBlockY == minBlockY)
-            maxBlockY++;
+        int minBlockY = (int) Math.floor(ty + 0.001);
+        int maxBlockY = (int) Math.floor(maxY - 0.001);
         int minBlockZ = (int) Math.floor(minZ);
         int maxBlockZ = (int) Math.floor(maxZ);
 
@@ -150,10 +148,6 @@ public class AStarPathfinder extends AbstractPathfinder
 
         int startFloorY = resolveFloorY(start);
         int endFloorY = resolveFloorY(end);
-
-        Block startFloor = world.getBlockAt(start.getBlockX(), startFloorY, start.getBlockZ());
-        if(NpcApi.config.checkValidPath() && !isSafeFloor(startFloor))
-            throw new PathfindingUtils.PathfindingException("Start not on a valid floor: " + start);
 
         Block endFloor = world.getBlockAt(end.getBlockX(), endFloorY, end.getBlockZ());
         if(NpcApi.config.checkValidPath() && !isSafeFloor(endFloor))
@@ -228,15 +222,15 @@ public class AStarPathfinder extends AbstractPathfinder
 
                         if(newGCost < neighbor.gCost || !openSetIds.contains(id))
                         {
+                            if(openSetIds.contains(id))
+                                openSet.remove(neighbor);
+
                             neighbor.gCost = newGCost;
                             neighbor.calculateH(end);
                             neighbor.parent = current;
 
-                            if(!openSetIds.contains(id))
-                            {
-                                openSet.add(neighbor);
-                                openSetIds.add(id);
-                            }
+                            openSet.add(neighbor);
+                            openSetIds.add(id);
                         }
                     }
                 }
