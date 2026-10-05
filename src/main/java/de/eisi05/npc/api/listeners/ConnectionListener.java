@@ -38,7 +38,7 @@ public class ConnectionListener implements Listener
             if (player == null || !player.isOnline())
                 return;
 
-            for(NPC npc : new ArrayList<>(NpcManager.getList()))
+            for(NPC npc : NpcManager.getList())
             {
                 if(!npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
                     continue;
@@ -62,6 +62,7 @@ public class ConnectionListener implements Listener
         {
             PacketReader.inject(player);
             TeamManager.clear(player.getUniqueId());
+            NpcDamageListener.cleanUpAttack(player);
         });
 
         for(NPC npc : NpcManager.getList())

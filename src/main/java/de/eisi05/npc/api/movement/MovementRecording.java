@@ -88,7 +88,7 @@ public record MovementRecording(@NotNull ArrayList<MovementData> movements, long
     {
         try
         {
-            return new ObjectSaver(file).read();
+            return new ObjectSaver(file).read(MovementRecording.class);
         }
         catch(RuntimeException e)
         {

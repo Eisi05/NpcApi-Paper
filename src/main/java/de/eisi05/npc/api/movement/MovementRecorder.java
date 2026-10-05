@@ -1,8 +1,16 @@
 package de.eisi05.npc.api.movement;
 
+import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
+import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerAnimationEvent;
+import org.bukkit.event.player.PlayerAnimationType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -97,7 +105,7 @@ public class MovementRecorder
     /**
      * Represents an active recording session for a player.
      */
-    public static class RecordingSession
+    public static class RecordingSession implements Listener
     {
         private final Player player;
         private final long sessionId;
@@ -105,6 +113,9 @@ public class MovementRecorder
         private final ArrayList<MovementData> movements;
         private final long startTime;
         private PluginTask recordingTask;
+
+        private boolean nextTickSwingMain = false;
+        private boolean nextTickSwingOff = false;
 
         private RecordingSession(@NotNull Player player, long sessionId, int intervalTicks)
         {
@@ -117,7 +128,9 @@ public class MovementRecorder
 
         private void start()
         {
-            movements.add(new MovementData(player.getLocation(), 0));
+            Bukkit.getPluginManager().registerEvents(this, NpcApi.plugin);
+
+            movements.add(new MovementData(player.getLocation(), player.getPose(), null, 0));
 
             recordingTask = SchedulerProvider.get().runTimerForEntity(player, () ->
             {
@@ -127,13 +140,23 @@ public class MovementRecorder
                     return;
                 }
 
+                AnimatePacket.Animation animation = null;
+                if(nextTickSwingMain)
+                    animation = AnimatePacket.Animation.SWING_MAIN_HAND;
+                if(nextTickSwingOff)
+                    animation = AnimatePacket.Animation.SWING_OFF_HAND;
+                nextTickSwingMain = false;
+                nextTickSwingOff = false;
+
                 long timestamp = System.currentTimeMillis() - startTime;
-                movements.add(new MovementData(player.getLocation(), timestamp));
+                movements.add(new MovementData(player.getLocation(), player.getPose(), animation, timestamp));
             }, intervalTicks, intervalTicks);
         }
 
         private @NotNull MovementRecording stop()
         {
+            HandlerList.unregisterAll(this);
+
             if (recordingTask != null)
             {
                 recordingTask.cancel();
@@ -142,6 +165,18 @@ public class MovementRecorder
 
             long endTime = System.currentTimeMillis();
             return new MovementRecording(movements, sessionId, startTime, endTime, player.getUniqueId(), intervalTicks);
+        }
+
+        @EventHandler
+        public void onPlayerAnimation(PlayerAnimationEvent event)
+        {
+            if(!event.getPlayer().getUniqueId().equals(this.player.getUniqueId()))
+                return;
+
+            if(event.getAnimationType() == PlayerAnimationType.ARM_SWING)
+                nextTickSwingMain = true;
+            else
+                nextTickSwingOff = true;
         }
 
         public @NotNull Player getPlayer()

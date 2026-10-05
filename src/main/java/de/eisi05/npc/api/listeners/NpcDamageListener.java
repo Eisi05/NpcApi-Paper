@@ -35,6 +35,7 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,6 +57,11 @@ public class NpcDamageListener implements Listener
 
     private static final Map<Projectile, Location> activeProjectiles = new ConcurrentHashMap<>();
     private static PluginTask projectileTask;
+
+    public static void cleanUpAttack(@NotNull Player player)
+    {
+        lastAttackTicks.remove(player.getUniqueId());
+    }
 
     public static PluginTask startProjectileTracker()
     {
@@ -785,7 +791,7 @@ public class NpcDamageListener implements Listener
                         //noinspection UnstableApiUsage
                         knockbackRestanceAttribute = Attribute.valueOf("GENERIC_KNOCKBACK_RESISTANCE");
                     }
-                    catch(Exception e)
+                    catch(Throwable e)
                     {
                         knockbackRestanceAttribute = Attribute.KNOCKBACK_RESISTANCE;
                     }
@@ -835,7 +841,7 @@ public class NpcDamageListener implements Listener
             //noinspection UnstableApiUsage
             attackDamage = attacker.getAttribute(Attribute.valueOf("GENERIC_ATTACK_DAMAGE"));
         }
-        catch(Exception e)
+        catch(Throwable e)
         {
             attackDamage = attacker.getAttribute(Attribute.ATTACK_DAMAGE);
         }
@@ -909,7 +915,7 @@ public class NpcDamageListener implements Listener
             //noinspection UnstableApiUsage
             speedAttr = player.getAttribute(Attribute.valueOf("GENERIC_ATTACK_SPEED"));
         }
-        catch(Exception e)
+        catch(Throwable e)
         {
             speedAttr = player.getAttribute(Attribute.ATTACK_SPEED);
         }
@@ -958,7 +964,7 @@ public class NpcDamageListener implements Listener
                     //noinspection UnstableApiUsage
                     armorAttribute = Attribute.valueOf("GENERIC_ARMOR");
                 }
-                catch(Exception e)
+                catch(Throwable e)
                 {
                     armorAttribute = Attribute.ARMOR;
                 }
@@ -969,7 +975,7 @@ public class NpcDamageListener implements Listener
                     //noinspection UnstableApiUsage
                     armorToughnessAttribute = Attribute.valueOf("GENERIC_ARMOR_TOUGHNESS");
                 }
-                catch(Exception e)
+                catch(Throwable e)
                 {
                     armorToughnessAttribute = Attribute.ARMOR_TOUGHNESS;
                 }
@@ -980,7 +986,7 @@ public class NpcDamageListener implements Listener
                     //noinspection UnstableApiUsage
                     knockbackResistanceAttribute = Attribute.valueOf("GENERIC_KNOCKBACK_RESISTANCE");
                 }
-                catch(Exception e)
+                catch(Throwable e)
                 {
                     knockbackResistanceAttribute = Attribute.KNOCKBACK_RESISTANCE;
                 }

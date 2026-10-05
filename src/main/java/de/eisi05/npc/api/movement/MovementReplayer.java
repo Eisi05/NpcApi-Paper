@@ -1,9 +1,11 @@
 package de.eisi05.npc.api.movement;
 
 import de.eisi05.npc.api.objects.NPC;
+import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.TeleportEntityPacket;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.world.entity.Entity;
@@ -11,6 +13,7 @@ import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
@@ -170,7 +173,7 @@ public class MovementReplayer
             }
 
             Location startLocation = firstMovement.toLocation(world);
-
+            npc.setOption(NpcOption.POSE, firstMovement.getPose());
             if(viewers != null)
             {
                 for(Player p : viewers)
@@ -239,6 +242,15 @@ public class MovementReplayer
             }
 
             Location targetLocation = movement.toLocation(world);
+
+            for(Player player : viewers)
+                NpcOption.POSE.getPacket(npc, player, movement.getPose()).ifPresent(o -> ((CraftPlayer) player).getHandle().connection.send((Packet<?>) o));
+
+            if(movement.getAnimation() != null)
+            {
+                for(Player player : viewers)
+                    npc.playAnimation(player, movement.getAnimation());
+            }
 
             // Check if this is a teleport (large distance) or smooth movement
             ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket((Entity) npc.getEntity(), (byte) (targetLocation.getYaw() * 256 / 360));

@@ -51,13 +51,13 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.scoreboard.Team;
@@ -87,6 +87,7 @@ public class NPC extends NpcHolder
     public transient final Map<UUID, String> nameCache = new HashMap<>();
     transient final Map<UUID, Map<String, Integer>> toDeleteEntities = new HashMap<>();
     private final Set<UUID> viewers = new HashSet<>();
+    private final Set<UUID> unmodifiableViewers = Collections.unmodifiableSet(viewers);
     private final CustomNameTag nameTag;
     private final Path npcPath;
     private final Map<UUID, PathTask> pathTasks = new HashMap<>();
@@ -386,7 +387,7 @@ public class NPC extends NpcHolder
     public void reload()
     {
         boolean hasUnsavedChanges = hasUnsavedChanges();
-        final List<UUID> viewers = new ArrayList<>(this.viewers);
+        final List<UUID> viewers = List.copyOf(this.viewers);
         NpcVisibilityManager visibilityManager = getVisibilityManager();
         boolean shouldShowToAll = visibilityManager.shouldShowToAllPlayers();
         Set<UUID> specificPlayers = visibilityManager.getSpecificPlayers();
@@ -431,6 +432,8 @@ public class NPC extends NpcHolder
      */
     public void setLocation(@NotNull Location location)
     {
+        NpcManager.updateNpcPosition(this, this.location, location);
+
         this.location = location;
         markChange();
 
@@ -482,6 +485,17 @@ public class NPC extends NpcHolder
     public @NotNull Component getName()
     {
         return name.getName();
+    }
+
+    /**
+     * Checks if this NPC is a monster.
+     *
+     * @return true if the NPC is a monster, false otherwise
+     */
+    public boolean isMonster()
+    {
+        Class<? extends org.bukkit.entity.Entity> entityClass = getOption(NpcOption.ENTITY).getType().getEntityClass();
+        return entityClass != null && Monster.class.isAssignableFrom(entityClass);
     }
 
     /**
@@ -687,7 +701,7 @@ public class NPC extends NpcHolder
     @ApiStatus.Internal
     public Set<UUID> getViewers()
     {
-        return viewers;
+        return unmodifiableViewers;
     }
 
     /**
@@ -1384,11 +1398,11 @@ public class NPC extends NpcHolder
         {
             for(UUID uuid : viewers)
             {
-                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
-                if(!offlinePlayer.isOnline())
+                Player player = Bukkit.getPlayer(uuid);
+                if(player == null || !player.isOnline())
                     continue;
 
-                ServerPlayer serverPlayer = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
+                ServerPlayer serverPlayer = ((CraftPlayer) player.getPlayer()).getHandle();
                 if(moveEntityPacket != null)
                     serverPlayer.connection.send(moveEntityPacket);
             }
@@ -1423,11 +1437,11 @@ public class NPC extends NpcHolder
         {
             for(UUID uuid : viewers)
             {
-                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
-                if(!offlinePlayer.isOnline())
+                Player player = Bukkit.getPlayer(uuid);
+                if(player == null || !player.isOnline())
                     continue;
 
-                ServerPlayer serverPlayer1 = ((CraftPlayer) offlinePlayer.getPlayer()).getHandle();
+                ServerPlayer serverPlayer1 = ((CraftPlayer) player.getPlayer()).getHandle();
                 if(teleportEntityPacket != null)
                     serverPlayer1.connection.send(teleportEntityPacket);
                 if(rotateHeadPacket != null)

@@ -48,7 +48,9 @@ public class PathTask implements Runnable
     private final double entityWidth;
     private Path path;
     private final List<Location> pathPoints;
+    private final List<Vector> pathPointVectors;
     private final Set<UUID> viewerIds = new HashSet<>();
+    private Player[] cachedViewers;
     private final boolean autoManageWalkingViewers;
     private final Entity serverEntity;
     private final Consumer<WalkingResult> callback;
@@ -70,7 +72,8 @@ public class PathTask implements Runnable
     private int viewerRefreshTicks = 0;
     private boolean isWaitingForChunkLoad = false;
 
-    private final LinkedList<Vector> positionHistory = new LinkedList<>();
+    private final Vector[] positionHistory;
+    private int positionHistoryIndex = 0;
     private int stuckCounter = 0;
     private boolean bypassCollisionChecks = false;
 
@@ -88,6 +91,7 @@ public class PathTask implements Runnable
         this.entityWidth = ((Entity) npc.getEntity()).getBoundingBox().getXsize() * scale;
         this.path = builder.path;
         this.pathPoints = new ArrayList<>(builder.path.asLocations());
+        this.pathPointVectors = new ArrayList<>(builder.path.asVectors());
         if(builder.viewers != null)
         {
             for(Player viewer : builder.viewers)
@@ -109,7 +113,10 @@ public class PathTask implements Runnable
         this.previousMoveDir = npc.getLocation().getDirection();
         this.serverEntity = (Entity) npc.getEntity();
 
-        positionHistory.add(currentPos.clone());
+        this.positionHistory = new Vector[STUCK_DETECTION_TICKS];
+        for(int i = 0; i < STUCK_DETECTION_TICKS; i++)
+            this.positionHistory[i] = new Vector();
+        this.positionHistory[0] = currentPos.clone();
     }
 
     /**
@@ -126,10 +133,16 @@ public class PathTask implements Runnable
         this.path = newPath;
         this.pathPoints.clear();
         this.pathPoints.addAll(newLocations);
+
+        this.pathPointVectors.clear();
+        for(Location loc : this.pathPoints)
+            this.pathPointVectors.add(loc.toVector());
+
         this.stuckCounter = 0;
         this.bypassCollisionChecks = false;
 
         this.index = calculateBestStartingIndex(newLocations);
+        this.cachedViewers = null;
     }
 
     /**
@@ -148,25 +161,33 @@ public class PathTask implements Runnable
         int bestIndex = 1;
         double minDistanceSq = Double.MAX_VALUE;
 
+        List<Vector> vectors = new ArrayList<>(size);
+        for(Location loc : locations)
+            vectors.add(loc.toVector());
+
         for(int i = 0; i < size - 1; i++)
         {
-            Vector p1 = locations.get(i).toVector();
-            Vector p2 = locations.get(i + 1).toVector();
+            Vector p1 = vectors.get(i);
+            Vector p2 = vectors.get(i + 1);
 
-            Vector segment = p2.clone().subtract(p1);
-            segment.setY(0);
-            double segLenSq = segment.lengthSquared();
+            double segX = p2.getX() - p1.getX();
+            double segZ = p2.getZ() - p1.getZ();
+            double segLenSq = segX * segX + segZ * segZ;
 
             if(segLenSq < 1e-6)
                 continue;
 
-            Vector toCurrent = currentPos.clone().subtract(p1);
-            toCurrent.setY(0);
+            double toCurrX = currentPos.getX() - p1.getX();
+            double toCurrZ = currentPos.getZ() - p1.getZ();
 
-            double t = Math.clamp(toCurrent.dot(segment) / segLenSq, 0.0, 1.0);
-            Vector proj = p1.clone().add(segment.clone().multiply(t));
+            double t = Math.clamp((toCurrX * segX + toCurrZ * segZ) / segLenSq, 0.0, 1.0);
+            double projX = p1.getX() + segX * t;
+            double projZ = p1.getZ() + segZ * t;
 
-            double distSq = currentPos.clone().setY(0).distanceSquared(proj);
+            double dx = currentPos.getX() - projX;
+            double dz = currentPos.getZ() - projZ;
+            double distSq = dx * dx + dz * dz;
+
             if(distSq < minDistanceSq)
             {
                 minDistanceSq = distSq;
@@ -240,10 +261,10 @@ public class PathTask implements Runnable
             npc.refreshWalkingViewers();
         }
 
-        while (index < pathPoints.size())
+        while (index < pathPointVectors.size())
         {
-            Vector target = pathPoints.get(index).toVector();
-            Vector toTarget = target.clone().subtract(currentPos);
+            Vector target = pathPointVectors.get(index);
+            Vector toTarget = new Vector(target.getX() - currentPos.getX(), target.getY() - currentPos.getY(), target.getZ() - currentPos.getZ());
 
             if (hasReachedWaypoint(toTarget))
                 index++;
@@ -251,14 +272,14 @@ public class PathTask implements Runnable
                 break;
         }
 
-        if (index >= pathPoints.size())
+        if (index >= pathPointVectors.size())
         {
             if (finishPath())
                 return;
         }
 
-        Vector target = pathPoints.get(Math.min(index, pathPoints.size() - 1)).toVector();
-        Vector toTarget = target.clone().subtract(currentPos);
+        Vector target = pathPointVectors.get(Math.min(index, pathPointVectors.size() - 1));
+        Vector toTarget = new Vector(target.getX() - currentPos.getX(), target.getY() - currentPos.getY(), target.getZ() - currentPos.getZ());
 
         int chunkX = currentPos.getBlockX() >> 4;
         int chunkZ = currentPos.getBlockZ() >> 4;
@@ -359,13 +380,16 @@ public class PathTask implements Runnable
         checkAndOpenDoor(currentPos.toLocation(world).getBlock());
         checkAndOpenDoor(currentPos.toLocation(world).getBlock().getRelative(BlockFace.UP));
 
-        if(index < pathPoints.size())
+        if(index < pathPointVectors.size())
         {
-            Location next = pathPoints.get(index);
-            if(currentPos.distanceSquared(next.toVector()) < 4.0)
+            Vector next = pathPointVectors.get(index);
+            double dx = next.getX() - currentPos.getX();
+            double dz = next.getZ() - currentPos.getZ();
+            if(dx * dx + dz * dz < 4.0)
             {
-                checkAndOpenDoor(next.getBlock());
-                checkAndOpenDoor(next.getBlock().getRelative(BlockFace.UP));
+                Location nextLoc = pathPoints.get(index);
+                checkAndOpenDoor(nextLoc.getBlock());
+                checkAndOpenDoor(nextLoc.getBlock().getRelative(BlockFace.UP));
             }
         }
     }
@@ -466,8 +490,9 @@ public class PathTask implements Runnable
      */
     private @NotNull Vector calculateHorizontalMovement(@NotNull Vector toTarget, @NotNull Vector targetPoint)
     {
-        Vector horizontal = new Vector(toTarget.getX(), 0, toTarget.getZ());
-        double distSq = horizontal.lengthSquared();
+        double hX = toTarget.getX();
+        double hZ = toTarget.getZ();
+        double distSq = hX * hX + hZ * hZ;
         if(distSq < 1e-6)
             return new Vector(0, 0, 0);
 
@@ -478,7 +503,8 @@ public class PathTask implements Runnable
             currentSpeed *= 0.6;
 
         double moveDistance = Math.min(currentSpeed, dist);
-        Vector moveStep = horizontal.clone().normalize().multiply(moveDistance);
+        double moveStepX = (hX / dist) * moveDistance;
+        double moveStepZ = (hZ / dist) * moveDistance;
 
         if(Math.abs(moveDistance - dist) < 1e-6)
         {
@@ -493,7 +519,7 @@ public class PathTask implements Runnable
             }
         }
 
-        return moveStep;
+        return new Vector(moveStepX, 0, moveStepZ);
     }
 
     /**
@@ -510,49 +536,66 @@ public class PathTask implements Runnable
 
         double effectiveStepHeight = bypassCollisionChecks ? STEP_HEIGHT * 2.0 : STEP_HEIGHT;
 
-        Vector stepTarget = currentPos.clone().add(movement);
+        double stepTargetX = currentPos.getX() + movement.getX();
+        double stepTargetY = currentPos.getY() + movement.getY();
+        double stepTargetZ = currentPos.getZ() + movement.getZ();
+        Vector stepTarget = new Vector(stepTargetX, stepTargetY, stepTargetZ);
         double targetGroundY = getGroundY(world, stepTarget);
 
         double futureGroundY = targetGroundY;
-        if(movement.lengthSquared() > 1e-6)
+        double moveLenSq = movement.lengthSquared();
+        if(moveLenSq > 1e-6)
         {
             double minLookAhead = (entityWidth / 2.0) + 0.1;
-            double desiredLookAhead = Math.clamp(movement.length() * 4.5, minLookAhead, 0.8);
+            double moveLen = Math.sqrt(moveLenSq);
+            double desiredLookAhead = Math.clamp(moveLen * 4.5, minLookAhead, 0.8);
 
-            Vector tracePos = currentPos.clone();
+            double tracePosX = currentPos.getX();
+            double tracePosY = currentPos.getY();
+            double tracePosZ = currentPos.getZ();
             double remainingDist = desiredLookAhead;
 
-            for(int i = index; i < pathPoints.size(); i++)
+            for(int i = index; i < pathPointVectors.size(); i++)
             {
-                Vector wp = pathPoints.get(i).toVector();
-                Vector toWp = wp.clone().subtract(tracePos);
-                toWp.setY(0);
-
-                double distToWp = toWp.length();
+                Vector wp = pathPointVectors.get(i);
+                double toWpX = wp.getX() - tracePosX;
+                double toWpZ = wp.getZ() - tracePosZ;
+                double distToWp = Math.sqrt(toWpX * toWpX + toWpZ * toWpZ);
 
                 if(distToWp >= remainingDist)
                 {
                     if(distToWp > 0)
-                        tracePos.add(toWp.normalize().multiply(remainingDist));
+                    {
+                        double ratio = remainingDist / distToWp;
+                        tracePosX += toWpX * ratio;
+                        tracePosZ += toWpZ * ratio;
+                    }
                     remainingDist = 0;
                     break;
                 }
                 else
                 {
-                    tracePos.add(toWp);
+                    tracePosX = wp.getX();
+                    tracePosZ = wp.getZ();
                     remainingDist -= distToWp;
                 }
             }
 
             if(remainingDist > 0)
             {
-                Vector horizontalMove = movement.clone();
-                horizontalMove.setY(0);
-                if(horizontalMove.lengthSquared() > 0)
-                    tracePos.add(horizontalMove.normalize().multiply(remainingDist));
+                double hMoveX = movement.getX();
+                double hMoveZ = movement.getZ();
+                double hMoveLenSq = hMoveX * hMoveX + hMoveZ * hMoveZ;
+                if(hMoveLenSq > 0)
+                {
+                    double hMoveLen = Math.sqrt(hMoveLenSq);
+                    double ratio = remainingDist / hMoveLen;
+                    tracePosX += hMoveX * ratio;
+                    tracePosZ += hMoveZ * ratio;
+                }
             }
 
-            futureGroundY = getGroundY(world, tracePos);
+            futureGroundY = getGroundY(world, new Vector(tracePosX, tracePosY, tracePosZ));
         }
 
         Location targetWaypoint = pathPoints.get(Math.min(index, pathPoints.size() - 1));
@@ -657,13 +700,16 @@ public class PathTask implements Runnable
      */
     private boolean finishPath()
     {
-        if(!pathPoints.isEmpty())
+        if(!pathPointVectors.isEmpty())
         {
-            Location last = pathPoints.getLast();
-            if(currentPos.distanceSquared(last.toVector()) > 0.04)
+            Vector last = pathPointVectors.getLast();
+            double dx = last.getX() - currentPos.getX();
+            double dy = last.getY() - currentPos.getY();
+            double dz = last.getZ() - currentPos.getZ();
+            if(dx * dx + dy * dy + dz * dz > 0.04)
                 return false;
 
-            smoothEndRotation(last);
+            smoothEndRotation(pathPoints.getLast());
         }
 
         finished = true;
@@ -717,21 +763,32 @@ public class PathTask implements Runnable
      */
     private float @NotNull [] calculateSmoothRotation()
     {
-        Vector lookDir;
-        if(index + 1 < pathPoints.size())
+        double lookDirX, lookDirZ;
+        if(index + 1 < pathPointVectors.size())
         {
-            Vector p1 = pathPoints.get(index).toVector();
-            Vector p2 = pathPoints.get(index + 1).toVector();
-            lookDir = p1.add(p2).multiply(0.5).subtract(currentPos);
+            Vector p1 = pathPointVectors.get(index);
+            Vector p2 = pathPointVectors.get(index + 1);
+            lookDirX = (p1.getX() + p2.getX()) * 0.5 - currentPos.getX();
+            lookDirZ = (p1.getZ() + p2.getZ()) * 0.5 - currentPos.getZ();
         }
         else
-            lookDir = pathPoints.get(Math.min(index, pathPoints.size() - 1)).toVector().subtract(currentPos);
+        {
+            Vector p = pathPointVectors.get(Math.min(index, pathPointVectors.size() - 1));
+            lookDirX = p.getX() - currentPos.getX();
+            lookDirZ = p.getZ() - currentPos.getZ();
+        }
 
-        Vector horizontalLook = new Vector(lookDir.getX(), 0, lookDir.getZ());
-        if(horizontalLook.lengthSquared() < 1e-6)
-            horizontalLook.copy(previousMoveDir.clone());
+        double hLookX = lookDirX;
+        double hLookZ = lookDirZ;
+        double hLookLenSq = hLookX * hLookX + hLookZ * hLookZ;
 
-        float targetYaw = (float) (Math.toDegrees(Math.atan2(horizontalLook.getZ(), horizontalLook.getX())) - 90);
+        if(hLookLenSq < 1e-6)
+        {
+            hLookX = previousMoveDir.getX();
+            hLookZ = previousMoveDir.getZ();
+        }
+
+        float targetYaw = (float) (Math.toDegrees(Math.atan2(hLookZ, hLookX)) - 90);
         targetYaw = normalizeAngle(targetYaw);
 
         float diff = normalizeAngle(targetYaw - previousYaw);
@@ -739,11 +796,16 @@ public class PathTask implements Runnable
 
         float yaw = previousYaw + diff;
         previousYaw = yaw;
-        previousMoveDir.copy(horizontalLook);
+        previousMoveDir.setX(hLookX);
+        previousMoveDir.setY(0);
+        previousMoveDir.setZ(hLookZ);
 
-        Vector targetVec = pathPoints.get(Math.min(index + 1, pathPoints.size() - 1)).toVector().subtract(currentPos);
-        double hLen = Math.sqrt(targetVec.getX() * targetVec.getX() + targetVec.getZ() * targetVec.getZ());
-        float pitch = (float) (-Math.toDegrees(Math.atan2(targetVec.getY(), hLen))) / 1.5f;
+        Vector targetVec = pathPointVectors.get(Math.min(index + 1, pathPointVectors.size() - 1));
+        double tVecX = targetVec.getX() - currentPos.getX();
+        double tVecY = targetVec.getY() - currentPos.getY();
+        double tVecZ = targetVec.getZ() - currentPos.getZ();
+        double hLen = Math.sqrt(tVecX * tVecX + tVecZ * tVecZ);
+        float pitch = (float) (-Math.toDegrees(Math.atan2(tVecY, hLen))) / 1.5f;
 
         return new float[]{yaw, pitch};
     }
@@ -797,6 +859,7 @@ public class PathTask implements Runnable
         if(!viewerIds.add(player.getUniqueId()))
             return false;
 
+        cachedViewers = null;
         sendCurrentPosition(player);
         return true;
     }
@@ -820,6 +883,7 @@ public class PathTask implements Runnable
     public void removeViewer(@NotNull Player player)
     {
         viewerIds.remove(player.getUniqueId());
+        cachedViewers = null;
     }
 
     /**
@@ -829,10 +893,14 @@ public class PathTask implements Runnable
      */
     private Player @NotNull [] getViewers()
     {
-        return viewerIds.stream()
+        if(cachedViewers != null)
+            return cachedViewers;
+
+        cachedViewers = viewerIds.stream()
                 .map(Bukkit::getPlayer)
                 .filter(Objects::nonNull)
                 .toArray(Player[]::new);
+        return cachedViewers;
     }
 
     /**
@@ -1103,9 +1171,8 @@ public class PathTask implements Runnable
      */
     private void detectAndHandleStuck()
     {
-        positionHistory.addLast(currentPos.clone());
-        if(positionHistory.size() > STUCK_DETECTION_TICKS)
-            positionHistory.removeFirst();
+        positionHistory[positionHistoryIndex] = currentPos.clone();
+        positionHistoryIndex = (positionHistoryIndex + 1) % STUCK_DETECTION_TICKS;
 
         boolean insideBlock = isInsideBlock();
 
@@ -1116,12 +1183,12 @@ public class PathTask implements Runnable
             return;
         }
 
-        if(positionHistory.size() < STUCK_DETECTION_TICKS)
+        int oldestIndex = positionHistoryIndex;
+        Vector oldestPos = positionHistory[oldestIndex];
+        if(oldestPos == null)
             return;
 
-        Vector oldestPos = positionHistory.getFirst();
         double distanceMoved = currentPos.distance(oldestPos);
-
         if(distanceMoved < STUCK_THRESHOLD)
         {
             stuckCounter++;

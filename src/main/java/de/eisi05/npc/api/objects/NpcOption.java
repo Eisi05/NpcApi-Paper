@@ -14,6 +14,7 @@ import de.eisi05.npc.api.manager.NpcCombatManager;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.NpcVisibilityManager;
 import de.eisi05.npc.api.manager.TeamManager;
+import de.eisi05.npc.api.movement.MovementReplayer;
 import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.scheduler.tasks.Tasks;
@@ -66,7 +67,6 @@ import org.bukkit.entity.Pose;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -506,7 +506,7 @@ public class NpcOption<T, S extends Serializable>
                         data.set(EntityDataSerializers.BYTE.createAccessor(8), (byte) (handFlag & ~0x04));
                 }
 
-                if(pose == Pose.SLEEPING)
+                if(pose == Pose.SLEEPING && !MovementReplayer.isReplaying(npc))
                 {
                     final Location startLocation = npc.getLocation().clone();
                     final float startYaw = startLocation.getYaw();
@@ -531,7 +531,7 @@ public class NpcOption<T, S extends Serializable>
                         }
                     }, 20, 5);
                 }
-                else
+                else if(!MovementReplayer.isReplaying(npc))
                     SchedulerProvider.get().runLaterForEntity(player, () -> npc.updateLocationForPlayer(npc.getLocation(), player), 1);
 
                 Map<String, Integer> playerEntities = npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
@@ -542,11 +542,14 @@ public class NpcOption<T, S extends Serializable>
                             Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
                                     EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
                                 npc.entity.level());
-                    textDisplay.absSnapTo(npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ());
+
+                    Var.moveEntity(textDisplay, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch());
                     playerEntities.put("sit", textDisplay.getId());
 
-                    Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket(
-                            Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
+                    Packet<? super ClientGamePacketListener> addEntityPacket =
+                            Versions.isCurrentVersionSmallerThan(Versions.V1_21) ?
+                            (Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(textDisplay, Var.obfuscated ? "dl" : "getAddEntityPacket").get() :
+                            textDisplay.getAddEntityPacket(Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
 
                     SynchedEntityData entityData = textDisplay.getEntityData();
                     entityData.set(accessor, (byte) (flags | 0x20));
@@ -649,7 +652,7 @@ public class NpcOption<T, S extends Serializable>
                     entity = npc.entity;
 
                 Location location = npc.getLocation();
-                if(npc.getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SITTING)
+                if(npc.getOption(NpcOption.POSE) == Pose.SITTING)
                     location = location.clone().subtract(0, npc.getOption(NpcOption.SCALE) * (((AABB) npc.getDefaultBoundingBox()).getYsize() / 3D), 0);
                 Var.moveEntity(entity, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
 
@@ -666,7 +669,11 @@ public class NpcOption<T, S extends Serializable>
 
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.serverPlayer.getId()));
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.entity.getId()));
-                packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
+
+                if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
+                    packets.add((Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(entity, Var.obfuscated ? "dl" : "getAddEntityPacket").get());
+                else
+                    packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
 
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
@@ -736,7 +743,11 @@ public class NpcOption<T, S extends Serializable>
                     interactionData.set(EntityDataSerializers.FLOAT.createAccessor(8), width);
                     interactionData.set(EntityDataSerializers.FLOAT.createAccessor(9), height);
 
-                    packets.add(interaction.getAddEntityPacket(Var.getServerEntity(interaction, Var.getServerLevel(npc.serverPlayer))));
+                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
+                        packets.add((Packet<? super ClientGamePacketListener>)
+                                Reflections.invokeMethod(interaction, Var.obfuscated ? "dl" : "getAddEntityPacket").get());
+                    else
+                        packets.add(interaction.getAddEntityPacket(Var.getServerEntity(interaction, Var.getServerLevel(npc.serverPlayer))));
                     packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(interaction.getId(), interactionData));
                 }
                 else
@@ -744,7 +755,11 @@ public class NpcOption<T, S extends Serializable>
 
                 if(!npc.getOption(NpcOption.HIDE_NAMETAG, player))
                 {
-                    packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket(
+                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
+                        packets.add((Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(
+                                npc.getNameTag().getDisplay(), Var.obfuscated ? "dl" : "getAddEntityPacket").get());
+                    else
+                        packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket(
                             Var.getServerEntity((Display.TextDisplay) npc.getNameTag().getDisplay(), Var.getServerLevel(npc.serverPlayer))));
 
                     packets.add(
@@ -1054,10 +1069,24 @@ public class NpcOption<T, S extends Serializable>
      */
     public @NotNull Optional<Object> getPacket(@NotNull NPC npc, Player player)
     {
+        return getPacket(npc, player, npc.getOption(this, player));
+    }
+
+    /**
+     * Generates the network packet(s) needed to apply this option's value to an NPC for a specific player. The method checks for version compatibility before
+     * generating the packet.
+     *
+     * @param npc    The {@link NPC} to apply the option to. Must not be null.
+     * @param player The {@link Player} who will receive the update. Must not be null.
+     * @param value  The value to apply to the option.
+     * @return An {@link Optional} containing the {@link Packet} if one is generated and the option is compatible, otherwise an empty Optional.
+     */
+    public @NotNull Optional<Object> getPacket(@NotNull NPC npc, Player player, T value)
+    {
         if(packet == null || !isCompatible())
             return Optional.empty();
 
-        return Optional.ofNullable(packet.apply(npc.getOption(this), npc, player));
+        return Optional.ofNullable(packet.apply(value, npc, player));
     }
 
     @Override

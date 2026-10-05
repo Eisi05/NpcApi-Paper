@@ -30,10 +30,9 @@ public class WorldLoadListener implements Listener
         int chunkZ = event.getChunk().getZ();
 
         Collection<Player> players = event.getWorld().getPlayers();
-        new ArrayList<>(NpcManager.getList())
+        NpcManager.getNpcsInChunk(chunkX, chunkZ)
                 .stream()
                 .filter(npc -> npc.getLocation().getWorld().getUID().equals(event.getChunk().getWorld().getUID()))
-                .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
                 .forEach(npc -> players.forEach(player ->
                 {
                     if(npc.getVisibilityManager().shouldShowToPlayer(player.getUniqueId())) {
@@ -53,10 +52,9 @@ public class WorldLoadListener implements Listener
         int chunkZ = event.getChunk().getZ();
 
         Collection<Player> players = event.getWorld().getPlayers();
-        new ArrayList<>(NpcManager.getList())
+        NpcManager.getNpcsInChunk(chunkX, chunkZ)
                 .stream()
                 .filter(npc -> npc.getLocation().getWorld().getUID().equals(event.getChunk().getWorld().getUID()))
-                .filter(npc -> (npc.getLocation().getBlockX() >> 4) == chunkX && ((npc.getLocation().getBlockZ() >> 4) == chunkZ))
                 .forEach(npc -> players.forEach(npc::hideNpcFromPlayer));
     }
 }

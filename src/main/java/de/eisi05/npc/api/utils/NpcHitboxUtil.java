@@ -48,12 +48,13 @@ public class NpcHitboxUtil
             //noinspection UnstableApiUsage
             maxDistance = player.getAttribute(Attribute.valueOf("PLAYER_ENTITY_INTERACTION_RANGE")).getValue();
         }
-        catch(Exception e1)
+        catch(Throwable e1)
         {
-            try {
+            try
+            {
                 maxDistance = player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE).getValue();
             }
-            catch(Exception e2)
+            catch(Throwable e2)
             {
                 maxDistance = player.getGameMode() == GameMode.CREATIVE ? 5.0 : 3.0;
             }

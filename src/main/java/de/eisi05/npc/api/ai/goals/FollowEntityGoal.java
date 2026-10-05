@@ -2,12 +2,9 @@ package de.eisi05.npc.api.ai.goals;
 
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.objects.NpcOption;
-import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
 import de.eisi05.npc.api.utils.LocationUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -24,7 +21,7 @@ import java.util.UUID;
 /**
  * A goal that makes the NPC follow a target entity. The NPC will maintain a specified distance from the target and pathfind to them if too far.
  */
-public class FollowEntityGoal extends Goal
+public class FollowEntityGoal extends EntityTargetGoal
 {
     public static final double DEFAULT_FOLLOW_DISTANCE = 10.0;
     public static final double DEFAULT_STOP_DISTANCE = 1.5;
@@ -163,40 +160,6 @@ public class FollowEntityGoal extends Goal
     }
 
     /**
-     * Gets the current target location for this goal.
-     *
-     * @param npc the NPC to use for location calculations
-     * @return the current target location, or null if no target is set
-     */
-    private @Nullable Location getTargetLocation(@NotNull NPC npc)
-    {
-        if(target == null || target.getWorld() == null)
-            return null;
-
-        Location location = target.getLocation().clone();
-        World world = location.getWorld();
-        int minHeight = world.getMinHeight();
-
-        double scale = npc.getOption(NpcOption.SCALE);
-        double entityWidth = ((net.minecraft.world.entity.Entity) npc.getEntity()).getBoundingBox().getXsize() * scale;
-
-        while (location.getY() >= minHeight)
-        {
-            BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(
-                    world, location.getX(), location.getY(), location.getZ(), entityWidth);
-
-            if (support.valid())
-            {
-                location.setY(support.feetY());
-                return location;
-            }
-            location.subtract(0, 0.5, 0);
-        }
-
-        return target.getLocation();
-    }
-
-    /**
      * Checks if this goal can be used by the NPC.
      *
      * @param npc the NPC to check
@@ -248,7 +211,7 @@ public class FollowEntityGoal extends Goal
 
         this.target = le;
         this.pathRecalculationCooldown = 0;
-        Location targetLoc = getTargetLocation(npc);
+        Location targetLoc = getTargetLocation();
         if(targetLoc == null && target != null)
             targetLoc = target.getLocation().clone();
 
@@ -282,7 +245,7 @@ public class FollowEntityGoal extends Goal
             }
         }
 
-        Location targetLoc = getTargetLocation(npc);
+        Location targetLoc = getTargetLocation();
         if(targetLoc == null)
             targetLoc = target.getLocation().clone();
 

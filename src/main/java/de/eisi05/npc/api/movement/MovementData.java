@@ -1,8 +1,11 @@
 package de.eisi05.npc.api.movement;
 
+import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.entity.Pose;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -20,15 +23,19 @@ public class MovementData implements Serializable
     private final long timestamp;
     private final double x, y, z;
     private final float yaw, pitch;
+    private final Pose pose;
+    private final AnimatePacket.Animation animation;
     private final UUID worldUUID;
 
     /**
      * Creates a new MovementData instance from a location and timestamp.
      *
      * @param location The location to record
+     * @param pose The pose of the entity
+     * @param animation The animation of the entity
      * @param timestamp The timestamp in milliseconds when this movement occurred
      */
-    public MovementData(@NotNull Location location, long timestamp)
+    public MovementData(@NotNull Location location, @NotNull Pose pose, @Nullable AnimatePacket.Animation animation, long timestamp)
     {
         this.timestamp = timestamp;
         this.x = location.getX();
@@ -37,6 +44,19 @@ public class MovementData implements Serializable
         this.yaw = location.getYaw();
         this.pitch = location.getPitch();
         this.worldUUID = location.getWorld().getUID();
+        this.pose = pose;
+        this.animation = animation;
+    }
+
+    /**
+     * Creates a new MovementData instance from a location and timestamp.
+     *
+     * @param location  The location to record
+     * @param timestamp The timestamp in milliseconds when this movement occurred
+     */
+    public MovementData(@NotNull Location location, long timestamp)
+    {
+        this(location, Pose.STANDING, null, timestamp);
     }
 
     /**
@@ -110,6 +130,26 @@ public class MovementData implements Serializable
     }
 
     /**
+     * Gets the pose of the entity.
+     *
+     * @return The pose
+     */
+    public @NotNull Pose getPose()
+    {
+        return pose;
+    }
+
+    /**
+     * Gets the animation of the current movement.
+     *
+     * @return The animation
+     */
+    public @Nullable AnimatePacket.Animation getAnimation()
+    {
+        return animation;
+    }
+
+    /**
      * Creates a Location object from this movement data.
      *
      * @param world The world to create the location in
@@ -134,6 +174,7 @@ public class MovementData implements Serializable
     @Override
     public @NotNull String toString()
     {
-        return String.format("MovementData{world='%s', x=%.2f, y=%.2f, z=%.2f, yaw=%.1f, pitch=%.1f, time=%d}", worldUUID, x, y, z, yaw, pitch, timestamp);
+        return String.format("MovementData{world='%s', x=%.2f, y=%.2f, z=%.2f, yaw=%.1f, pitch=%.1f, pose='%s', time=%d}",
+                worldUUID, x, y, z, yaw, pitch, pose, timestamp);
     }
 }

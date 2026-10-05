@@ -349,6 +349,7 @@ public class ObjectSaver
      * @return The deserialized object, or {@code null} if an error occurs during reading (e.g., file not found, EOF, class not found, or I/O error).
      */
     @SuppressWarnings("unchecked")
+    @Deprecated
     public <T extends Serializable> @Nullable T read()
     {
         try

@@ -10,11 +10,16 @@ import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionHand;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -76,6 +81,36 @@ public class PacketReader
                 readers.forEach(consumer -> consumer.accept(player, msg));
 
                 super.channelRead(ctx, msg);
+            }
+
+            @Override
+            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception
+            {
+                if(msg instanceof ClientboundChangeDifficultyPacket difficultyPacket)
+                {
+                    var difficulty = Reflections.getField(difficultyPacket, Var.obfuscated ? "b" : "difficulty").get();
+                    if(difficulty == Difficulty.PEACEFUL)
+                    {
+                        SchedulerProvider.get().runSyncAtLocation(player.getWorld().getSpawnLocation(), () ->
+                        {
+                            long amount = NpcManager.unloadMonsterNpcs(player.getWorld());
+                            Component message =
+                                    Component.text("Unloaded " + amount + " NPCs because the difficulty changed to peaceful!").color(NamedTextColor.RED);
+                            Bukkit.getOnlinePlayers().stream().filter(player1 -> player1.isOp() || player1.hasPermission("npc.admin"))
+                                            .forEach(player1 -> player1.sendMessage(message));
+                        });
+
+                        return;
+                    }
+
+                    NpcManager.loadMonsterNpcs((location, runnable) ->
+                    {
+                        if(location.getWorld().equals(player.getWorld()))
+                            SchedulerProvider.get().runLaterAtLocation(location, runnable, 1L);
+                    });
+                }
+
+                super.write(ctx, msg, promise);
             }
         };
 

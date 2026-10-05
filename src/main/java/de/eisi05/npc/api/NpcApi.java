@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Function;
 
@@ -116,7 +117,7 @@ public final class NpcApi
      */
     public static void disable()
     {
-        List<NPC> npcsToSave = new ArrayList<>(NpcManager.getList());
+        Collection<NPC> npcsToSave = NpcManager.getList();
         for (NPC npc : npcsToSave)
         {
             npc.stopGoals();
