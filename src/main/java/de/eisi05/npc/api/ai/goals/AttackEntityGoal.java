@@ -9,7 +9,6 @@ import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.LocationUtils;
 import de.eisi05.npc.api.utils.RegistryPredicate;
 import de.eisi05.npc.api.utils.SerializableBiPredicate;
-import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.utils.serialize.NpcRegistry;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
@@ -49,7 +48,7 @@ import java.util.*;
  * Only activates when a valid target is in range and line of sight. Once a target is locked, the NPC continues attacking until the target becomes
  * unreachable or invalid.
  */
-@SuppressWarnings({"ScheduledForRemoval", "removal"})
+@SuppressWarnings({"ScheduledForRemoval"})
 public class AttackEntityGoal extends EntityTargetGoal
 {
     @Serial
@@ -555,17 +554,7 @@ public class AttackEntityGoal extends EntityTargetGoal
         if(meta == null)
             return 5;
 
-        Collection<AttributeModifier> modifiers;
-        try
-        {
-            //noinspection UnstableApiUsage
-            modifiers = meta.getAttributeModifiers(Attribute.valueOf("GENERIC_ATTACK_SPEED"));
-        }
-        catch(Throwable e)
-        {
-            modifiers = meta.getAttributeModifiers(Attribute.ATTACK_SPEED);
-        }
-
+        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.GENERIC_ATTACK_DAMAGE);
         if(modifiers == null)
             return 5;
 
@@ -693,9 +682,6 @@ public class AttackEntityGoal extends EntityTargetGoal
                 arrow.setDamage(getAttackDamage(npc));
                 arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
 
-                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21))
-                    arrow.setWeapon(mainHand);
-
                 ClientboundRemoveEntitiesPacket removePacket = new ClientboundRemoveEntitiesPacket(arrow.getEntityId());
                 for(Player player : npcLoc.getWorld().getPlayers())
                 {
@@ -814,17 +800,7 @@ public class AttackEntityGoal extends EntityTargetGoal
         if(meta == null)
             return 0.5;
 
-        Collection<AttributeModifier> modifiers;
-        try
-        {
-            //noinspection UnstableApiUsage
-            modifiers = meta.getAttributeModifiers(Attribute.valueOf("GENERIC_ATTACK_DAMAGE"));
-        }
-        catch(Throwable e)
-        {
-            modifiers = meta.getAttributeModifiers(Attribute.ATTACK_DAMAGE);
-        }
-
+        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.GENERIC_ATTACK_DAMAGE);
         if(modifiers == null)
             return 0.5;
 
@@ -863,17 +839,7 @@ public class AttackEntityGoal extends EntityTargetGoal
         if(meta == null)
             return 0.5;
 
-        Collection<AttributeModifier> modifiers;
-        try
-        {
-            //noinspection UnstableApiUsage
-            modifiers = meta.getAttributeModifiers(Attribute.valueOf("GENERIC_ATTACK_KNOCKBACK"));
-        }
-        catch(Throwable e)
-        {
-            modifiers = meta.getAttributeModifiers(Attribute.ATTACK_KNOCKBACK);
-        }
-
+        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.GENERIC_ATTACK_KNOCKBACK);
         if(modifiers == null)
             return 0.5;
 
@@ -892,17 +858,7 @@ public class AttackEntityGoal extends EntityTargetGoal
      */
     private double getKnockbackResistance(@NotNull LivingEntity target)
     {
-        Attribute attribute;
-        try
-        {
-            //noinspection UnstableApiUsage
-            attribute = Attribute.valueOf("GENERIC_KNOCKBACK_RESISTANCE");
-        }
-        catch(Throwable e)
-        {
-            attribute = Attribute.KNOCKBACK_RESISTANCE;
-        }
-
+        Attribute attribute = Attribute.GENERIC_KNOCKBACK_RESISTANCE;
         if(target.getAttribute(attribute) == null)
             return 0;
 

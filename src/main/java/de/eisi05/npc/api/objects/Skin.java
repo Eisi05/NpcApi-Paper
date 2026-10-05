@@ -9,8 +9,6 @@ import com.mojang.authlib.properties.PropertyMap;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.scheduler.tasks.Tasks;
-import de.eisi05.npc.api.utils.Reflections;
-import de.eisi05.npc.api.utils.Versions;
 import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
@@ -59,27 +57,14 @@ public record Skin(@Nullable String name, @NotNull String value, @NotNull String
      */
     public static @Nullable Skin fromPlayer(@NotNull Player player)
     {
-        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-        {
-            ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
-            PropertyMap properties = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
-            Iterator<Property> it = properties.get("textures").iterator();
-
-            if(!it.hasNext())
-                return null;
-
-            var property = it.next();
-
-            return new Skin(player.getName(), property.value(), property.signature());
-        }
-
         ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
-        var properties = serverPlayer.getGameProfile().properties().get("textures").iterator();
+        PropertyMap properties = serverPlayer.getGameProfile().getProperties();
+        Iterator<Property> it = properties.get("textures").iterator();
 
-        if(!properties.hasNext())
+        if(!it.hasNext())
             return null;
 
-        var property = properties.next();
+        var property = it.next();
 
         return new Skin(player.getName(), property.value(), property.signature());
     }

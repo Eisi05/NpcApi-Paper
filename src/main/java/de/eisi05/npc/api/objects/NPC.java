@@ -18,9 +18,7 @@ import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.PathfindingUtils;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.scheduler.tasks.PathTask;
-import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.Var;
-import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.utils.serialize.ObjectSaver;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
@@ -175,10 +173,7 @@ public class NPC extends NpcHolder
             setOption(value, Var.unsafeCast(value.getDefaultValue()));
         NpcApi.config.autoUpdate(autoUpdate);
 
-        Display.TextDisplay display = new Display.TextDisplay(
-                Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
-                        EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
-                ((CraftWorld) location.getWorld()).getHandle());
+        Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, ((CraftWorld) location.getWorld()).getHandle());
         Var.moveEntity(display, location.getX(), location.getY() + 0.2, location.getZ(), 0f, 0f);
 
         nameTag = new CustomNameTag(display);
@@ -186,10 +181,7 @@ public class NPC extends NpcHolder
 
         NpcManager.addNPC(this);
         startGoals();
-        if(Versions.isCurrentVersionSmallerThan(Versions.V26_2))
-            serverPlayer.getAdvancements().stopListening();
-        else
-            Reflections.invokeMethod(serverPlayer.getAdvancements(), "clearTriggers");
+        serverPlayer.getAdvancements().stopListening();
     }
 
     /**
@@ -513,9 +505,7 @@ public class NPC extends NpcHolder
 
     public @NotNull String getGameProfileName()
     {
-        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-            return (String) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getName").get();
-        return serverPlayer.getGameProfile().name();
+        return serverPlayer.getGameProfile().getName();
     }
 
     /**

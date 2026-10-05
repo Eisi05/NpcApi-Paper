@@ -6,7 +6,6 @@ import de.eisi05.npc.api.objects.NpcOption;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import org.bukkit.FluidCollisionMode;
-import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
@@ -35,30 +34,13 @@ public class NpcHitboxUtil
      * blocks or other entities; {@code false} otherwise * @see org.bukkit.util.Vector
      * @see RayTraceResult
      */
-    @SuppressWarnings("removal")
     public static boolean rayIntersectsNpc(@NotNull NPC npc, boolean sleeping, @NotNull Player player)
     {
         Location eyeLocation = player.getEyeLocation();
         Vector origin = eyeLocation.toVector();
         Vector dir = eyeLocation.getDirection();
 
-        double maxDistance;
-        try
-        {
-            //noinspection UnstableApiUsage
-            maxDistance = player.getAttribute(Attribute.valueOf("PLAYER_ENTITY_INTERACTION_RANGE")).getValue();
-        }
-        catch(Throwable e1)
-        {
-            try
-            {
-                maxDistance = player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE).getValue();
-            }
-            catch(Throwable e2)
-            {
-                maxDistance = player.getGameMode() == GameMode.CREATIVE ? 5.0 : 3.0;
-            }
-        }
+        double maxDistance = player.getAttribute(Attribute.PLAYER_ENTITY_INTERACTION_RANGE).getValue();
 
         Location base = npc.getLocation();
         float yaw = base.getYaw();

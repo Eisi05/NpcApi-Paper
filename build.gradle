@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "de.eisi05"
-version = "3.5.0-beta"
+version = "1.20.6"
 
 base {
     archivesName = "NpcApi-Paper"
@@ -23,8 +23,8 @@ repositories {
 }
 
 dependencies {
-    paperweightDevelopmentBundle("io.papermc.paper:dev-bundle:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    paperweightDevelopmentBundle("io.papermc.paper:dev-bundle:1.20.6-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
     compileOnly("com.cjcrafter:weaponmechanics:4.1.0")
     compileOnly("com.cjcrafter:mechanicscore:4.1.0")
 }

@@ -3,8 +3,6 @@ package de.eisi05.npc.api.utils;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -15,10 +13,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class Var
@@ -41,94 +35,12 @@ public class Var
 
     public static void moveEntity(Entity entity, double x, double y, double z, float yaw, float pitch)
     {
-        if(obfuscated)
-            Reflections.invokeMethod(entity, "a", x, y, z, yaw, pitch);
-        else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
-            Reflections.invokeMethod(entity, "absMoveTo", x, y, z, yaw, pitch);
-        else
-            Reflections.invokeMethod(entity, "snapTo", x, y, z, yaw, pitch);
+        entity.absMoveTo(x, y, z, yaw, pitch);
     }
 
     public static ServerLevel getServerLevel(ServerPlayer player)
     {
-        if(obfuscated)
-        {
-            String methodName = switch(Versions.getVersion())
-            {
-                case V1_21_11 -> "ao";
-                case V1_21_9 -> "an";
-                case V1_21_6 -> "ai";
-                case V1_21_5, V1_21_2, V1_21_4 -> "cU";
-                case V1_21 -> "cN";
-                default -> null;
-            };
-
-            if(methodName == null)
-                throw new RuntimeException("Cannot get level of player!");
-
-            return (ServerLevel) Reflections.invokeMethod(player, methodName).get();
-        }
-
-        return (ServerLevel) Reflections.invokeMethod(player, "level").get();
-    }
-
-    public static ServerEntity getServerEntity(Entity entity, ServerLevel level)
-    {
-        ServerEntity serverEntity;
-        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
-                    new Consumer<Packet<?>>()
-                    {
-                        @Override
-                        public void accept(Packet<?> packet)
-                        {
-
-                        }
-
-                        @Override
-                        public @NotNull Consumer<Packet<?>> andThen(@NotNull Consumer<? super Packet<?>> after)
-                        {
-                            return Consumer.super.andThen(after);
-                        }
-                    },
-                    Set.of()).orElseThrow();
-        else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false,
-                    new Consumer<Packet<?>>()
-                    {
-                        @Override
-                        public void accept(Packet<?> packet)
-                        {
-
-                        }
-
-                        @Override
-                        public @NotNull Consumer<Packet<?>> andThen(@NotNull Consumer<? super Packet<?>> after)
-                        {
-                            return Consumer.super.andThen(after);
-                        }
-                    },
-                    new BiConsumer<Packet<?>, UUID>()
-                    {
-                        @Override
-                        public void accept(Packet<?> packet, UUID uuid)
-                        {
-
-                        }
-
-                        @Override
-                        public @NotNull BiConsumer<Packet<?>, UUID> andThen(@NotNull BiConsumer<? super Packet<?>, ? super UUID> after)
-                        {
-                            return BiConsumer.super.andThen(after);
-                        }
-                    }, Set.of()).orElseThrow();
-        else if(Versions.isCurrentVersionSmallerThan(Versions.V26_3))
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity, 0, false, null, Set.of()).orElseThrow();
-        else
-            serverEntity = Reflections.tryFindConstructor(ServerEntity.class, level, entity,
-                    Reflections.getStaticField("net.minecraft.world.entity.UpdateInterval", "NEVER"), false, null, Set.of()).orElseThrow();
-
-        return serverEntity;
+        return player.serverLevel();
     }
 
     /**
@@ -183,13 +95,7 @@ public class Var
 
     private static boolean getBoolean(@NotNull CompoundTag nbt, @NotNull String name)
     {
-        if(obfuscated)
-            return (boolean) Reflections.invokeMethod(nbt, Versions.isCurrentVersionSmallerThan(Versions.V1_21_5) ? "q" : "b", name).get();
-
-        Object o = Reflections.invokeMethod(nbt, "getBoolean", name).get();
-        if(o instanceof Optional<?> optional)
-            return optional.map(o1 -> (boolean) o1).orElse(false);
-        return (boolean) o;
+        return nbt.getBoolean(name);
     }
 
     /**
@@ -248,17 +154,7 @@ public class Var
     {
         byte flags = 0;
 
-        boolean isFire = false;
-        try
-        {
-            isFire = Versions.isCurrentVersionSmallerThan(Versions.V1_21_4) ? (boolean) Reflections.invokeMethod(entity, "isVisualFire").get() :
-                    entity.getVisualFire().toBooleanOrElse(false);
-        }
-        catch(Exception e)
-        {
-        }
-
-        if(entity.getFireTicks() > 0 || isFire)
+        if(entity.getFireTicks() > 0 || entity.isVisualFire())
             flags |= 0x01;
 
         if(entity instanceof Player player && player.isSneaking())

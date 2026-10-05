@@ -4,19 +4,14 @@ import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.utils.Reflections;
 import de.eisi05.npc.api.utils.SerializableFunction;
 import de.eisi05.npc.api.utils.Var;
-import de.eisi05.npc.api.utils.Versions;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.TagParser;
-import net.minecraft.world.entity.EntityProcessor;
-import net.minecraft.world.entity.EntitySpawnReason;
 import org.bukkit.World;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftEntity;
-import org.bukkit.craftbukkit.entity.CraftEntityType;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.jetbrains.annotations.NotNull;
@@ -135,31 +130,10 @@ public class WrappedEntitySnapshot implements Serializable
      */
     public @NotNull net.minecraft.world.entity.Entity create(@NotNull World world, @NotNull NPC npc)
     {
-        String methodName = Var.obfuscated ? "a" : "loadEntityRecursive";
-
         net.minecraft.world.entity.Entity entity;
         CompoundTag data = getData();
-        if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_2))
-        {
-            data.putString("id", type.toLowerCase());
-
-            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, methodName,
-                    data, ((CraftWorld) world).getHandle(), Function.identity()).get();
-        }
-        else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-        {
-            data.putString("id", type.toLowerCase());
-
-            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, methodName,
-                    data, ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD, Function.identity()).get();
-        }
-        else if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_11))
-            entity = (net.minecraft.world.entity.Entity) Reflections.invokeStaticMethod(net.minecraft.world.entity.EntityType.class, methodName,
-                    CraftEntityType.bukkitToMinecraft(getType()), data, ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD,
-                    Function.identity()).get();
-        else
-            entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(CraftEntityType.bukkitToMinecraft(getType()), data,
-                    ((CraftWorld) world).getHandle(), EntitySpawnReason.LOAD, EntityProcessor.NOP);
+        data.putString("id", type.toLowerCase());
+        entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(data, ((CraftWorld) world).getHandle(), Function.identity());
 
         npc.data = data.toString();
         return entityFunction == null ? entity : ((CraftEntity) entityFunction.apply(Var.unsafeCast(entity.getBukkitEntity()))).getHandle();
@@ -193,11 +167,7 @@ public class WrappedEntitySnapshot implements Serializable
             {
                 try
                 {
-                    CompoundTag data;
-                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_2))
-                        data = (CompoundTag) Reflections.invokeStaticMethod(TagParser.class,  Var.obfuscated ? "a" : "parseTag", json.getAsString()).get();
-                    else
-                        data = TagParser.parseCompoundFully(json.getAsString());
+                    CompoundTag data = TagParser.parseTag(json.getAsString());
                     byte[] tempData;
                     try
                     {

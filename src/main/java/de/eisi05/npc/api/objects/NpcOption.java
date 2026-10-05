@@ -1,9 +1,7 @@
 package de.eisi05.npc.api.objects;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Multimaps;
 import com.google.common.reflect.TypeToken;
-import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import de.eisi05.npc.api.NpcApi;
@@ -24,7 +22,6 @@ import de.eisi05.npc.api.wrapper.enums.ChatFormat;
 import de.eisi05.npc.api.wrapper.objects.WrappedEntitySnapshot;
 import de.eisi05.npc.api.wrapper.packets.SetEntityDataPacket;
 import de.eisi05.npc.api.wrapper.packets.SetPlayerTeamPacket;
-import net.kyori.adventure.text.serializer.json.JSONComponentSerializer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
@@ -34,9 +31,7 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -55,11 +50,9 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.craftbukkit.CraftServer;
-import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.craftbukkit.scoreboard.CraftScoreboard;
-import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
@@ -102,40 +95,8 @@ public class NpcOption<T, S extends Serializable>
                 ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
                 ServerPlayer npcServerPlayer = npc.serverPlayer;
 
-                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-                {
-                    var textureProperties = ((PropertyMap) Reflections.getField(serverPlayer.getGameProfile(), "properties")
-                            .get()).get("textures").iterator();
-
-                    var npcTextureProperties = ((PropertyMap) Reflections.getField(npcServerPlayer.getGameProfile(), "properties")
-                            .get()).get("textures").iterator();
-
-                    Property property = textureProperties.hasNext() ? textureProperties.next() : null;
-                    Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
-
-                    if((property == null && npcProperty == null) || (property != null && npcProperty != null &&
-                            Reflections.getField(property, "value").get().equals(Reflections.getField(npcProperty, "value").get())))
-                        return null;
-
-                    PropertyMap propertyMap = new PropertyMap(Multimaps.forMap(property == null ? Map.of() : Map.of("textures", property)));
-                    GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
-
-                    Location location = npc.getLocation();
-                    MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
-                    ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
-                    int id = npc.serverPlayer.getId();
-                    npc.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
-                    npc.serverPlayer.setId(id);
-                    Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-                    npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
-                            CommonListenerCookie.createInitial(profile, true));
-                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName()));
-                    npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
-                    return null;
-                }
-
-                PropertyMap playerProperty = (PropertyMap) Reflections.invokeMethod(serverPlayer.getGameProfile(), "getProperties").get();
-                PropertyMap npcProperty = (PropertyMap) Reflections.invokeMethod(npcServerPlayer.getGameProfile(), "getProperties").get();
+                PropertyMap playerProperty = serverPlayer.getGameProfile().getProperties();
+                PropertyMap npcProperty = npcServerPlayer.getGameProfile().getProperties();
 
                 var textureProperties = playerProperty.get("textures").iterator();
                 npcProperty.removeAll("textures");
@@ -146,7 +107,7 @@ public class NpcOption<T, S extends Serializable>
                 var textureProperty = textureProperties.next();
                 npcProperty.put("textures", textureProperty);
                 return null;
-            }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9));
+            });
 
     /**
      * NPC option to set a specific skin using a value and signature. This is ignored if {@link #USE_PLAYER_SKIN} is true.
@@ -160,34 +121,8 @@ public class NpcOption<T, S extends Serializable>
 
                 Skin skin = skinData.getSkin(player, npc);
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
-                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9))
-                {
-                    var npcTextureProperties = ((PropertyMap) Reflections.getField(npcServerPlayer.getGameProfile(), "properties")
-                            .get()).get("textures").iterator();
 
-                    Property npcProperty = npcTextureProperties.hasNext() ? npcTextureProperties.next() : null;
-                    if(skin != null && npcProperty != null && skin.value().equals(Reflections.getField(npcProperty, "value").get()))
-                        return null;
-
-                    PropertyMap propertyMap = new PropertyMap(
-                            Multimaps.forMap(skin == null ? Map.of() : Map.of("textures", new Property("textures", skin.value(), skin.signature()))));
-                    GameProfile profile = new GameProfile(npc.getUUID(), "NPC" + npc.getUUID().toString().substring(0, 13), propertyMap);
-
-                    Location location = npc.getLocation();
-                    MinecraftServer server = ((CraftServer) Bukkit.getServer()).getServer();
-                    ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
-                    int id = npc.serverPlayer.getId();
-                    npc.serverPlayer = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
-                    npc.serverPlayer.setId(id);
-                    Var.moveEntity(npc.serverPlayer, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-                    npc.serverPlayer.connection = new ServerGamePacketListenerImpl(server, new Connection(PacketFlow.SERVERBOUND), npc.serverPlayer,
-                            CommonListenerCookie.createInitial(profile, true));
-                    npc.serverPlayer.listName = CraftChatMessage.fromJSON(JSONComponentSerializer.json().serialize(npc.getName()));
-                    npc.serverPlayer.passengers = ImmutableList.of((Display.TextDisplay) npc.getNameTag().getDisplay());
-                    return null;
-                }
-
-                PropertyMap properties = (PropertyMap) Reflections.invokeMethod(npcServerPlayer.getGameProfile(), "getProperties").get();
+                PropertyMap properties = npcServerPlayer.getGameProfile().getProperties();
                 properties.removeAll("textures");
 
                 if(skin == null)
@@ -195,7 +130,7 @@ public class NpcOption<T, S extends Serializable>
 
                 properties.put("textures", new Property("textures", skin.value(), skin.signature()));
                 return null;
-            }).loadBefore(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_9)).type(NpcSkin.class);
+            }).type(NpcSkin.class);
 
     /**
      * NPC option to control whether the NPC is shown in the player tab list. If false, the NPC will be removed from the tab list for the viewing player after a
@@ -225,25 +160,8 @@ public class NpcOption<T, S extends Serializable>
             {
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
 
-                CommonListenerCookie commonListenerCookie;
-                if(Versions.isCurrentVersionSmallerThan(Versions.V1_21_7))
-                    commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
-                            npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true).orElseThrow();
-                else
-                {
-                    try
-                    {
-                        commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
-                                npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null,
-                                new HashSet<>(), Reflections.getInstance("io.papermc.paper.util.KeepAlive").orElseThrow()).orElseThrow();
-                    }
-                    catch(Exception e)
-                    {
-                        commonListenerCookie = Reflections.tryFindConstructor(CommonListenerCookie.class,
-                                npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true, null, new HashSet<>()).orElseThrow();
-                    }
-                }
-
+                CommonListenerCookie commonListenerCookie =
+                        new CommonListenerCookie(npcServerPlayer.getGameProfile(), latency, ClientInformation.createDefault(), true);
                 npcServerPlayer.connection = new ServerGamePacketListenerImpl(((CraftServer) Bukkit.getServer()).getServer(),
                         new Connection(PacketFlow.SERVERBOUND), npcServerPlayer, commonListenerCookie);
 
@@ -314,8 +232,7 @@ public class NpcOption<T, S extends Serializable>
             {
                 ServerPlayer npcServerPlayer = (ServerPlayer) npc.getServerPlayer();
                 SynchedEntityData data = npcServerPlayer.getEntityData();
-                data.set(EntityDataSerializers.BYTE.createAccessor(Versions.isCurrentVersionSmallerThan(Versions.V1_21_9) ? 17 : 16),
-                        (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
+                data.set(EntityDataSerializers.BYTE.createAccessor(17), (byte) Arrays.stream(skinParts).mapToInt(SkinParts::getValue).sum());
                 return (Packet<?>) SetEntityDataPacket.create(npcServerPlayer.getId(), data);
             }).type(SkinParts[].class);
     /**
@@ -422,11 +339,7 @@ public class NpcOption<T, S extends Serializable>
 
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
-                if(Versions.isCurrentVersionSmallerThan(Versions.V26_2))
-                    team.setColor(ChatFormatting.getByCode(color.getColorCode()));
-                else
-                    Reflections.invokeMethod(team, "setColor", Optional.of(
-                            SetPlayerTeamPacket.getTeamColor(ChatFormatting.getByCode(color.getColorCode()))));
+                team.setColor(ChatFormatting.getByCode(color.getColorCode()));
 
                 var teamPacket = SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
 
@@ -538,18 +451,12 @@ public class NpcOption<T, S extends Serializable>
                 Integer oldId = playerEntities.remove("sit");
                 if(pose == Pose.SITTING)
                 {
-                    Display.TextDisplay textDisplay = new Display.TextDisplay(
-                            Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
-                                    EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
-                                npc.entity.level());
+                    Display.TextDisplay textDisplay = new Display.TextDisplay(EntityType.TEXT_DISPLAY, npc.entity.level());
 
                     Var.moveEntity(textDisplay, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch());
                     playerEntities.put("sit", textDisplay.getId());
 
-                    Packet<? super ClientGamePacketListener> addEntityPacket =
-                            Versions.isCurrentVersionSmallerThan(Versions.V1_21) ?
-                            (Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(textDisplay, Var.obfuscated ? "dl" : "getAddEntityPacket").get() :
-                            textDisplay.getAddEntityPacket(Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
+                    Packet<? super ClientGamePacketListener> addEntityPacket = textDisplay.getAddEntityPacket();
 
                     SynchedEntityData entityData = textDisplay.getEntityData();
                     entityData.set(accessor, (byte) (flags | 0x20));
@@ -608,16 +515,8 @@ public class NpcOption<T, S extends Serializable>
      */
     public static final NpcOption<Integer, Integer> LIST_ORDER = new NpcOption<>("list-order", () -> 0,
             aInt -> aInt, aInt -> aInt, aInt -> aInt,
-            (order, npc, player) ->
-            {
-                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_2))
-                    return null;
-
-                ((ServerPlayer) npc.getServerPlayer()).listOrder = order;
-
-                return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER,
-                        (ServerPlayer) npc.getServerPlayer());
-            }).since(Versions.V1_21_2).type(TypeToken.of(Integer.class).getType());
+            (order, npc, player) -> null)
+            .since(Versions.V1_21_2).type(TypeToken.of(Integer.class).getType());
 
     /**
      * NPC option to control if the NPC is enabled (visible and interactable). If false, a "DISABLED" marker may be shown. This is an internal option, typically
@@ -670,10 +569,7 @@ public class NpcOption<T, S extends Serializable>
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.serverPlayer.getId()));
                 packets.add(new ClientboundRemoveEntitiesPacket(npc.entity.getId()));
 
-                if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
-                    packets.add((Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(entity, Var.obfuscated ? "dl" : "getAddEntityPacket").get());
-                else
-                    packets.add(entity.getAddEntityPacket(Var.getServerEntity(entity, Var.getServerLevel(npc.serverPlayer))));
+                packets.add(entity.getAddEntityPacket());
 
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
@@ -726,9 +622,7 @@ public class NpcOption<T, S extends Serializable>
                 {
                     Vector3f scale = display.getTransformation().getScale();
 
-                    Interaction interaction = new Interaction(Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
-                            EntityType.INTERACTION : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "INTERACTION"),
-                            Var.getServerLevel(npc.serverPlayer));
+                    Interaction interaction = new Interaction(EntityType.INTERACTION, Var.getServerLevel(npc.serverPlayer));
                     Var.moveEntity(interaction, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch());
                     float width = Math.max(scale.x, scale.z);
                     float height = scale.y;
@@ -743,11 +637,7 @@ public class NpcOption<T, S extends Serializable>
                     interactionData.set(EntityDataSerializers.FLOAT.createAccessor(8), width);
                     interactionData.set(EntityDataSerializers.FLOAT.createAccessor(9), height);
 
-                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
-                        packets.add((Packet<? super ClientGamePacketListener>)
-                                Reflections.invokeMethod(interaction, Var.obfuscated ? "dl" : "getAddEntityPacket").get());
-                    else
-                        packets.add(interaction.getAddEntityPacket(Var.getServerEntity(interaction, Var.getServerLevel(npc.serverPlayer))));
+                    packets.add(interaction.getAddEntityPacket());
                     packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(interaction.getId(), interactionData));
                 }
                 else
@@ -755,13 +645,8 @@ public class NpcOption<T, S extends Serializable>
 
                 if(!npc.getOption(NpcOption.HIDE_NAMETAG, player))
                 {
-                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
-                        packets.add((Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(
-                                npc.getNameTag().getDisplay(), Var.obfuscated ? "dl" : "getAddEntityPacket").get());
-                    else
-                        packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket(
-                            Var.getServerEntity((Display.TextDisplay) npc.getNameTag().getDisplay(), Var.getServerLevel(npc.serverPlayer))));
 
+                    packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket());
                     packets.add(
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(((Display.TextDisplay) npc.getNameTag().getDisplay()).getId(),
                                     (SynchedEntityData) npc.getNameTag().applyData(npc.isEnabled() ? npc.name.getName(player) :

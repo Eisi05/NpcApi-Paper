@@ -13,7 +13,6 @@ import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
 import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
-import de.eisi05.npc.api.utils.Versions;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import net.minecraft.world.phys.AABB;
 import org.bukkit.*;
@@ -41,7 +40,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
-@SuppressWarnings("removal")
+@SuppressWarnings({"UnstableApiUsage"})
 public class NpcDamageListener implements Listener
 {
     private static final float FALLBACK_DAMAGE = 2;
@@ -785,17 +784,7 @@ public class NpcDamageListener implements Listener
                         dir = new Vector(1, 0, 0);
                     dir.normalize();
 
-                    Attribute knockbackRestanceAttribute;
-                    try
-                    {
-                        //noinspection UnstableApiUsage
-                        knockbackRestanceAttribute = Attribute.valueOf("GENERIC_KNOCKBACK_RESISTANCE");
-                    }
-                    catch(Throwable e)
-                    {
-                        knockbackRestanceAttribute = Attribute.KNOCKBACK_RESISTANCE;
-                    }
-
+                    Attribute knockbackRestanceAttribute = Attribute.GENERIC_KNOCKBACK_RESISTANCE;
                     double kbRes = living.getAttribute(knockbackRestanceAttribute) != null
                             ? living.getAttribute(knockbackRestanceAttribute).getValue() : 0.0;
 
@@ -835,16 +824,7 @@ public class NpcDamageListener implements Listener
 
     private DamageResult computeIncomingDamage(Player attacker, NPC npc, boolean isCrit, boolean isSmashAttack)
     {
-        AttributeInstance attackDamage;
-        try
-        {
-            //noinspection UnstableApiUsage
-            attackDamage = attacker.getAttribute(Attribute.valueOf("GENERIC_ATTACK_DAMAGE"));
-        }
-        catch(Throwable e)
-        {
-            attackDamage = attacker.getAttribute(Attribute.ATTACK_DAMAGE);
-        }
+        AttributeInstance attackDamage = attacker.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE);
 
         float attackStrength = getPlayerAttackStrength(attacker);
         lastAttackTicks.put(attacker.getUniqueId(), Bukkit.getCurrentTick());
@@ -909,16 +889,7 @@ public class NpcDamageListener implements Listener
         int currentTick = Bukkit.getCurrentTick();
         int lastTick = lastAttackTicks.getOrDefault(player.getUniqueId(), currentTick - 100);
 
-        AttributeInstance speedAttr;
-        try
-        {
-            //noinspection UnstableApiUsage
-            speedAttr = player.getAttribute(Attribute.valueOf("GENERIC_ATTACK_SPEED"));
-        }
-        catch(Throwable e)
-        {
-            speedAttr = player.getAttribute(Attribute.ATTACK_SPEED);
-        }
+        AttributeInstance speedAttr = player.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
 
         double attackSpeed = (speedAttr != null) ? speedAttr.getValue() : 4.0;
 
@@ -958,38 +929,9 @@ public class NpcDamageListener implements Listener
 
             if(modifiers != null)
             {
-                Attribute armorAttribute;
-                try
-                {
-                    //noinspection UnstableApiUsage
-                    armorAttribute = Attribute.valueOf("GENERIC_ARMOR");
-                }
-                catch(Throwable e)
-                {
-                    armorAttribute = Attribute.ARMOR;
-                }
-
-                Attribute armorToughnessAttribute;
-                try
-                {
-                    //noinspection UnstableApiUsage
-                    armorToughnessAttribute = Attribute.valueOf("GENERIC_ARMOR_TOUGHNESS");
-                }
-                catch(Throwable e)
-                {
-                    armorToughnessAttribute = Attribute.ARMOR_TOUGHNESS;
-                }
-
-                Attribute knockbackResistanceAttribute;
-                try
-                {
-                    //noinspection UnstableApiUsage
-                    knockbackResistanceAttribute = Attribute.valueOf("GENERIC_KNOCKBACK_RESISTANCE");
-                }
-                catch(Throwable e)
-                {
-                    knockbackResistanceAttribute = Attribute.KNOCKBACK_RESISTANCE;
-                }
+                Attribute armorAttribute = Attribute.GENERIC_ARMOR;
+                Attribute armorToughnessAttribute = Attribute.GENERIC_ARMOR_TOUGHNESS;
+                Attribute knockbackResistanceAttribute = Attribute.GENERIC_KNOCKBACK_RESISTANCE;
 
                 for(AttributeModifier mod : modifiers.get(armorAttribute))
                     points += (float) mod.getAmount();
@@ -1056,7 +998,6 @@ public class NpcDamageListener implements Listener
         };
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     private void applyWeaponDurability(Player player, ItemStack weapon)
     {
         if (player.getGameMode() == GameMode.CREATIVE)
@@ -1069,16 +1010,7 @@ public class NpcDamageListener implements Listener
         {
             int unbreakingLevel = weapon.getEnchantmentLevel(Enchantment.UNBREAKING);
 
-
-            int baseDurabilityLoss;
-            if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21_5))
-            {
-                io.papermc.paper.datacomponent.item.Weapon component = weapon.getData(io.papermc.paper.datacomponent.DataComponentTypes.WEAPON);
-                baseDurabilityLoss = component.itemDamagePerAttack();
-            }
-            else
-                baseDurabilityLoss = Tag.ITEMS_BREAKS_DECORATED_POTS.isTagged(weapon.getType()) ? 2 : 1;
-
+            int baseDurabilityLoss = Tag.ITEMS_BREAKS_DECORATED_POTS.isTagged(weapon.getType()) ? 2 : 1;
             int durabilityToReduce = 0;
             for (int i = 0; i < baseDurabilityLoss; i++)
             {
