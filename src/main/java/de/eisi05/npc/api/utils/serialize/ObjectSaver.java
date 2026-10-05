@@ -91,6 +91,16 @@ public class ObjectSaver
                 return null;
 
             JsonObject jsonObject = element.getAsJsonObject();
+            if(!jsonObject.has("type") && jsonObject.has("id"))
+                jsonObject.addProperty("type", jsonObject.get("id").getAsString().replace("minecraft:", "").toUpperCase(Locale.ROOT));
+            else if(!jsonObject.has("id") && jsonObject.has("type"))
+                jsonObject.addProperty("id",  "minecraft:" + jsonObject.get("type").getAsString().toLowerCase(Locale.ROOT));
+
+            if(!jsonObject.has("amount") && jsonObject.has("count"))
+                jsonObject.addProperty("amount", jsonObject.get("count").getAsInt());
+            else if(!jsonObject.has("count") && jsonObject.has("amount"))
+                jsonObject.addProperty("count", jsonObject.get("amount").getAsInt());
+
             YamlConfiguration config = new YamlConfiguration();
             try
             {
