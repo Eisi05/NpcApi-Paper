@@ -447,6 +447,7 @@ public class NpcOption<T, S extends Serializable>
      * </ul>
      * <p>
      */
+    @SuppressWarnings("unchecked")
     public static final NpcOption<Boolean, Boolean> COLLISION = new NpcOption<>("collision", () -> true,
             aBoolean -> aBoolean, aBoolean -> aBoolean, aBoolean -> aBoolean,
             (collision, npc, player) ->
@@ -454,7 +455,8 @@ public class NpcOption<T, S extends Serializable>
                 var teamPair = getTeam(player, npc);
                 PlayerTeam team = teamPair.getKey();
                 team.setCollisionRule(collision ? Team.CollisionRule.ALWAYS : Team.CollisionRule.NEVER);
-                return SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue());
+                return new ClientboundBundlePacket(List.of((Packet<? super ClientGamePacketListener>)
+                        SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue())));
             });
 
     /**
@@ -682,7 +684,7 @@ public class NpcOption<T, S extends Serializable>
 
                 if(!team.getName().startsWith("trans"))
                     team.getPlayers().add(npc.getGameProfileName());
-                else
+                else if(TeamManager.exists(player, npc.getGameProfileName()))
                     ((PlayerTeam) TeamManager.create(player, npc.getGameProfileName())).getPlayers().remove(npc.getGameProfileName());
 
                 packets.add((Packet<? super ClientGamePacketListener>) SetPlayerTeamPacket.createAddOrModifyPacket(team, !teamPair.getValue()));

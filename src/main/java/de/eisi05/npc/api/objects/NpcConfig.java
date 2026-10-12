@@ -110,6 +110,11 @@ public class NpcConfig
     /**
      * A predicate that determines whether a block is passable for pathfinding.
      * <p>
+     * <b>Threading:</b> pathfinding may run asynchronously, but the predicate takes a live {@link Block}. It is therefore never called from the search thread:
+     * it is evaluated on the main thread, <b>once per block state</b>, and the result is cached. Consequently, the predicate must depend only on the block's
+     * type and state (e.g. {@code block.getType()}, {@code block.getBlockData()}), <b>not on its position</b> or on anything that changes over time. To apply
+     * a changed predicate, set a new one with {@link #pathfindingPassableOverride(Predicate)} (the cache is dropped automatically).
+     * <p>
      * Default: {@code block -> false}
      */
     private Predicate<Block> pathfindingPassableOverride = block -> false;
@@ -283,6 +288,8 @@ public class NpcConfig
 
     /**
      * A predicate that determines whether a block is passable for pathfinding.
+     * <p>
+     * It is evaluated on the main thread once per block state and cached, so it must only depend on the block's type/state, never on its position.
      *
      * @param pathfindingPassableOverride The predicate to use for pathfinding passability.
      * @return This {@link NpcConfig} instance for method chaining. Never null.

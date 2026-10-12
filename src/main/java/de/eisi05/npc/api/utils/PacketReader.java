@@ -4,6 +4,7 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.ClickActionType;
 import de.eisi05.npc.api.events.NpcInteractEvent;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
@@ -14,10 +15,7 @@ import io.netty.channel.ChannelPromise;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.*;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionHand;
@@ -86,6 +84,21 @@ public class PacketReader
             @Override
             public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception
             {
+                if(msg instanceof ClientboundSetPlayerTeamPacket teamPacket && checkTeamPacket(player, teamPacket))
+                    return;
+
+                if(msg instanceof ClientboundBundlePacket bundlePacket)
+                {
+                    for(var subPacket : bundlePacket.subPackets())
+                    {
+                        if(subPacket instanceof ClientboundSetPlayerTeamPacket teamPacket)
+                        {
+                            if(checkTeamPacket(player, teamPacket))
+                                return;
+                        }
+                    }
+                }
+
                 if(msg instanceof ClientboundChangeDifficultyPacket difficultyPacket)
                 {
                     var difficulty = Reflections.getField(difficultyPacket, Var.obfuscated ? "b" : "difficulty").get();
@@ -118,6 +131,20 @@ public class PacketReader
             channel.pipeline().addLast(NpcApi.plugin.getName(), duplexHandler);
         else
             channel.pipeline().addBefore("packet_handler", NpcApi.plugin.getName(), duplexHandler);
+    }
+
+    private static boolean checkTeamPacket(@NotNull Player player, @NotNull ClientboundSetPlayerTeamPacket teamPacket)
+    {
+        TeamManager.TeamData teamData = TeamManager.getTeamData(player, teamPacket.getName());
+        if(teamData == null)
+            return false;
+
+        if(teamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD)
+        {
+            teamData.setShown(true);
+            return false;
+        }
+        return !teamData.isShown();
     }
 
     /**
