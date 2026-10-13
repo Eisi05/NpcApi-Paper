@@ -1,9 +1,8 @@
-package de.eisi05.npc.api.pathfinding;
+package de.eisi05.npc.api.pathfinding.archive;
 
-import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NpcConfig;
+import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -17,7 +16,8 @@ import java.util.function.BiConsumer;
 /**
  * Utility class for calculating paths between locations using A* pathfinding. Provides synchronous and asynchronous methods.
  */
-public class PathfindingUtils
+@Deprecated
+public class ArchivePathfindingUtils
 {
     /**
      * Asynchronously calculates a path through a list of waypoints using the default {@link NpcConfig#pathfinderFactory()}.
@@ -46,7 +46,7 @@ public class PathfindingUtils
      * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
      */
-    public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory factory, @NotNull List<Location> waypoints,
+    public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable ArchiveAbstractPathfinder.PathfinderFactory factory, @NotNull List<Location> waypoints,
                                                                  int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
                                                                  @Nullable BiConsumer<Double, Integer> progressListener)
     {
@@ -109,7 +109,7 @@ public class PathfindingUtils
      * @return the calculated {@link Path} containing all intermediate locations
      * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
-    public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory factory, @NotNull List<Location> waypoints, int maxIterations,
+    public static @NotNull Path findPath(@Nullable ArchiveAbstractPathfinder.PathfinderFactory factory, @NotNull List<Location> waypoints, int maxIterations,
                                          boolean allowDiagonalMovement, double entityHeight, double entityWidth,
                                          @Nullable BiConsumer<Double, Integer> progressListener)
             throws PathfindingException
@@ -120,8 +120,7 @@ public class PathfindingUtils
         List<Location> fullPathPoints = new ArrayList<>();
         int totalSegments = waypoints.size() - 1;
 
-        AbstractPathfinder pathfinder = (factory == null ? NpcApi.config.pathfinderFactory() : factory)
-                .create(maxIterations, allowDiagonalMovement, entityHeight, entityWidth);
+        ArchiveAbstractPathfinder pathfinder = factory.create(maxIterations, allowDiagonalMovement, entityHeight, entityWidth);
 
         for(int i = 0; i < totalSegments; i++)
         {

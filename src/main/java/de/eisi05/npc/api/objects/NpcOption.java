@@ -76,6 +76,7 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -536,22 +537,22 @@ public class NpcOption<T, S extends Serializable>
                 else if(!MovementReplayer.isReplaying(npc))
                     SchedulerProvider.get().runLaterForEntity(player, () -> npc.updateLocationForPlayer(npc.getLocation(), player), 1);
 
-                Map<String, Integer> playerEntities = npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
+                Map<String, Integer> playerEntities = npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>());
                 Integer oldId = playerEntities.remove("sit");
                 if(pose == Pose.SITTING)
                 {
                     Display.TextDisplay textDisplay = new Display.TextDisplay(
                             Versions.isCurrentVersionSmallerThan(Versions.V26_2) ?
                                     EntityType.TEXT_DISPLAY : Reflections.getStaticField("net.minecraft.world.entity.EntityTypes", "TEXT_DISPLAY"),
-                                npc.entity.level());
+                            npc.entity.level());
 
                     Var.moveEntity(textDisplay, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch());
                     playerEntities.put("sit", textDisplay.getId());
 
                     Packet<? super ClientGamePacketListener> addEntityPacket =
                             Versions.isCurrentVersionSmallerThan(Versions.V1_21) ?
-                            (Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(textDisplay, Var.obfuscated ? "dl" : "getAddEntityPacket").get() :
-                            textDisplay.getAddEntityPacket(Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
+                                    (Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(textDisplay, Var.obfuscated ? "dl" : "getAddEntityPacket").get() :
+                                    textDisplay.getAddEntityPacket(Var.getServerEntity(textDisplay, npc.serverPlayer.level()));
 
                     SynchedEntityData entityData = textDisplay.getEntityData();
                     entityData.set(accessor, (byte) (flags | 0x20));
@@ -567,7 +568,7 @@ public class NpcOption<T, S extends Serializable>
                         return new ClientboundBundlePacket(List.of(addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
 
                     return new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
-                                addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
+                            addEntityPacket, entityDataPacket, passengerPacket, rotateHeadPacket));
                 }
                 else
                 {
@@ -577,9 +578,9 @@ public class NpcOption<T, S extends Serializable>
                                         List.of((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
 
                     return packet == null ? new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
-                        (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data)))
-                        : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
-                        (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
+                            (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data)))
+                            : new ClientboundBundlePacket(List.of(new ClientboundRemoveEntitiesPacket(oldId),
+                            (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(npc.entity.getId(), data), packet));
                 }
             }).type(Pose.class);
 
@@ -638,20 +639,25 @@ public class NpcOption<T, S extends Serializable>
             (wrappedEntitySnapshot, npc, player) ->
             {
                 Entity entity;
-                if(wrappedEntitySnapshot.getType() == org.bukkit.entity.EntityType.PLAYER || wrappedEntitySnapshot.getType().name().equals("MANNEQUIN") ||
-                        wrappedEntitySnapshot.getType() == org.bukkit.entity.EntityType.UNKNOWN)
-                    entity = npc.serverPlayer;
-                else if(wrappedEntitySnapshot.getType() != npc.entity.getBukkitEntity().getType() ||
-                        !npc.data.equals(wrappedEntitySnapshot.getData().toString()))
+                synchronized(npc.entityLock)
                 {
-                    entity = wrappedEntitySnapshot.create(player.getWorld(), npc);
-                    npc.defaultBoundingBoxEntity = entity.getBoundingBox();
-                    Var.moveEntity(entity, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(),
-                            npc.getLocation().getPitch());
-                    npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put("entity", entity.getId());
+                    if(wrappedEntitySnapshot.getType() == org.bukkit.entity.EntityType.PLAYER || wrappedEntitySnapshot.getType().name().equals("MANNEQUIN") ||
+                            wrappedEntitySnapshot.getType() == org.bukkit.entity.EntityType.UNKNOWN)
+                        entity = npc.serverPlayer;
+                    else if(wrappedEntitySnapshot.getType() != npc.entity.getBukkitEntity().getType() ||
+                            !npc.data.equals(wrappedEntitySnapshot.getData().toString()))
+                    {
+                        entity = wrappedEntitySnapshot.create(player.getWorld(), npc);
+                        npc.defaultBoundingBoxEntity = entity.getBoundingBox();
+                        Var.moveEntity(entity, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(),
+                                npc.getLocation().getPitch());
+                        npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new java.util.concurrent.ConcurrentHashMap<>()).put("entity", entity.getId());
+                    }
+                    else
+                        entity = npc.entity;
+
+                    npc.entity = entity;
                 }
-                else
-                    entity = npc.entity;
 
                 Location location = npc.getLocation();
                 if(npc.getOption(NpcOption.POSE) == Pose.SITTING)
@@ -736,7 +742,7 @@ public class NpcOption<T, S extends Serializable>
                     float height = scale.y;
 
                     NpcManager.addID(interaction.getId(), npc);
-                    npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>()).put("interaction", interaction.getId());
+                    npc.toDeleteEntities.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).put("interaction", interaction.getId());
                     passengers.add(interaction);
 
                     npc.name.getDisplayOptions().setHeight(height);
@@ -762,13 +768,13 @@ public class NpcOption<T, S extends Serializable>
                                 npc.getNameTag().getDisplay(), Var.obfuscated ? "dl" : "getAddEntityPacket").get());
                     else
                         packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket(
-                            Var.getServerEntity((Display.TextDisplay) npc.getNameTag().getDisplay(), Var.getServerLevel(npc.serverPlayer))));
+                                Var.getServerEntity((Display.TextDisplay) npc.getNameTag().getDisplay(), Var.getServerLevel(npc.serverPlayer))));
 
                     packets.add(
                             (Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(((Display.TextDisplay) npc.getNameTag().getDisplay()).getId(),
                                     (SynchedEntityData) npc.getNameTag().applyData(npc.isEnabled() ? npc.name.getName(player) :
                                             NpcApi.DISABLED_MESSAGE_PROVIDER.apply(player)
-                                            .appendNewline().append(npc.name.getName(player)), npc.name.getDisplayOptions())));
+                                                    .appendNewline().append(npc.name.getName(player)), npc.name.getDisplayOptions())));
 
                     passengers.add((Display.TextDisplay) npc.getNameTag().getDisplay());
                 }
@@ -832,7 +838,8 @@ public class NpcOption<T, S extends Serializable>
                 npcVisibilityManager.getSpecificPlayers().forEach(newManager::addSpecificPlayer);
                 return newManager;
             },
-            visibilityManager -> visibilityManager, visibilityManager ->
+            visibilityManager -> visibilityManager,
+            visibilityManager ->
             {
                 if(visibilityManager.getSpecificPlayers().isEmpty() && !visibilityManager.shouldShowToAllPlayers())
                     visibilityManager.setShowToAllPlayers(true);

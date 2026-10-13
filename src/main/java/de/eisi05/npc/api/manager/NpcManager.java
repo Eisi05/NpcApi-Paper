@@ -19,6 +19,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
 /**
@@ -146,7 +147,12 @@ public class NpcManager
     private static void registerNpcInChunk(@NotNull NPC npc, @NotNull Location location)
     {
         long key = getChunkKey(location);
-        npcsByChunk.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet()).add(npc);
+        npcsByChunk.compute(key, (k, set) ->
+        {
+            Set<NPC> result = set == null ? ConcurrentHashMap.newKeySet() : set;
+            result.add(npc);
+            return result;
+        });
     }
 
     /**
@@ -158,13 +164,11 @@ public class NpcManager
     private static void unregisterNpcFromChunk(NPC npc, Location loc)
     {
         long key = getChunkKey(loc);
-        Set<NPC> set = npcsByChunk.get(key);
-        if(set != null)
+        npcsByChunk.computeIfPresent(key, (k, set) ->
         {
             set.remove(npc);
-            if(set.isEmpty())
-                npcsByChunk.remove(key);
-        }
+            return set.isEmpty() ? null : set;
+        });
     }
 
     /**
@@ -261,7 +265,7 @@ public class NpcManager
                 Either<NPC, UUID> npcEither = serializedNPC.deserializedNPC();
                 if(npcEither.right().isPresent())
                 {
-                    toLoadNPCs.computeIfAbsent(npcEither.right().get(), k -> new ArrayList<>()).add(serializedNPC);
+                    toLoadNPCs.computeIfAbsent(npcEither.right().get(), k -> new CopyOnWriteArrayList<>()).add(serializedNPC);
                     continue;
                 }
 
@@ -428,18 +432,20 @@ public class NpcManager
     public static void loadMonsterNpcs(BiConsumer<Location, Runnable> consumer)
     {
         new HashMap<>(monsterNPCs).forEach((key, value) ->
-                consumer.accept(value, () ->
-                {
-                    Either<NPC, UUID> npcEither = key.deserializedNPC();
-                    if(npcEither.right().isPresent())
-                        toLoadNPCs.computeIfAbsent(npcEither.right().get(), k -> new ArrayList<>()).add(key);
+        {
+            monsterNPCs.remove(key);
+            consumer.accept(value, () ->
+            {
+                Either<NPC, UUID> npcEither = key.deserializedNPC();
+                if(npcEither.right().isPresent())
+                    toLoadNPCs.computeIfAbsent(npcEither.right().get(), k -> new CopyOnWriteArrayList<>()).add(key);
 
-                    if(npcEither.left().isEmpty())
-                        return;
+                if(npcEither.left().isEmpty())
+                    return;
 
-                    loadNpc(npcEither.left().get());
-                }));
-        monsterNPCs.clear();
+                loadNpc(npcEither.left().get());
+            });
+        });
     }
 
     /**

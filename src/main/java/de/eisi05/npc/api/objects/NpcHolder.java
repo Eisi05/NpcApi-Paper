@@ -18,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Abstract class representing an entity that can hold NPC-related data and has a concept of unsaved changes. It implements {@link InventoryHolder} but onlay as
@@ -26,15 +27,22 @@ import java.util.*;
 public abstract class NpcHolder implements InventoryHolder
 {
     protected static final UUID GLOBAL_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
-    protected final Map<UUID, Map<NpcOption<?, ?>, Object>> options = new HashMap<>();
-    private final Map<UUID, NamespacedKey> playerKeyCache = new HashMap<>();
+    protected final Map<UUID, Map<NpcOption<?, ?>, Object>> options = new ConcurrentHashMap<>();
+    private final Map<UUID, NamespacedKey> playerKeyCache = new ConcurrentHashMap<>();
+    private final Object goalsLock = new Object();
 
     protected NpcName name;
 
     /**
      * Flag indicating whether there are unsaved changes to this holder. Defaults to {@code false}.
      */
-    private boolean unsavedChanges = false;
+    private volatile boolean unsavedChanges = false;
+
+    /**
+     * While true, option changes of this holder do not send packets (set by the NPC constructor while it fills in the default options, instead of changing the
+     * global {@code autoUpdate} setting, which other threads read at the same time).
+     */
+    protected volatile boolean suppressAutoUpdate = false;
 
     /**
      * Checks if there are any unsaved changes for this NPC holder.
@@ -118,7 +126,7 @@ public abstract class NpcHolder implements InventoryHolder
      */
     <T> void setOption(@NotNull NpcOption<T, ?> option, @Nullable T value, @NotNull UUID uuid)
     {
-        Map<NpcOption<?, ?>, Object> playerOptions = options.computeIfAbsent(uuid, k -> new HashMap<>());
+        Map<NpcOption<?, ?>, Object> playerOptions = options.computeIfAbsent(uuid, k -> new ConcurrentHashMap<>());
         if(value == null)
         {
             playerOptions.remove(option);
@@ -133,7 +141,7 @@ public abstract class NpcHolder implements InventoryHolder
             options.put(uuid, playerOptions);
         }
 
-        if(NpcApi.config.autoUpdate() && this instanceof NPC npc)
+        if(NpcApi.config.autoUpdate() && !suppressAutoUpdate && this instanceof NPC npc)
         {
             if(option.equals(NpcOption.SKIN) || option.equals(NpcOption.USE_PLAYER_SKIN))
             {
@@ -251,9 +259,9 @@ public abstract class NpcHolder implements InventoryHolder
      */
     public void applyOptions(@NotNull Map<NpcOption<?, ?>, Object> options, @NotNull UUID uuid)
     {
-        Map<NpcOption<?, ?>, Object> playerOptions = this.options.computeIfAbsent(uuid, k -> new HashMap<>());
+        Map<NpcOption<?, ?>, Object> playerOptions = this.options.computeIfAbsent(uuid, k -> new ConcurrentHashMap<>());
         playerOptions.putAll(options);
-        if(NpcApi.config.autoUpdate() && this instanceof NPC npc)
+        if(NpcApi.config.autoUpdate() && !suppressAutoUpdate && this instanceof NPC npc)
             npc.reload();
     }
 
@@ -277,7 +285,7 @@ public abstract class NpcHolder implements InventoryHolder
      */
     public @NotNull Map<NpcOption<?, ?>, Object> getOptions(@NotNull UUID uuid)
     {
-        return options.getOrDefault(uuid, new HashMap<>());
+        return options.getOrDefault(uuid, new ConcurrentHashMap<>());
     }
 
     /**
@@ -307,9 +315,12 @@ public abstract class NpcHolder implements InventoryHolder
      */
     public void addGoal(@NotNull Goal goal)
     {
-        ArrayList<Goal> goals = getOption(NpcOption.GOALS);
-        goals.add(goal);
-        setOption(NpcOption.GOALS, goals);
+        synchronized(goalsLock)
+        {
+            ArrayList<Goal> goals = new ArrayList<>(getOption(NpcOption.GOALS));
+            goals.add(goal);
+            setOption(NpcOption.GOALS, goals);
+        }
     }
 
     /**
@@ -325,10 +336,13 @@ public abstract class NpcHolder implements InventoryHolder
         if(selector != null && !selector.queueGoalForRemoval(goal))
             return true;
 
-        ArrayList<Goal> goals = getOption(NpcOption.GOALS);
-        boolean removed = goals.remove(goal);
-        setOption(NpcOption.GOALS, goals);
-        return removed;
+        synchronized(goalsLock)
+        {
+            ArrayList<Goal> goals = new ArrayList<>(getOption(NpcOption.GOALS));
+            boolean removed = goals.remove(goal);
+            setOption(NpcOption.GOALS, goals);
+            return removed;
+        }
     }
 
     /**

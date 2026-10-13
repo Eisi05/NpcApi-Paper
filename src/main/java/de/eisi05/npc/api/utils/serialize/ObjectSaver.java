@@ -9,6 +9,8 @@ import com.google.gson.stream.JsonWriter;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.interfaces.NpcClickAction;
 import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.algorithm.AbstractPathfinder;
+import de.eisi05.npc.api.pathfinding.movement.NavOptions;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
@@ -31,6 +33,30 @@ import java.util.*;
 public class ObjectSaver
 {
     private final static ObjectInputFilter objectInputFilter = filterInfo -> ObjectInputFilter.Status.ALLOWED;
+
+    private static final RuntimeTypeAdapterFactory<AbstractPathfinder.PathfinderFactory> PATHFINDER_ADAPTER =
+            RuntimeTypeAdapterFactory.of(AbstractPathfinder.PathfinderFactory.class, "type")
+                    .registerSubtype(AbstractPathfinder.PathfinderFactory.AStarFactory.class, "ASTAR")
+                    .registerSubtype(AbstractPathfinder.PathfinderFactory.BoundingBoxFactory.class, "BOUNDING_BOX");
+
+    private static final JsonSerializer<NavOptions> NAV_OPTIONS_SERIALIZER = (src, typeOfSrc, context) ->
+    {
+        Gson plainGson = new Gson();
+        JsonObject srcJson = plainGson.toJsonTree(src).getAsJsonObject();
+        JsonObject defaultJson = plainGson.toJsonTree(NavOptions.defaults()).getAsJsonObject();
+
+        JsonObject result = new JsonObject();
+        for(Map.Entry<String, JsonElement> entry : srcJson.entrySet())
+        {
+            String key = entry.getKey();
+            JsonElement srcVal = entry.getValue();
+            JsonElement defVal = defaultJson.get(key);
+
+            if(!srcVal.equals(defVal))
+                result.add(key, srcVal);
+        }
+        return result;
+    };
 
     private static final TypeAdapter<Instant> INSTANT_ADAPTER = new TypeAdapter<Instant>()
     {
@@ -91,16 +117,6 @@ public class ObjectSaver
                 return null;
 
             JsonObject jsonObject = element.getAsJsonObject();
-            if(!jsonObject.has("type") && jsonObject.has("id"))
-                jsonObject.addProperty("type", jsonObject.get("id").getAsString().replace("minecraft:", "").toUpperCase(Locale.ROOT));
-            else if(!jsonObject.has("id") && jsonObject.has("type"))
-                jsonObject.addProperty("id",  "minecraft:" + jsonObject.get("type").getAsString().toLowerCase(Locale.ROOT));
-
-            if(!jsonObject.has("amount") && jsonObject.has("count"))
-                jsonObject.addProperty("amount", jsonObject.get("count").getAsInt());
-            else if(!jsonObject.has("count") && jsonObject.has("amount"))
-                jsonObject.addProperty("count", jsonObject.get("amount").getAsInt());
-
             YamlConfiguration config = new YamlConfiguration();
             try
             {
@@ -138,17 +154,21 @@ public class ObjectSaver
 
     public static final Gson CLEAN_GSON = new GsonBuilder()
             //.registerTypeAdapterFactory(new GsonDebugFactory())
+            .registerTypeAdapterFactory(PATHFINDER_ADAPTER)
             .registerTypeAdapter(Instant.class, INSTANT_ADAPTER)
             .registerTypeHierarchyAdapter(ItemStack.class, ITEM_STACK_ADAPTER)
+            .registerTypeAdapter(NavOptions.class, NAV_OPTIONS_SERIALIZER)
             .disableHtmlEscaping()
             .setPrettyPrinting()
             .create();
 
     static final Gson GSON = new GsonBuilder()
             //.registerTypeAdapterFactory(new GsonDebugFactory())
+            .registerTypeAdapterFactory(PATHFINDER_ADAPTER)
             .registerTypeAdapter(Instant.class, INSTANT_ADAPTER)
             .registerTypeHierarchyAdapter(ItemStack.class, ITEM_STACK_ADAPTER)
             .registerTypeAdapter(Serializable.class, SERIALIZABLE_ADAPTER)
+            .registerTypeAdapter(NavOptions.class, NAV_OPTIONS_SERIALIZER)
             .registerTypeHierarchyAdapter(NpcClickAction.class, new NpcClickActionAdapter())
             .registerTypeHierarchyAdapter(Goal.class, (JsonDeserializer<Goal>) (json, typeOfT, context) ->
             {

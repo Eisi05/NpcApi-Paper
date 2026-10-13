@@ -7,33 +7,32 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Keeps the scoreboard teams the API created per player. The maps are concurrent because they are used from several threads at once: the players' own
+ * threads (join, show/hide), the global thread and the Netty thread of the packet handler ({@code PacketReader}), which asks {@link #getTeamData} for every
+ * outgoing team packet.
+ */
 public class TeamManager
 {
-    public static final Map<UUID, Map<String, TeamData>> teams = new HashMap<>();
+    public static final Map<UUID, Map<String, TeamData>> teams = new ConcurrentHashMap<>();
 
     public static @NotNull Object create(@NotNull Player player, @NotNull String name)
     {
-        if(exists(player, name))
-            return teams.get(player.getUniqueId()).get(name).team;
-
-        Scoreboard scoreboard = ((CraftScoreboard) player.getScoreboard()).getHandle();
-
-        PlayerTeam team = new PlayerTeam(scoreboard, name);
-
-        var map = teams.getOrDefault(player.getUniqueId(), new HashMap<>());
-        map.put(name, new TeamData(team, false));
-        teams.put(player.getUniqueId(), map);
-
-        return team;
+        return teams.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>()).computeIfAbsent(name, n ->
+        {
+            Scoreboard scoreboard = ((CraftScoreboard) player.getScoreboard()).getHandle();
+            return new TeamData(new PlayerTeam(scoreboard, n), false);
+        }).team;
     }
 
     public static boolean exists(@NotNull Player player, @NotNull String name)
     {
-        return teams.getOrDefault(player.getUniqueId(), new HashMap<>()).containsKey(name);
+        Map<String, TeamData> map = teams.get(player.getUniqueId());
+        return map != null && map.containsKey(name);
     }
 
     public static void clear()
@@ -48,24 +47,27 @@ public class TeamManager
 
     public static void clear(String name)
     {
-        for(var entry : teams.entrySet())
-            entry.getValue().keySet().removeIf(s -> s.equals(name));
+        for(Map<String, TeamData> map : teams.values())
+            map.remove(name);
     }
 
     public static void clear(UUID uuid, String name)
     {
-        teams.get(uuid).remove(name);
+        Map<String, TeamData> map = teams.get(uuid);
+        if(map != null)
+            map.remove(name);
     }
 
     public static @Nullable TeamData getTeamData(@NotNull Player player, @NotNull String name)
     {
-        return teams.getOrDefault(player.getUniqueId(), new HashMap<>()).get(name);
+        Map<String, TeamData> map = teams.get(player.getUniqueId());
+        return map == null ? null : map.get(name);
     }
 
     public static class TeamData
     {
         private final PlayerTeam team;
-        private boolean shown;
+        private volatile boolean shown;
 
         private TeamData(PlayerTeam team, boolean shown)
         {

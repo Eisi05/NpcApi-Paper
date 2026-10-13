@@ -6,7 +6,7 @@
 
 # NpcAPI
 
-A powerful and easy-to-use NPC (Non-Player Character) API for Minecraft Spigot plugins that allows you to create, manage, and customize NPCs with
+A powerful and easy-to-use NPC (Non-Player Character) API for Minecraft Paper plugins that allows you to create, manage, and customize NPCs with
 advanced features.
 
 ## Wiki
@@ -23,7 +23,9 @@ See the in-repo wiki pages under:
 - Save and load NPCs persistently
 - Show/hide NPCs for specific players
 - Comprehensive NPC management system
-- Let NPCs walk around
+- Advanced pathfinding with A* and Theta* algorithms
+- Entity-specific navigation capabilities (climb, swim, jump, doors)
+- AI Goals system for autonomous NPC behavior
 
 ## Installation
 Choose your preferred installation method based on your project needs:
@@ -44,7 +46,7 @@ This method requires [NpcPlugin-Paper](https://modrinth.com/plugin/npc-plugin?lo
 <dependency>
     <groupId>com.github.Eisi05</groupId>
     <artifactId>NpcApi-Paper</artifactId>
-    <version>3.4.1</version>
+    <version>3.6.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -60,7 +62,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    compileOnly 'com.github.Eisi05:NpcApi-Paper:3.4.1'
+    compileOnly 'com.github.Eisi05:NpcApi-Paper:3.6.0'
 }
 ```
 
@@ -99,7 +101,7 @@ Add the repository and dependency to your `pom.xml`:
    	<dependency>
 	    <groupId>com.github.Eisi05</groupId>
 	    <artifactId>NpcApi-Paper</artifactId>
-	    <version>3.4.1</version>
+	    <version>3.6.0</version>
 	</dependency>
 </dependencies>
 ```
@@ -116,7 +118,7 @@ dependencyResolutionManagement {
 }
 
 dependencies {
-    implementation 'com.github.Eisi05:NpcApi-Paper:3.4.1'
+    implementation 'com.github.Eisi05:NpcApi-Paper:3.6.0'
 }
 ```
 
@@ -149,7 +151,8 @@ public void onDisable()
 Location location = new Location(world, x, y, z);
 
 // Create a new NPC with a name
-NPC npc = new NPC(location, Component.text("Test"));
+import de.eisi05.npc.api.objects.NpcName;
+NPC npc = new NPC(location, NpcName.of(Component.text("Test")));
 
 // Enable the NPC to make it visible to all players
 npc.setEnabled(true);
@@ -180,7 +183,7 @@ npc.setClickEvent(event -> {
 
 ```java
 npc.save();
-npc.setName(Component.text("New Name"));
+npc.setName(NpcName.of(Component.text("New Name")));
 npc.setLocation(newLocation);
 npc.reload();
 ```
@@ -193,6 +196,111 @@ npc.showNPCToPlayer(player);
 npc.hideNpcFromPlayer(player);
 npc.lookAtPlayer(player);
 npc.delete();
+```
+
+### Pathfinding
+
+NpcAPI provides advanced pathfinding with A* and Theta* algorithms, along with entity-specific navigation capabilities.
+
+#### Basic Pathfinding
+
+```java
+import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
+
+List<Location> waypoints = List.of(start, mid, end);
+
+// Synchronous pathfinding
+Path path = PathfindingUtils.findPath(
+    waypoints,
+    50_000,     // maxIterations
+    true,       // allowDiagonalMovement
+    null        // progressListener
+);
+
+// Asynchronous pathfinding
+PathfindingUtils.findPathAsync(waypoints, 50_000, true, (progress) -> {
+    // progress updates (0.0 to 1.0)
+}).thenAccept(path -> {
+    // use the path
+});
+```
+
+#### Navigation Capabilities
+
+```java
+import de.eisi05.npc.api.pathfinding.movement.NavCapabilities;
+import org.bukkit.entity.EntityType;
+
+// Get capabilities for an entity type
+NavCapabilities caps = NavCapabilities.of(EntityType.PLAYER);
+
+// Check capabilities
+boolean canClimb = caps.canClimb();           // Can use ladders/vines
+boolean canSwim = caps.canSwim();             // Can swim in water
+boolean canGapJump = caps.canGapJump();       // Can jump over gaps
+double maxJumpHeight = caps.maxJumpHeight();  // Jump apex in blocks
+
+// Register custom capabilities
+NavCapabilities custom = NavCapabilities.DEFAULT
+    .maxJumpHeight(3.0)
+    .canClimbWalls(true);
+NavCapabilities.register(EntityType.VILLAGER, custom);
+```
+
+### AI Goals
+
+The AI Goals system allows NPCs to have autonomous behavior with configurable priorities.
+
+#### Adding Goals
+
+```java
+import de.eisi05.npc.api.ai.goals.WalkToLocationGoal;
+import de.eisi05.npc.api.ai.goals.WanderGoal;
+import de.eisi05.npc.api.ai.goals.FollowEntityGoal;
+import de.eisi05.npc.api.ai.goals.AttackEntityGoal;
+
+// Walk to a specific location
+WalkToLocationGoal walkGoal = new WalkToLocationGoal.Builder(targetLocation)
+    .speed(0.4)
+    .maxIterations(5000)
+    .allowDiagonal(true)
+    .build();
+npc.addGoal(walkGoal);
+
+// Wander randomly
+WanderGoal wanderGoal = new WanderGoal(15, centerLocation);
+npc.addGoal(wanderGoal);
+
+// Follow an entity
+FollowEntityGoal followGoal = new FollowEntityGoal(player.getUniqueId(), 5.0, 2.0, 0.5);
+npc.addGoal(followGoal);
+
+// Attack entities
+AttackEntityGoal attackGoal = new AttackEntityGoal(
+    entity -> entity instanceof Monster,
+    15.0,  // attack range
+    0.5    // movement speed
+);
+npc.addGoal(attackGoal);
+```
+
+#### Goal Priorities
+
+Goals have their priority set in their constructor:
+- `WalkToLocationGoal` - Priority.MEDIUM
+- `WanderGoal` - Priority.MEDIUM
+- `FollowEntityGoal` - Priority.ALWAYS
+- `AttackEntityGoal` - Priority.ALWAYS
+
+To create custom goals with specific priorities, extend the `Goal` class and pass the desired priority to the constructor:
+```java
+public class MyCustomGoal extends Goal {
+    public MyCustomGoal() {
+        super(Priority.HIGH); // Set priority in constructor
+    }
+    // ... implement goal methods
+}
 ```
 
 ## NPC Management

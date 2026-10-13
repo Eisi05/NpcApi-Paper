@@ -4,12 +4,10 @@ import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
-import de.eisi05.npc.api.utils.LocationUtils;
-import de.eisi05.npc.api.utils.RegistryPredicate;
-import de.eisi05.npc.api.utils.SerializableBiPredicate;
-import de.eisi05.npc.api.utils.Versions;
+import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.utils.*;
 import de.eisi05.npc.api.utils.serialize.NpcRegistry;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
@@ -63,6 +61,8 @@ public class AttackEntityGoal extends EntityTargetGoal
     private static final double KITING_DISTANCE = 3.0;
     private static final double OPTIMAL_RANGED_DISTANCE = 6.0;
     private static final int SEARCH_INTERVAL = 20;
+    private static final long LOS_CACHE_MS = 250;
+    private static final long RETRY_MOVEMENT_MS = 1500;
 
     private static final double WEAPONMECHANICS_ATTACK_RANGE_SQ = WEAPONMECHANICS_ATTACK_RANGE * WEAPONMECHANICS_ATTACK_RANGE;
     private static final double BOW_ATTACK_RANGE_SQ = BOW_ATTACK_RANGE * BOW_ATTACK_RANGE;
@@ -81,11 +81,15 @@ public class AttackEntityGoal extends EntityTargetGoal
     private transient WalkToLocationGoal movementGoal;
     private transient boolean isUsing;
     private transient List<WeakReference<Player>> cachedViewers;
-    private transient int lineOfSightCheckCooldown;
+    private transient LookController look;
+    private transient LivingEntity losTarget;
+    private transient boolean losResult;
+    private transient long losCheckedAt;
+    private transient long retryMovementAt;
     private transient int pathRecalculationCooldown;
     private transient boolean isKiting;
 
-    private transient int searchTicks = 0;
+    private transient long nextSearchAt;
 
     /**
      * Creates an AttackEntityGoal with a filter for valid targets.
@@ -130,7 +134,7 @@ public class AttackEntityGoal extends EntityTargetGoal
      */
     private AttackEntityGoal(@NotNull AttackEntityGoal goal)
     {
-        super(goal.getPriority());
+        super(goal);
         this.targetFilter = goal.targetFilter;
         this.customAttackRange = goal.customAttackRange;
         this.speed = goal.speed;
@@ -211,7 +215,8 @@ public class AttackEntityGoal extends EntityTargetGoal
         if(!super.canUse(npc))
             return false;
 
-        if(target != null && target.isValid() && canContinue(npc))
+        refreshTarget(npc);
+        if(target != null && targetValid() && canContinue(npc))
             return true;
 
         LivingEntity potentialTarget = findTarget(npc);
@@ -219,6 +224,7 @@ public class AttackEntityGoal extends EntityTargetGoal
             return false;
 
         this.target = potentialTarget;
+        refreshTarget(npc);
         return true;
     }
 
@@ -234,8 +240,10 @@ public class AttackEntityGoal extends EntityTargetGoal
         this.isAttacking = true;
         movementGoal = null;
         isUsing = false;
-        lineOfSightCheckCooldown = 0;
+        losCheckedAt = 0;
+        retryMovementAt = 0;
         pathRecalculationCooldown = 0;
+        look().reset();
         isKiting = false;
         setUsingItemState(npc, false);
         updateCachedViewers(npc);
@@ -249,7 +257,11 @@ public class AttackEntityGoal extends EntityTargetGoal
     @Override
     public void tick(@NotNull NPC npc)
     {
-        if(target == null || !target.isValid())
+        refreshTarget(npc);
+        if(awaitingSnapshot())
+            return;
+
+        if(target == null || !targetValid())
         {
             isAttacking = false;
             stopMovement(npc);
@@ -258,14 +270,7 @@ public class AttackEntityGoal extends EntityTargetGoal
 
         Location npcLoc = npc.getLocation();
 
-        if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
-            updateCachedViewers(npc);
-
-        for(WeakReference<Player> viewer : cachedViewers)
-            npc.lookAtEntity(target, viewer.get(), true);
-
-        if(lineOfSightCheckCooldown > 0)
-            lineOfSightCheckCooldown--;
+        lookAtTarget(npc, look());
 
         Location targetLocation = getTargetLocation();
         double distance = npcLoc.distanceSquared(targetLocation);
@@ -273,39 +278,37 @@ public class AttackEntityGoal extends EntityTargetGoal
 
         if(distance > attackRange)
         {
-            boolean checkLineOfSight = lineOfSightCheckCooldown <= 0;
-            if(checkLineOfSight)
-                lineOfSightCheckCooldown = 5;
-
-            if(distance > LINE_OF_SIGHT_RANGE_SQ || (checkLineOfSight && !hasLineOfSight(npc, target)))
+            if(distance > LINE_OF_SIGHT_RANGE_SQ || !hasLineOfSightCached(npc, target))
             {
                 stop(npc);
                 return;
             }
 
+            if(movementGoal != null && !movementGoal.isActive())
+            {
+                if(movementGoal.isUnreachable())
+                    retryMovementAt = System.currentTimeMillis() + RETRY_MOVEMENT_MS;
+                movementGoal = null;
+            }
+
+            Location ground = getTargetGround(npc);
             if(movementGoal == null)
-                startMovement(npc, targetLocation);
+            {
+                if(ground != null && System.currentTimeMillis() >= retryMovementAt)
+                    startMovement(npc, ground);
+            }
             else
             {
-                Location currentTarget = movementGoal.getTargetLocation(npc.getLocation().getWorld());
-                boolean shouldRecalculate = currentTarget.distanceSquared(targetLocation) > 5.0;
+                isKiting = false;
 
-                if(!shouldRecalculate && pathRecalculationCooldown <= 0)
+                if(ground != null)
                 {
-                    shouldRecalculate = true;
-                    pathRecalculationCooldown = WalkToLocationGoal.RECALCULATION_COOLDOWN;
+                    double tolerance = Math.clamp(Math.sqrt(distance) * 0.2, 1.0, 5.0);
+                    if(movementGoal.horizontalTargetDistanceSq(ground) > tolerance * tolerance || movementGoal.verticalTargetDistance(ground) > 1.5)
+                        movementGoal.updateTargetLocation(ground.clone(), npc);
                 }
 
-                if(shouldRecalculate)
-                {
-                    movementGoal.updateTargetLocation(target.getLocation(), npc);
-                    pathRecalculationCooldown = WalkToLocationGoal.RECALCULATION_COOLDOWN;
-                }
-                else
-                {
-                    movementGoal.tick(npc);
-                    pathRecalculationCooldown--;
-                }
+                movementGoal.tick(npc);
 
                 distance = npc.getLocation().distanceSquared(targetLocation);
                 if(distance <= attackRange)
@@ -322,15 +325,11 @@ public class AttackEntityGoal extends EntityTargetGoal
                 stopKiting(npc);
             else if(isKiting)
             {
-                if(movementGoal != null)
+                if(movementGoal != null && movementGoal.isActive())
                 {
                     movementGoal.tick(npc);
-                    pathRecalculationCooldown--;
-                    if(pathRecalculationCooldown <= 0)
-                    {
+                    if(--pathRecalculationCooldown <= 0)
                         startKiting(npc);
-                        pathRecalculationCooldown = WalkToLocationGoal.RECALCULATION_COOLDOWN;
-                    }
                 }
                 else
                     isKiting = false;
@@ -364,7 +363,7 @@ public class AttackEntityGoal extends EntityTargetGoal
     public void stop(@NotNull NPC npc)
     {
         stopMovement(npc);
-        target = null;
+        clearTarget();
         isAttacking = false;
         attackCooldown = 0;
         isUsing = false;
@@ -380,7 +379,14 @@ public class AttackEntityGoal extends EntityTargetGoal
     @Override
     public boolean canContinue(@NotNull NPC npc)
     {
-        if(!isAttacking || target == null || !target.isValid())
+        if(!isAttacking || target == null)
+            return false;
+
+        refreshTarget(npc);
+        if(awaitingSnapshot())
+            return super.canContinue(npc);
+
+        if(!targetValid())
             return false;
 
         if(!super.canContinue(npc))
@@ -392,8 +398,7 @@ public class AttackEntityGoal extends EntityTargetGoal
         if(!npcLoc.getWorld().equals(targetLoc.getWorld()))
             return false;
 
-        boolean checkLineOfSight = lineOfSightCheckCooldown <= 0;
-        if(checkLineOfSight && !hasLineOfSight(npc, target))
+        if(!hasLineOfSightCached(npc, target))
             return false;
 
         double distance = npcLoc.distanceSquared(targetLoc);
@@ -410,10 +415,7 @@ public class AttackEntityGoal extends EntityTargetGoal
 
         if(movementGoal != null && movementGoal.canContinue(npc))
         {
-            Location npcLoc = npc.getLocation();
-            Location below = npcLoc.clone().subtract(0, 0.1, 0);
-
-            if(below.getBlock().getType().isAir())
+            if(isAirBelow(npc))
                 return false;
         }
         return true;
@@ -430,16 +432,18 @@ public class AttackEntityGoal extends EntityTargetGoal
      */
     private LivingEntity findTarget(@NotNull NPC npc)
     {
-        if (searchTicks > 0)
-        {
-            searchTicks--;
+        long now = System.currentTimeMillis();
+        if(now < nextSearchAt)
             return null;
-        }
 
-        searchTicks = SEARCH_INTERVAL;
+        nextSearchAt = now + SEARCH_INTERVAL * 50L;
         Location loc = npc.getLocation();
 
-        double searchRange = Math.max(getAttackRange(npc), LINE_OF_SIGHT_RANGE);
+        double wantedRange = Math.max(getAttackRange(npc), LINE_OF_SIGHT_RANGE);
+        double searchRange = ownedRange(loc, wantedRange);
+        if(searchRange <= 0)
+            return null;
+
         Collection<Entity> nearby = loc.getWorld().getNearbyEntities(
                 loc,
                 searchRange,
@@ -448,18 +452,47 @@ public class AttackEntityGoal extends EntityTargetGoal
                 entity -> entity instanceof LivingEntity
         );
 
+        List<LivingEntity> candidates = new ArrayList<>();
         for(Entity entity : nearby)
         {
-            if(!targetFilter.test((LivingEntity) entity, npc))
-                continue;
+            if(targetFilter.test((LivingEntity) entity, npc))
+                candidates.add((LivingEntity) entity);
+        }
 
-            if(!hasLineOfSight(npc, (LivingEntity) entity))
-                continue;
+        if(candidates.isEmpty())
+            return null;
 
-            return (LivingEntity) entity;
+        candidates.sort(Comparator.comparingDouble(candidate -> candidate.getLocation().distanceSquared(loc)));
+        for(LivingEntity candidate : candidates)
+        {
+            if(hasLineOfSight(npc, candidate))
+                return candidate;
         }
 
         return null;
+    }
+
+    private @NotNull LookController look()
+    {
+        if(look == null)
+            look = new LookController();
+        return look;
+    }
+
+    /**
+     * Line of sight with a short cache. {@code canUse}, {@code canContinue} and {@code tick} are all called every tick; without the cache this was up to two
+     * ray traces per tick while in melee range.
+     */
+    private boolean hasLineOfSightCached(@NotNull NPC npc, @NotNull LivingEntity entity)
+    {
+        long now = System.currentTimeMillis();
+        if(entity != losTarget || now - losCheckedAt >= LOS_CACHE_MS)
+        {
+            losResult = hasLineOfSight(npc, entity);
+            losTarget = entity;
+            losCheckedAt = now;
+        }
+        return losResult;
     }
 
     /**
@@ -468,11 +501,20 @@ public class AttackEntityGoal extends EntityTargetGoal
     private boolean hasLineOfSight(@NotNull NPC npc, @NotNull LivingEntity target)
     {
         Location npcLoc = npc.getLocation().clone().add(0, 1.6, 0);
-        Location targetLoc = target.getLocation().clone().add(0, target.getEyeHeight(), 0);
+
+        boolean current = target == this.target;
+        Location base = current ? targetPosition() : target.getLocation();
+        if(base == null)
+            return false;
+        Location targetLoc = base.clone().add(0, current ? targetEyeHeight() : target.getEyeHeight(), 0);
 
         World world = npcLoc.getWorld();
         if(world == null || targetLoc.getWorld() != world)
             return false;
+
+        if(!Bukkit.isOwnedByCurrentRegion(world, Math.min(npcLoc.getBlockX(), targetLoc.getBlockX()) >> 4, Math.min(npcLoc.getBlockZ(), targetLoc.getBlockZ()) >> 4,
+                Math.max(npcLoc.getBlockX(), targetLoc.getBlockX()) >> 4, Math.max(npcLoc.getBlockZ(), targetLoc.getBlockZ()) >> 4))
+            return true;
 
         Vector direction = targetLoc.toVector().subtract(npcLoc.toVector());
         double distance = direction.length();
@@ -530,18 +572,22 @@ public class AttackEntityGoal extends EntityTargetGoal
         {
             try
             {
-                me.deecaad.core.file.Configuration config = me.deecaad.weaponmechanics.WeaponMechanics.getInstance().getWeaponConfigurations();
+                Object config = Reflections.invokeMethod("me.deecaad.weaponmechanics.WeaponMechanics", "getInstance")
+                        .thenInvoke("getWeaponConfigurations").get();
                 if(config != null)
                 {
-                    int shotsPerSecond = config.getInt(weaponTitle + ".Shoot.Fully_Automatic_Shots_Per_Second", 0);
+
+                    int shotsPerSecond = (int) Reflections.invokeMethod(config, "getInt", weaponTitle + ".Shoot.Fully_Automatic_Shots_Per_Second", 0).get();
                     if(shotsPerSecond > 0)
                         return Math.max(1, 20 / shotsPerSecond);
 
-                    int burstDelay = config.getInt(weaponTitle + ".Shoot.Burst.Ticks_Between_Each_Shot", 0);
+
+                    int burstDelay = (int) Reflections.invokeMethod(config, "getInt", weaponTitle + ".Shoot.Burst.Ticks_Between_Each_Shot", 0).get();
                     if(burstDelay > 0)
                         return burstDelay;
 
-                    int shootDelay = config.getInt(weaponTitle + ".Shoot.Delay_Between_Shots", 0);
+
+                    int shootDelay = (int) Reflections.invokeMethod(config, "getInt", weaponTitle + ".Shoot.Delay_Between_Shots", 0).get();
                     if(shootDelay > 0)
                         return shootDelay;
                 }
@@ -603,7 +649,7 @@ public class AttackEntityGoal extends EntityTargetGoal
 
         try
         {
-            return me.deecaad.weaponmechanics.WeaponMechanicsAPI.getWeaponTitle(item);
+            return (String) Reflections.invokeMethod("me.deecaad.weaponmechanics.WeaponMechanicsAPI", "getWeaponTitle", item).get();
         }
         catch(NoClassDefFoundError | Exception e)
         {
@@ -616,34 +662,34 @@ public class AttackEntityGoal extends EntityTargetGoal
      */
     private void performWeaponMechanicsAttack(@NotNull NPC npc, String weaponTitle, ItemStack weaponStack)
     {
-        if(target == null || !target.isValid())
+        if(target == null || !targetValid())
             return;
 
         Player npcPlayer = ((ServerPlayer) npc.getServerPlayer()).getBukkitEntity();
         if(npcPlayer == null)
             return;
 
-        if(target == null || !target.isValid())
+        Location targetPos = targetPosition();
+        LivingEntity victim = target;
+        if(victim == null || targetPos == null)
             return;
 
         try
         {
-            Vector direction = target.getLocation().subtract(npc.getLocation()).toVector().normalize();
+            Vector direction = targetPos.subtract(npc.getLocation()).toVector().normalize();
             Location location = npc.getLocation().clone().add(0, npc.getEyeHeight(null), 0);
             location.setDirection(direction);
 
-            me.deecaad.weaponmechanics.WeaponMechanics.getInstance().getWeaponHandler().getShootHandler()
-                    .shoot(me.deecaad.weaponmechanics.WeaponMechanics.getInstance().getEntityWrapper(npcPlayer), weaponTitle, weaponStack, location,
-                            true, true, false);
+            Object entityWrapper = Reflections.invokeMethod("me.deecaad.weaponmechanics.WeaponMechanics", "getInstance")
+                    .thenInvoke("getEntityWrapper", npcPlayer).get();
+            Reflections.invokeMethod("me.deecaad.weaponmechanics.WeaponMechanics", "getInstance")
+                    .thenInvoke("getWeaponHandler").thenInvoke("getShootHandler")
+                    .thenInvoke("shoot", entityWrapper, weaponTitle, weaponStack, location, true, true, false);
         }
         catch(NoClassDefFoundError | Exception e)
         {
-            double damage = getAttackDamage(npc);
-            SchedulerProvider.get().runSyncForEntity(target, () ->
-            {
-                if(target.isValid())
-                    target.damage(damage, npcPlayer);
-            });
+            double fallbackDamage = getAttackDamage(npc);
+            runOnTarget(victim, () -> victim.damage(fallbackDamage, npcPlayer));
         }
     }
 
@@ -652,11 +698,11 @@ public class AttackEntityGoal extends EntityTargetGoal
      */
     private void performRangedAttack(@NotNull NPC npc)
     {
-        if(target == null || !target.isValid() || isUsing)
+        if(target == null || !targetValid() || isUsing)
             return;
 
-        net.minecraft.world.entity.Entity entity = (net.minecraft.world.entity.Entity) npc.getEntity();
-        double eyeHeight = (entity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() : entity.getBukkitEntity().getHeight()) -
+        Entity bukkitEntity = ((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity();
+        double eyeHeight = (bukkitEntity instanceof LivingEntity le ? le.getEyeHeight() : bukkitEntity.getHeight()) -
                 (npc.getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SITTING ? 0.625 : 0);
 
         Location npcLoc = npc.getLocation().clone().add(0, eyeHeight * npc.getOption(NpcOption.SCALE), 0);
@@ -671,7 +717,8 @@ public class AttackEntityGoal extends EntityTargetGoal
             setUsingItemState(npc, true);
             isUsing = true;
 
-            SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), () ->
+            // scheduled at the NPC's position; the shot itself runs in the NPC's region under the goal's lock, the arrow is spawned where it was drawn
+            SchedulerProvider.get().runLaterAtLocation(npcLoc, () -> npc.getGoalExecutor().execute(() ->
             {
                 setUsingItemState(npc, false);
 
@@ -680,29 +727,39 @@ public class AttackEntityGoal extends EntityTargetGoal
                 if(target == null)
                     return;
 
-                Location targetLoc = target.getLocation().clone().add(0, target.getEyeHeight(), 0);
+                Location targetPos = targetPosition();
+                if(targetPos == null)
+                    return;
+
+                Location targetLoc = targetPos.add(0, targetEyeHeight(), 0);
                 Vector direction = targetLoc.toVector().subtract(npcLoc.toVector()).normalize();
 
-                AbstractArrow arrow;
-                if(mainHand == null || mainHand.getType() == Material.TRIDENT)
-                    arrow = npcLoc.getWorld().spawnArrow(npcLoc, direction, speed, 0, Trident.class);
-                else
-                    arrow = npcLoc.getWorld().spawnArrow(npcLoc, direction, speed, 0, Arrow.class);
-                if(npc.getServerPlayer() != null)
-                    arrow.setShooter(((ServerPlayer) npc.getServerPlayer()).getBukkitEntity());
-                arrow.setDamage(getAttackDamage(npc));
-                arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
-
-                if(!Versions.isCurrentVersionSmallerThan(Versions.V1_21))
-                    arrow.setWeapon(mainHand);
-
-                ClientboundRemoveEntitiesPacket removePacket = new ClientboundRemoveEntitiesPacket(arrow.getEntityId());
-                for(Player player : npcLoc.getWorld().getPlayers())
+                Runnable spawn = () ->
                 {
-                    if(!npc.getViewers().contains(player.getUniqueId()))
-                        ((CraftPlayer) player).getHandle().connection.send(removePacket);
-                }
-            }, BOW_DRAW_DELAY_TICKS);
+                    AbstractArrow arrow;
+                    if(mainHand == null || mainHand.getType() == Material.TRIDENT)
+                        arrow = npcLoc.getWorld().spawnArrow(npcLoc, direction, speed, 0, Trident.class);
+                    else
+                        arrow = npcLoc.getWorld().spawnArrow(npcLoc, direction, speed, 0, Arrow.class);
+                    if(npc.getServerPlayer() != null)
+                        arrow.setShooter(((ServerPlayer) npc.getServerPlayer()).getBukkitEntity());
+                    arrow.setDamage(getAttackDamage(npc));
+                    arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
+                    arrow.setShotFromCrossbow(mainHand.getType() == Material.CROSSBOW);
+
+                    ClientboundRemoveEntitiesPacket removePacket = new ClientboundRemoveEntitiesPacket(arrow.getEntityId());
+                    for(Player player : Bukkit.getOnlinePlayers())
+                    {
+                        if(player.getWorld().equals(npcLoc.getWorld()) && !npc.getViewers().contains(player.getUniqueId()))
+                            ((CraftPlayer) player).getHandle().connection.send(removePacket);
+                    }
+                };
+
+                if(Bukkit.isOwnedByCurrentRegion(npcLoc))
+                    spawn.run();
+                else
+                    SchedulerProvider.get().runSyncAtLocation(npcLoc, spawn);
+            }), BOW_DRAW_DELAY_TICKS);
         }
     }
 
@@ -737,7 +794,7 @@ public class AttackEntityGoal extends EntityTargetGoal
      */
     private void performMeleeAttack(@NotNull NPC npc)
     {
-        if(target == null || !target.isValid())
+        if(target == null || !targetValid())
             return;
 
         if(cachedViewers == null || cachedViewers.size() != npc.getViewers().size())
@@ -746,28 +803,26 @@ public class AttackEntityGoal extends EntityTargetGoal
         for(WeakReference<Player> viewer : cachedViewers)
             npc.playAnimation(viewer.get(), AnimatePacket.Animation.SWING_MAIN_HAND);
 
+        LivingEntity victim = target;
         double damage = getAttackDamage(npc);
-        Location npcLoc = npc.getLocation();
-        Location targetLoc = target.getLocation();
-
         double knockbackStrength = getAttackKnockback(npc);
-        double knockbackResistance = getKnockbackResistance(target);
-        double effectiveKnockback = knockbackStrength * (1 - knockbackResistance);
+        Location npcLoc = npc.getLocation().clone();
 
-        Vector direction = targetLoc.toVector().subtract(npcLoc.toVector());
-        if(direction.lengthSquared() > Vector.getEpsilon())
-            direction = direction.normalize();
-
-        Vector knockback = direction.multiply(effectiveKnockback);
-        knockback.setY(effectiveKnockback * 0.4);
-
-        SchedulerProvider.get().runSyncForEntity(target, () ->
+        runOnTarget(victim, () ->
         {
-            if(target.isValid())
-            {
-                target.damage(damage);
-                target.setVelocity(knockback);
-            }
+            victim.damage(damage);
+
+            Location targetLoc = victim.getLocation();
+            double knockbackResistance = getKnockbackResistance(victim);
+            double effectiveKnockback = knockbackStrength * (1 - knockbackResistance);
+
+            Vector direction = targetLoc.toVector().subtract(npcLoc.toVector());
+            if(direction.lengthSquared() > Vector.getEpsilon())
+                direction = direction.normalize();
+
+            Vector knockback = direction.multiply(effectiveKnockback);
+            knockback.setY(effectiveKnockback * 0.4);
+            victim.setVelocity(knockback);
         });
     }
 
@@ -910,55 +965,92 @@ public class AttackEntityGoal extends EntityTargetGoal
     }
 
     /**
-     * Starts movement towards the target location.
+     * Starts movement towards the target's ground location. The goal handles the look direction itself, so the walk does not send its own rotation.
      */
-    private void startMovement(@NotNull NPC npc, @NotNull Location targetLoc)
+    private void startMovement(@NotNull NPC npc, @NotNull Location ground)
     {
         stopMovement(npc);
 
-        OptionalInt safeY = LocationUtils.findSafeY(targetLoc, npc);
-        if(safeY.isPresent())
-            targetLoc = new Location(targetLoc.getWorld(), targetLoc.getX(), safeY.getAsInt(), targetLoc.getZ());
-        movementGoal = new WalkToLocationGoal.Builder(targetLoc).speed(speed).build();
+        movementGoal = new WalkToLocationGoal.Builder(ground.clone()).speed(speed).pathfinder(pathfinder).withRotation(false).build();
         movementGoal.start(npc);
     }
 
     /**
-     * Starts kiting by moving away from the target to optimal distance.
+     * Starts kiting by moving away from the target to optimal distance. If a kiting walk is already running it is simply retargeted (no stop/start), which
+     * keeps the retreat smooth.
      */
     private void startKiting(@NotNull NPC npc)
     {
-        if(target == null || !target.isValid())
+        if(target == null || !targetValid())
             return;
 
+        boolean retarget = isKiting && movementGoal != null && movementGoal.isActive();
+
         Location npcLoc = npc.getLocation();
-        Location targetLoc = target.getLocation();
+        Location targetLoc = targetPosition();
+        if(targetLoc == null)
+            return;
 
-        Vector direction = npcLoc.toVector().subtract(targetLoc.toVector()).normalize();
+        Vector away = npcLoc.toVector().subtract(targetLoc.toVector());
+        away.setY(0);
+        if(away.lengthSquared() < 1.0E-6)
+        {
+            double angle = Math.random() * Math.PI * 2;
+            away = new Vector(Math.cos(angle), 0, Math.sin(angle));
+        }
+        else
+            away.normalize();
 
-        Vector retreatPos = targetLoc.toVector().add(direction.multiply(OPTIMAL_RANGED_DISTANCE));
+        Location retreatLoc = null;
+        Location fallback = null;
+        for(double angle : new double[]{0, 0.7, -0.7, 1.4, -1.4})
+        {
+            Vector pos = targetLoc.toVector().add(away.clone().rotateAroundY(angle).multiply(OPTIMAL_RANGED_DISTANCE));
+            if(!retarget && angle == 0)
+            {
+                pos.setX(pos.getX() + (Math.random() - 0.5) * 3);
+                pos.setZ(pos.getZ() + (Math.random() - 0.5) * 3);
+            }
 
-        retreatPos.setX(retreatPos.getX() + (Math.random() - 0.5) * 3);
-        retreatPos.setZ(retreatPos.getZ() + (Math.random() - 0.5) * 3);
+            Location candidate = new Location(npcLoc.getWorld(), pos.getX(), npcLoc.getY(), pos.getZ());
+            if(fallback == null)
+                fallback = candidate.clone();
 
-        Location retreatLoc = new Location(npcLoc.getWorld(), retreatPos.getX(), npcLoc.getY(), retreatPos.getZ());
+            if(candidate.getWorld() == null || !WorldAccess.canAccessArea(candidate.getWorld(), candidate.getBlockX() - 1, candidate.getBlockZ() - 1,
+                    candidate.getBlockX() + 1, candidate.getBlockZ() + 1))
+                continue;
 
-        OptionalInt safeY = LocationUtils.findSafeY(retreatLoc, npc);
-        if(safeY.isPresent())
-            retreatLoc = new Location(retreatLoc.getWorld(), retreatLoc.getX(), safeY.getAsInt(), retreatLoc.getZ());
+            OptionalInt safeY = LocationUtils.findSafeY(candidate, npc);
+            if(safeY.isPresent())
+            {
+                candidate.setY(safeY.getAsInt());
+                retreatLoc = candidate;
+                break;
+            }
+        }
+        if(retreatLoc == null)
+            retreatLoc = fallback;
 
-        stopMovement(npc);
+        if(retarget)
+            movementGoal.updateTargetLocation(retreatLoc, npc);
+        else
+        {
+            stopMovement(npc);
 
+            WalkToLocationGoal newGoal = new WalkToLocationGoal.Builder(retreatLoc)
+                    .speed(speed + 0.5)
+                    .pathfinder(pathfinder)
+                    .maxIterations(5000)
+                    .allowDiagonal(true)
+                    .completionCallback(walkingResult ->
+                    {
+                        isKiting = false;
+                        movementGoal = null;
+                    }).withRotation(false).build();
 
-        WalkToLocationGoal newGoal = new WalkToLocationGoal.Builder(retreatLoc).speed(speed + 0.5).maxIterations(5000).allowDiagonal(true)
-                .completionCallback(walkingResult ->
-                {
-                    isKiting = false;
-                    movementGoal = null;
-                }).withRotation(false).build();
-
-        movementGoal = newGoal;
-        newGoal.start(npc);
+            movementGoal = newGoal;
+            newGoal.start(npc);
+        }
 
         isKiting = true;
         pathRecalculationCooldown = WalkToLocationGoal.RECALCULATION_COOLDOWN;

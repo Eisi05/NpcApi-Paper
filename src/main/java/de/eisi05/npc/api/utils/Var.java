@@ -241,6 +241,8 @@ public class Var
      *     <li>Bit 7 (0x80) - Fall flying (elytra gliding)</li>
      * </ul>
      *
+     * <b>Threading:</b> reads the live entity, so call it from the thread that owns the entity (the main thread on Paper, the entity's scheduler on Folia).
+     *
      * @param entity The Bukkit entity whose state should be converted into entity flags.
      * @return A byte representing the combined entity flags for accessor 0.
      */

@@ -2,6 +2,7 @@ package de.eisi05.npc.api.utils;
 
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import org.bukkit.Location;
@@ -36,7 +37,8 @@ public class LocationUtils
 
     /**
      * Finds a safe surface Y coordinate on the ground for the given location, accounting for entity height and footprint width.
-     * Searches up to 5 blocks above and below the starting Y level.
+     * Searches up to 5 blocks above and below the starting Y level. Reads live blocks, so call it from the thread that owns the location; for
+     * locations it may not access it returns empty.
      *
      * @param loc          The location to find a safe Y level for
      * @param entityHeight The height of the entity
@@ -52,6 +54,10 @@ public class LocationUtils
         double x = loc.getX();
         double z = loc.getZ();
         int startY = loc.getBlockY();
+
+        double reach = entityWidth / 2.0 + 0.5;
+        if(!WorldAccess.canAccessArea(world, (int) Math.floor(x - reach), (int) Math.floor(z - reach), (int) Math.floor(x + reach), (int) Math.floor(z + reach)))
+            return OptionalDouble.empty();
 
         for(int y = startY; y <= startY + 5 && y < world.getMaxHeight(); y++)
         {

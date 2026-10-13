@@ -3,28 +3,33 @@ package de.eisi05.npc.api.scheduler;
 /**
  * Provides access to the appropriate server scheduler based on the server implementation.
  * <p>
- * Automatically detects whether the server is running Folia or a standard Paper-compatible implementation and initializes the corresponding scheduler.
+ * Automatically detects whether the server is running Folia or a standard Paper-compatible implementation and initializes the corresponding scheduler. Both
+ * the detection and the scheduler instance are initialized exactly once, thread-safely (the first call may come from any region or async thread on Folia).
  */
 public class SchedulerProvider
 {
-    private static ServerScheduler scheduler;
-    private static Boolean isFolia = null;
+    private static final boolean FOLIA = detectFolia();
 
     /**
-     * Gets the server scheduler, initializing it if necessary.
+     * Initialization-on-demand holder: the JVM guarantees the scheduler is created once, lazily, with safe publication.
+     */
+    private static final class Holder
+    {
+        private static final ServerScheduler INSTANCE = FOLIA ? new FoliaScheduler() : new PaperScheduler();
+    }
+
+    private SchedulerProvider()
+    {
+    }
+
+    /**
+     * Gets the server scheduler.
      *
      * @return the server scheduler for the current server implementation
      */
     public static ServerScheduler get()
     {
-        if(scheduler == null)
-        {
-            if(isFolia())
-                scheduler = new FoliaScheduler();
-            else
-                scheduler = new PaperScheduler();
-        }
-        return scheduler;
+        return Holder.INSTANCE;
     }
 
     /**
@@ -36,18 +41,19 @@ public class SchedulerProvider
      */
     public static boolean isFolia()
     {
-        if(isFolia == null)
+        return FOLIA;
+    }
+
+    private static boolean detectFolia()
+    {
+        try
         {
-            try
-            {
-                Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
-                isFolia = true;
-            }
-            catch(ClassNotFoundException e)
-            {
-                isFolia = false;
-            }
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+            return true;
         }
-        return isFolia;
+        catch(ClassNotFoundException e)
+        {
+            return false;
+        }
     }
 }
