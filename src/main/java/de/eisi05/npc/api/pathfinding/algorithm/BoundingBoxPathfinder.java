@@ -5,10 +5,10 @@ import de.eisi05.npc.api.pathfinding.PathResult;
 import de.eisi05.npc.api.pathfinding.PathingResult;
 import de.eisi05.npc.api.pathfinding.environment.BlockProfile;
 import de.eisi05.npc.api.pathfinding.environment.NavSpace;
+import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import de.eisi05.npc.api.pathfinding.movement.MoveType;
 import de.eisi05.npc.api.pathfinding.movement.NavOptions;
 import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
-import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -21,9 +21,9 @@ import java.util.function.BiConsumer;
 /**
  * Fine-grained any-angle (Theta*) pathfinder with exact bounding-box collision.
  * <p>
- * Nodes lie on a sub-cell grid anchored at the start position, every move is validated against the real collision shapes with the full entity box, and
- * lazily evaluated line-of-sight shortcuts let the path leave the grid axes, which yields smooth, natural routes that still keep a small clearance to walls
- * and ledges. All collision logic is shared with {@link AStarPathfinder} through {@link NavSpace}.
+ * Nodes lie on a sub-cell grid anchored at the start position, every move is validated against the real collision shapes with the full entity box, and lazily
+ * evaluated line-of-sight shortcuts let the path leave the grid axes, which yields smooth, natural routes that still keep a small clearance to walls and
+ * ledges. All collision logic is shared with {@link AStarPathfinder} through {@link NavSpace}.
  */
 public class BoundingBoxPathfinder extends AbstractPathfinder
 {
@@ -114,8 +114,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Resolves ground support for an entity at the specified coordinates with custom movement limitations. This is what {@code PathTask} uses while walking,
-     * so it uses the same footprint and collision data as the planner (via {@link BlockProfile}), but without per-call allocation.
+     * Resolves ground support for an entity at the specified coordinates with custom movement limitations. This is what {@code PathTask} uses while walking, so
+     * it uses the same footprint and collision data as the planner (via {@link BlockProfile}), but without per-call allocation.
      * <p>
      * <b>Region thread only.</b> Block columns that the current thread may not read (owned by another Folia region, or not loaded) are skipped instead of
      * throwing or loading chunks; if none of the footprint is readable the result is {@link FootSupport#INVALID}, which callers treat as "unknown".
@@ -218,8 +218,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Same as {@link #getPath(Location, Location, BiConsumer)} but also returns the {@link MoveType} of every point. This is the primary
-     * calculation method; {@code getPath} just returns its points.
+     * Same as {@link #getPath(Location, Location, BiConsumer)} but also returns the {@link MoveType} of every point. This is the primary calculation method;
+     * {@code getPath} just returns its points.
      *
      * @param start            the starting location
      * @param end              the target location
@@ -241,6 +241,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         NavSpace space = new NavSpace(resolveView(world, start, end), entityHeight, entityWidth, effectiveOptions(options));
         GridSearch search = new GridSearch(space, gridStep, true, allowDiagonal, maxIterations);
         search.setCancellation(cancellation());
+        search.setVisualizer(visualizer());
         try
         {
             return search.search(start, end, progressListener);

@@ -39,7 +39,7 @@ public final class WorldAccess
         int maxCx = maxBlockX >> 4;
         int maxCz = maxBlockZ >> 4;
 
-        if(!Bukkit.isOwnedByCurrentRegion(world, minCx, minCz, maxCx, maxCz))
+        if(!ownsChunks(world, minCx, minCz, maxCx, maxCz))
             return false;
 
         for(int cx = minCx; cx <= maxCx; cx++)
@@ -51,6 +51,31 @@ public final class WorldAccess
             }
         }
         return true;
+    }
+
+    /**
+     * Checks whether the current region owns every chunk of a rectangle of chunks (all bounds inclusive).
+     *
+     * @param world the world the chunks are in
+     * @param minCx the smallest chunk X of the rectangle
+     * @param minCz the smallest chunk Z of the rectangle
+     * @param maxCx the largest chunk X of the rectangle
+     * @param maxCz the largest chunk Z of the rectangle
+     * @return {@code true} if the current thread owns every chunk of the rectangle, {@code false} if it does not or if this cannot be proven
+     */
+    public static boolean ownsChunks(World world, int minCx, int minCz, int maxCx, int maxCz)
+    {
+        try
+        {
+            return Bukkit.isOwnedByCurrentRegion(world, minCx, minCz, maxCx, maxCz);
+        }
+        catch(Throwable t)
+        {
+            int centerX = (minCx + maxCx) >> 1;
+            int centerZ = (minCz + maxCz) >> 1;
+            int radius = Math.max(Math.max(centerX - minCx, maxCx - centerX), Math.max(centerZ - minCz, maxCz - centerZ));
+            return Bukkit.isOwnedByCurrentRegion(world, centerX, centerZ, radius);
+        }
     }
 
     /**

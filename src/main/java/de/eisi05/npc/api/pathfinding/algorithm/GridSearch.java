@@ -11,6 +11,7 @@ import de.eisi05.npc.api.pathfinding.movement.MovementMode;
 import de.eisi05.npc.api.pathfinding.movement.NavOptions;
 import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import org.bukkit.Location;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * Shared search engine behind {@link AStarPathfinder} (cell-sized steps) and {@link BoundingBoxPathfinder} (sub-cell steps + Theta* shortcuts).
@@ -57,9 +59,12 @@ public final class GridSearch
     private final JumpArc arc;
     private final @Nullable NavSpace crouchSpace;
     private @Nullable BooleanSupplier cancelled;
+    private @Nullable Consumer<Location> visualizer;
 
     private final Long2ObjectOpenHashMap<Node> nodes = new Long2ObjectOpenHashMap<>();
     private final NodeHeap heap = new NodeHeap();
+
+    private final LongOpenHashSet shown = new LongOpenHashSet();
 
     private double originX;
     private double originZ;
@@ -89,6 +94,28 @@ public final class GridSearch
     void setCancellation(@Nullable BooleanSupplier cancelled)
     {
         this.cancelled = cancelled;
+    }
+
+    /**
+     * Sets the visualizer callback that receives the location of every node visited during pathfinding.
+     *
+     * @param visualizer a consumer that receives visited node locations, or null to disable visualization
+     */
+    void setVisualizer(@Nullable Consumer<Location> visualizer)
+    {
+        this.visualizer = visualizer;
+    }
+
+    private void visit(@NotNull Node n)
+    {
+        if(visualizer == null)
+            return;
+
+        int bx = (int) Math.floor(n.x), by = (int) Math.floor(n.y), bz = (int) Math.floor(n.z);
+        if(!shown.add(AbstractPathfinder.packBlockCoord(bx, by, bz)))
+            return;
+
+        visualizer.accept(new Location(space.getView().getWorld(), bx + 0.5, n.y, bz + 0.5));
     }
 
     private boolean pollCancelled(int iterations)
@@ -170,6 +197,8 @@ public final class GridSearch
             if(listener != null)
                 listener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
 
+            visit(current);
+
             if(isGoal(current))
             {
                 result = PathingResult.SUCCESS;
@@ -228,16 +257,16 @@ public final class GridSearch
             if(options.canSwim() && !options.avoidWater())
                 trySwimHorizontal(cur, d, swimming);
 
-            if(options.canGapJump() && Double.isNaN(walkY))
+            if(options.canGapJump() && (Double.isNaN(walkY) || walkY < cur.y - options.getStepHeight() - EPS))
                 needsGapJump = true;
         }
 
-        if(needsGapJump)
+        if(options.canGapJump())
         {
             if(groundedState == 0)
                 groundedState = space.isGrounded(cur.x, cur.y, cur.z) ? 1 : 2;
             if(groundedState == 1)
-                tryGapJumps(cur);
+                tryGapJumps(cur, !needsGapJump);
         }
 
         if(options.canClimb() && cur.climb)
@@ -406,17 +435,20 @@ public final class GridSearch
         }
     }
 
-    private void tryGapJumps(@NotNull Node cur)
+    private void tryGapJumps(@NotNull Node cur, boolean upOnly)
     {
         double perCell = Math.max(1, Math.round(1.0 / step));
 
         double effectiveMaxDist = Math.max(options.getMaxGapJumpDistance(), options.getMaxFallDistance() * 2.0 + 4.0);
+        if(upOnly)
+            effectiveMaxDist = Math.min(effectiveMaxDist, 3.0);
+        int stride = upOnly ? Math.max(1, (int) Math.round(perCell / 2.0)) : 1;
         int maxDist = (int) Math.ceil((effectiveMaxDist + TAKEOFF_OFFSET + 1.5) * perCell);
         int minCells = step < 1.0 - EPS ? 1 : 2;
 
-        for(int cx = -maxDist; cx <= maxDist; cx++)
+        for(int cx = -maxDist; cx <= maxDist; cx += stride)
         {
-            for(int cz = -maxDist; cz <= maxDist; cz++)
+            for(int cz = -maxDist; cz <= maxDist; cz += stride)
             {
                 if(Math.abs(cx) < minCells && Math.abs(cz) < minCells)
                     continue;
@@ -454,8 +486,9 @@ public final class GridSearch
                 for(double d = maxLandOffset; d >= 0; d -= 0.1) {
                     double plx = lx - ux * d;
                     double plz = lz - uz * d;
-                    ly = space.supportTop(plx, plz, space.getSupportRadius(), cur.y - options.getMaxFallDistance(), cur.y + Math.min(arc.apex() - 0.05,
-                                    options.getMaxJumpHeight()), true, 0);
+                    double lowest = upOnly ? cur.y + options.getStepHeight() + 0.05 : cur.y - options.getMaxFallDistance();
+                    ly = space.supportTop(plx, plz, space.getSupportRadius(), lowest, cur.y + Math.min(arc.apex() - 0.05,
+                            options.getMaxJumpHeight()), true, 0);
                     if(!Double.isNaN(ly)) {
                         landingX = plx;
                         landingZ = plz;
@@ -664,6 +697,8 @@ public final class GridSearch
                 minH = current.h;
             if(listener != null)
                 listener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
+
+            visit(current);
 
             if(Math.sqrt(sq(current.x - goalX) + sq(current.y - goalY) + sq(current.z - goalZ)) <= step * 0.9 + EPS)
             {

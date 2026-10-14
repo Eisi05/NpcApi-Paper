@@ -3,15 +3,11 @@ package de.eisi05.npc.api.pathfinding.algorithm;
 import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.pathfinding.PathResult;
 import de.eisi05.npc.api.pathfinding.PathingResult;
-import de.eisi05.npc.api.pathfinding.environment.BlockProfile;
-import de.eisi05.npc.api.pathfinding.environment.BlockView;
-import de.eisi05.npc.api.pathfinding.environment.ChunkSnapshotView;
-import de.eisi05.npc.api.pathfinding.environment.PassableOverrides;
+import de.eisi05.npc.api.pathfinding.environment.*;
 import de.eisi05.npc.api.pathfinding.movement.MoveType;
 import de.eisi05.npc.api.pathfinding.movement.NavCapabilities;
 import de.eisi05.npc.api.pathfinding.movement.NavOptions;
 import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
-import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -24,6 +20,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * Base abstract class for NPC pathfinding algorithms. Handles shared configuration, block classification helpers and world access.
@@ -41,6 +38,7 @@ public abstract class AbstractPathfinder
     private @Nullable BlockView blockView;
     private @Nullable NavCapabilities capabilities;
     private @Nullable BooleanSupplier cancellation;
+    private @Nullable Consumer<Location> visualizer;
     private PathingResult lastResult = PathingResult.NO_PATH;
     private int lastIterations;
 
@@ -61,8 +59,8 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * Checks if a block is safe to stand on. Reads the live world: call it from the thread that owns the block (main thread on Paper, the owning region
-     * thread on Folia). A block that the current thread may not read is reported as not safe.
+     * Checks if a block is safe to stand on. Reads the live world: call it from the thread that owns the block (main thread on Paper, the owning region thread
+     * on Folia). A block that the current thread may not read is reported as not safe.
      *
      * @param block the block to check
      * @return true if the block is safe to stand on, false otherwise
@@ -80,8 +78,8 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * Retrieves the collision boxes for a block. Backed by the global {@link BlockProfile} cache (one entry per block state, no per-call allocation of
-     * Bukkit voxel shapes). Reads the live block: region thread only (see {@link WorldAccess}).
+     * Retrieves the collision boxes for a block. Backed by the global {@link BlockProfile} cache (one entry per block state, no per-call allocation of Bukkit
+     * voxel shapes). Reads the live block: region thread only (see {@link WorldAccess}).
      *
      * @param block the block to check
      * @return bounding box collection (block-local coordinates) for the block's current state
@@ -114,8 +112,8 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * Makes this pathfinder read blocks from the given view instead of creating its own snapshots. Used to share one prefetched view across all segments of
-     * a path. The view must only be used by this pathfinder (and thread) while it is set.
+     * Makes this pathfinder read blocks from the given view instead of creating its own snapshots. Used to share one prefetched view across all segments of a
+     * path. The view must only be used by this pathfinder (and thread) while it is set.
      *
      * @param view the view, or null to go back to per-search snapshots
      * @return this pathfinder
@@ -140,6 +138,20 @@ public abstract class AbstractPathfinder
     }
 
     /**
+     * Sets a visualizer callback that receives the location of every node visited during pathfinding. This can be used to display particles or other visual
+     * feedback to show which blocks are being explored. The callback is called on the main thread for synchronous searches and on the pathfinding thread for
+     * async searches.
+     *
+     * @param visualizer a consumer that receives visited node locations, or null to disable visualization
+     * @return this pathfinder
+     */
+    public @NotNull AbstractPathfinder useVisualizer(@Nullable Consumer<Location> visualizer)
+    {
+        this.visualizer = visualizer;
+        return this;
+    }
+
+    /**
      * Lets the caller abort a running search: the supplier is polled every few dozen iterations and, once it returns true, the search stops with
      * {@link PathingResult#CANCELLED}. This is what makes cancelling the future returned by {@code findPathAsync} actually stop the work.
      *
@@ -150,6 +162,14 @@ public abstract class AbstractPathfinder
     {
         this.cancellation = cancellation;
         return this;
+    }
+
+    /**
+     * @return the visualizer set with {@link #useVisualizer(Consumer)}, or null
+     */
+    protected @Nullable Consumer<Location> visualizer()
+    {
+        return visualizer;
     }
 
     /**
@@ -169,8 +189,8 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * Returns the outcome of the most recent {@link #getPathResult} call on this instance: {@link PathingResult#SUCCESS}, or the reason why it returned
-     * null / threw. Pathfinder instances are created per calculation, so this is only meaningful on the instance that did the calculation.
+     * Returns the outcome of the most recent {@link #getPathResult} call on this instance: {@link PathingResult#SUCCESS}, or the reason why it returned null /
+     * threw. Pathfinder instances are created per calculation, so this is only meaningful on the instance that did the calculation.
      *
      * @return the last result
      */
@@ -258,8 +278,8 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * Calculates a path from start to end and returns the points together with the {@link MoveType} of every point (walking, jumping, climbing, swimming,
-     * gap jumps, ...). This is the method pathfinder implementations provide; {@link #getPath(Location, Location, BiConsumer)} is derived from it.
+     * Calculates a path from start to end and returns the points together with the {@link MoveType} of every point (walking, jumping, climbing, swimming, gap
+     * jumps, ...). This is the method pathfinder implementations provide; {@link #getPath(Location, Location, BiConsumer)} is derived from it.
      *
      * @param start            The starting location
      * @param end              The target location
@@ -271,9 +291,9 @@ public abstract class AbstractPathfinder
             throws PathfindingUtils.PathfindingException;
 
     /**
-     * Interface representing a factory that creates Pathfinder instances. This avoids thread-safety issues by providing fresh instances per
-     * calculation: a pathfinder instance (and the {@link BlockView} it uses) belongs to one search on one thread, while the factories themselves are
-     * immutable and may be shared freely.
+     * Interface representing a factory that creates Pathfinder instances. This avoids thread-safety issues by providing fresh instances per calculation: a
+     * pathfinder instance (and the {@link BlockView} it uses) belongs to one search on one thread, while the factories themselves are immutable and may be
+     * shared freely.
      */
     public interface PathfinderFactory<T extends AbstractPathfinder>
     {

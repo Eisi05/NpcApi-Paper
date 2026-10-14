@@ -512,7 +512,8 @@ public class AttackEntityGoal extends EntityTargetGoal
         if(world == null || targetLoc.getWorld() != world)
             return false;
 
-        if(!Bukkit.isOwnedByCurrentRegion(world, Math.min(npcLoc.getBlockX(), targetLoc.getBlockX()) >> 4, Math.min(npcLoc.getBlockZ(), targetLoc.getBlockZ()) >> 4,
+        if(!WorldAccess.ownsChunks(world, Math.min(npcLoc.getBlockX(), targetLoc.getBlockX()) >> 4,
+                Math.min(npcLoc.getBlockZ(), targetLoc.getBlockZ()) >> 4,
                 Math.max(npcLoc.getBlockX(), targetLoc.getBlockX()) >> 4, Math.max(npcLoc.getBlockZ(), targetLoc.getBlockZ()) >> 4))
             return true;
 

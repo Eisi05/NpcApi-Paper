@@ -20,10 +20,12 @@ import java.util.function.BiConsumer;
  * Compared to the old implementation it
  * <ul>
  *     <li>works on exact surface heights (slabs, stairs, snow, carpets) and the real collision shapes of every block,</li>
- *     <li>knows about hazards (lava, fire, magma, cactus, campfires, berry bushes, ...), water, webs, doors/gates, ice, soul sand, honey, ledges and walls,</li>
+ *     <li>knows about hazards (lava, fire, magma, cactus, campfires, berry bushes, ...), water, webs, doors/gates, ice, soul sand, honey, ledges and walls,
+ *     </li>
  *     <li>plans jumps and drops in one move generator with configurable limits ({@link NavOptions}),</li>
  *     <li>uses an indexed heap and per-search memoized block lookups instead of {@code PriorityQueue.contains/remove} and live world access,</li>
- *     <li>straightens the grid path with swept line-of-sight checks (when enabled and diagonal movement is allowed) so NPCs no longer walk staircase patterns.</li>
+ *     <li>straightens the grid path with swept line-of-sight checks (when enabled and diagonal movement is allowed) so NPCs no longer walk staircase
+ *     patterns.</li>
  * </ul>
  */
 public class AStarPathfinder extends AbstractPathfinder
@@ -59,8 +61,8 @@ public class AStarPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Checks if an entity of the given size fits at a position without touching solid or dangerous blocks. Reads the live world, so call it from the thread that
-     * owns the position (main thread on Paper, the owning region thread on Folia); blocks that thread may not read count as empty.
+     * Checks if an entity of the given size fits at a position without touching solid or dangerous blocks. Reads the live world, so call it from the thread
+     * that owns the position (main thread on Paper, the owning region thread on Folia); blocks that thread may not read count as empty.
      *
      * @param world        the world in which to check the position
      * @param tx           the target X coordinate (center)
@@ -76,8 +78,8 @@ public class AStarPathfinder extends AbstractPathfinder
     }
 
     /**
-     * Same as {@link #getPath(Location, Location, BiConsumer)} but also returns the {@link MoveType} of every point. This is the primary
-     * calculation method; {@code getPath} just returns its points.
+     * Same as {@link #getPath(Location, Location, BiConsumer)} but also returns the {@link MoveType} of every point. This is the primary calculation method;
+     * {@code getPath} just returns its points.
      *
      * @param start            the starting location
      * @param end              the target location
@@ -99,6 +101,7 @@ public class AStarPathfinder extends AbstractPathfinder
         NavSpace space = new NavSpace(resolveView(world, start, end), entityHeight, entityWidth, effectiveOptions(options));
         GridSearch search = new GridSearch(space, 1.0, false, allowDiagonal, maxIterations);
         search.setCancellation(cancellation());
+        search.setVisualizer(visualizer());
         try
         {
             return search.search(start, end, progressListener);
