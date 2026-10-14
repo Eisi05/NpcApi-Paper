@@ -136,7 +136,7 @@ public class MovementData implements Serializable
      */
     public @NotNull Pose getPose()
     {
-        return pose;
+        return pose == null ? Pose.STANDING : pose;
     }
 
     /**
