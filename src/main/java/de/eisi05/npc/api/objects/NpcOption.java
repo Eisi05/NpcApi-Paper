@@ -653,12 +653,8 @@ public class NpcOption<T, S extends Serializable>
 
                 if(!npc.getOption(NpcOption.HIDE_NAMETAG, player))
                 {
-                    if(Versions.isCurrentVersionSmallerThan(Versions.V1_21))
-                        packets.add((Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(
-                                npc.getNameTag().getDisplay(), Var.obfuscated ? "dl" : "getAddEntityPacket").get());
-                    else
-                        packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket(
-                                Var.getServerEntity((Display.TextDisplay) npc.getNameTag().getDisplay(), Var.getServerLevel(npc.serverPlayer))));
+                    packets.add((Packet<? super ClientGamePacketListener>) Reflections.invokeMethod(
+                            npc.getNameTag().getDisplay(), Var.obfuscated ? "dl" : "getAddEntityPacket").get());
 
                     packets.add(((Display.TextDisplay) npc.getNameTag().getDisplay()).getAddEntityPacket());
                     packets.add(

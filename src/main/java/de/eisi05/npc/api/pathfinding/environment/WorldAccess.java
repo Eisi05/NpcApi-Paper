@@ -65,17 +65,10 @@ public final class WorldAccess
      */
     public static boolean ownsChunks(World world, int minCx, int minCz, int maxCx, int maxCz)
     {
-        try
-        {
-            return Bukkit.isOwnedByCurrentRegion(world, minCx, minCz, maxCx, maxCz);
-        }
-        catch(Throwable t)
-        {
-            int centerX = (minCx + maxCx) >> 1;
-            int centerZ = (minCz + maxCz) >> 1;
-            int radius = Math.max(Math.max(centerX - minCx, maxCx - centerX), Math.max(centerZ - minCz, maxCz - centerZ));
-            return Bukkit.isOwnedByCurrentRegion(world, centerX, centerZ, radius);
-        }
+        int centerX = (minCx + maxCx) >> 1;
+        int centerZ = (minCz + maxCz) >> 1;
+        int radius = Math.max(Math.max(centerX - minCx, maxCx - centerX), Math.max(centerZ - minCz, maxCz - centerZ));
+        return Bukkit.isOwnedByCurrentRegion(world, centerX, centerZ, radius);
     }
 
     /**
