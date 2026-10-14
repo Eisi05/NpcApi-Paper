@@ -2,11 +2,14 @@ package de.eisi05.npc.api.ai.goals;
 
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
-import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
+import de.eisi05.npc.api.objects.NpcOption;
 import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.pathfinding.movement.MovementMode;
+import de.eisi05.npc.api.pathfinding.movement.NavCapabilities;
+import de.eisi05.npc.api.pathfinding.util.PlacementProbe;
+import net.minecraft.world.phys.AABB;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -16,7 +19,7 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * A goal that makes the NPC wander randomly to nearby locations. The NPC will pick a random location within a specified radius and walk to it.
  */
-public class WanderGoal extends Goal
+public class WanderGoal extends PathfindingGoal
 {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -24,7 +27,7 @@ public class WanderGoal extends Goal
     public static final int DEFAULT_RADIUS = 10;
     public static final int DEFAULT_MIN_DELAY = 40; // 2 seconds
     public static final int DEFAULT_MAX_DELAY = 140; // 7 seconds
-    private static final int[] LOCAL_Y_OFFSETS = {0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5};
+    private static final int GROUND_SEARCH_RANGE = 5;
 
     private int radius;
     private int minDelay;
@@ -81,11 +84,12 @@ public class WanderGoal extends Goal
      */
     private WanderGoal(@NotNull WanderGoal goal)
     {
-        super(goal.getPriority());
+        super(goal);
         this.radius = goal.radius;
         this.minDelay = goal.minDelay;
         this.maxDelay = goal.maxDelay;
         this.speed = goal.speed;
+        this.centerLocation = goal.centerLocation;
     }
 
     /**
@@ -283,7 +287,9 @@ public class WanderGoal extends Goal
     }
 
     /**
-     * Picks a new random target location near the NPC.
+     * Picks a new random target location near the NPC. Runs in the NPC's region (the goal selector ticks there); candidate spots that lie in chunks this
+     * region does not own are rejected by the {@link PlacementProbe} (see {@link PlacementProbe#isReadable}), so near a region border the NPC simply picks
+     * one of its other attempts.
      */
     private void pickNewTarget(@NotNull NPC npc)
     {
@@ -292,6 +298,15 @@ public class WanderGoal extends Goal
 
         if(world == null)
             return;
+
+        NavCapabilities capabilities = npc.getNavCapabilities();
+        MovementMode mode = capabilities.movement();
+
+        AABB boundingBox = (AABB) npc.getDefaultBoundingBox();
+        double scale = npc.getOption(NpcOption.SCALE);
+        double width = boundingBox.getXsize() * scale;
+        double height = boundingBox.getYsize() * scale;
+        PlacementProbe probe = new PlacementProbe(world, height, width, capabilities);
 
         int attempts = 0;
         while(attempts < 10)
@@ -302,7 +317,12 @@ public class WanderGoal extends Goal
             double x = currentLoc.getX() + Math.cos(angle) * distance;
             double z = currentLoc.getZ() + Math.sin(angle) * distance;
 
-            Location safeSpot = findLocalSafeTarget(world, x, currentLoc.getY(), z);
+            Location safeSpot = switch(mode)
+            {
+                case GROUND -> findGroundTarget(probe, capabilities, world, x, currentLoc.getY(), z);
+                case FLYING -> findAirTarget(probe, world, x, currentLoc.getY(), z);
+                case AQUATIC -> findWaterTarget(probe, world, x, currentLoc.getY(), z);
+            };
             if(safeSpot != null)
             {
                 targetLocation = safeSpot;
@@ -328,38 +348,53 @@ public class WanderGoal extends Goal
     }
 
     /**
-     * Finds a safe location to move to by checking the blocks around the given location.
+     * Finds a place the NPC can stand on near the given height: the closest surface where the NPC's whole bounding box fits and that is not a hazard. Deep
+     * water is skipped for NPCs that cannot swim, and any water for NPCs that avoid it.
      *
-     * @param world the world of the location
-     * @param x the x coordinate of the location
-     * @param startY the starting y value of the location
-     * @param z the z coordinate of the location
-     * @return the safe location or null if no safe location is found
+     * @param probe the placement probe for this NPC's size
+     * @param x     the x coordinate of the location
+     * @param nearY the height to search around
+     * @param z     the z coordinate of the location
+     * @return the location or null if there is no suitable spot
      */
-    private @Nullable Location findLocalSafeTarget(@NotNull World world, double x, double startY, double z)
+    private @Nullable Location findGroundTarget(@NotNull PlacementProbe probe, @NotNull NavCapabilities capabilities, @NotNull World world, double x,
+                                                double nearY, double z)
     {
-        int blockX = (int) Math.floor(x);
-        int blockZ = (int) Math.floor(z);
-        int baseY = (int) Math.floor(startY);
+        double standY = probe.groundY(x, nearY, z, GROUND_SEARCH_RANGE);
+        if(Double.isNaN(standY))
+            return null;
 
-        for(int dy : LOCAL_Y_OFFSETS)
-        {
-            int checkY = baseY + dy;
-            if(checkY < world.getMinHeight() + 1 || checkY >= world.getMaxHeight() - 2)
-                continue;
+        if(capabilities.avoidWater() && probe.isInWater(x, standY, z))
+            return null;
 
-            Block floor = world.getBlockAt(blockX, checkY - 1, blockZ);
-            Block feet = world.getBlockAt(blockX, checkY, blockZ);
-            Block head = world.getBlockAt(blockX, checkY + 1, blockZ);
+        if(!capabilities.canSwim() && probe.isSubmerged(x, standY, z))
+            return null;
 
-            if(AbstractPathfinder.isSafeFloor(floor) && feet.isPassable() && head.isPassable())
-            {
-                double exactY = AbstractPathfinder.getFloorSurfaceY(floor);
-                return new Location(world, x, exactY, z);
-            }
-        }
+        return new Location(world, x, standY, z);
+    }
 
-        return null;
+    /**
+     * Finds a spot of open air at a random height around {@code y} where the flying NPC fits.
+     */
+    private @Nullable Location findAirTarget(@NotNull PlacementProbe probe, @NotNull World world, double x, double y, double z)
+    {
+        double targetY = y + ThreadLocalRandom.current().nextDouble(-2.0, 4.0);
+        if(targetY < world.getMinHeight() + 1 || targetY >= world.getMaxHeight() - 3)
+            return null;
+
+        return probe.fitsAt(x, targetY, z) ? new Location(world, x, targetY, z) : null;
+    }
+
+    /**
+     * Finds a spot in water at a random depth around {@code y} where the aquatic NPC fits.
+     */
+    private @Nullable Location findWaterTarget(@NotNull PlacementProbe probe, @NotNull World world, double x, double y, double z)
+    {
+        double targetY = y + ThreadLocalRandom.current().nextDouble(-3.0, 3.0);
+        if(targetY < world.getMinHeight() + 1 || targetY >= world.getMaxHeight() - 3)
+            return null;
+
+        return probe.fitsInWater(x, targetY, z) ? new Location(world, x, targetY, z) : null;
     }
 
     private float calculateYaw(@NotNull Location current, @NotNull Location target)

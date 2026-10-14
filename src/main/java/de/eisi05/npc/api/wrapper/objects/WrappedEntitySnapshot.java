@@ -3,6 +3,7 @@ package de.eisi05.npc.api.wrapper.objects;
 import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.utils.SerializableFunction;
 import de.eisi05.npc.api.utils.Var;
@@ -127,6 +128,11 @@ public class WrappedEntitySnapshot implements Serializable
      * @param world The world to create the entity in
      * @return A wrapped entity instance
      * @throws RuntimeException If the entity could not be created
+     *                          <p>
+     *                          <b>Threading:</b> the entity is only created, never added to the world, so any thread may call this (on Folia the thread of the
+     *                          player the NPC is being shown to). The entity function given to the constructor runs on that same thread, on an entity that is
+     *                          not in the world yet. Callers must not run two {@code create} calls for the same NPC at the same time; {@code NpcOption.ENTITY}
+     *                          serialises them per NPC.
      */
     public @NotNull net.minecraft.world.entity.Entity create(@NotNull World world, @NotNull NPC npc)
     {
@@ -136,7 +142,18 @@ public class WrappedEntitySnapshot implements Serializable
         entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(data, ((CraftWorld) world).getHandle(), Function.identity());
 
         npc.data = data.toString();
-        return entityFunction == null ? entity : ((CraftEntity) entityFunction.apply(Var.unsafeCast(entity.getBukkitEntity()))).getHandle();
+        if(entityFunction == null)
+            return entity;
+
+        try
+        {
+            return ((CraftEntity) entityFunction.apply(Var.unsafeCast(entity.getBukkitEntity()))).getHandle();
+        }
+        catch(IllegalStateException e)
+        {
+            NpcApi.plugin.getLogger().warning("The entity function of an NPC (" + type + ") could not be applied from this thread: " + e.getMessage());
+            return entity;
+        }
     }
 
     private static class SnapshotDataJsonAdapter implements JsonSerializer<byte[]>, JsonDeserializer<byte[]>

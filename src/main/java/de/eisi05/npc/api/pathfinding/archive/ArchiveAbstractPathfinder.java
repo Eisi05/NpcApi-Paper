@@ -1,4 +1,4 @@
-package de.eisi05.npc.api.pathfinding;
+package de.eisi05.npc.api.pathfinding.archive;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -20,7 +20,8 @@ import java.util.function.BiConsumer;
 /**
  * Base abstract class for NPC pathfinding algorithms. Handles shared configuration, safety checks, and surface resolution.
  */
-public abstract class AbstractPathfinder
+@Deprecated
+public abstract class ArchiveAbstractPathfinder
 {
     private static final Cache<BlockData, Collection<BoundingBox>> BLOCK_BOX_CACHE = CacheBuilder.newBuilder()
             .maximumSize(5000)
@@ -40,7 +41,7 @@ public abstract class AbstractPathfinder
      * @param entityHeight  the height of the entity
      * @param entityWidth   the width of the entity
      */
-    public AbstractPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
+    public ArchiveAbstractPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
         this.maxIterations = maxIterations;
         this.allowDiagonal = allowDiagonal;
@@ -133,9 +134,9 @@ public abstract class AbstractPathfinder
      * @param start The starting location
      * @param end   The target location
      * @return A list of locations forming the path, or null if unreachable
-     * @throws PathfindingUtils.PathfindingException if start or end location is invalid
+     * @throws ArchivePathfindingUtils.PathfindingException if start or end location is invalid
      */
-    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end) throws PathfindingUtils.PathfindingException
+    public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end) throws ArchivePathfindingUtils.PathfindingException
     {
         return getPath(start, end, null);
     }
@@ -147,10 +148,10 @@ public abstract class AbstractPathfinder
      * @param end              The target location
      * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return A list of locations forming the path, or null if unreachable
-     * @throws PathfindingUtils.PathfindingException if start or end location is invalid
+     * @throws ArchivePathfindingUtils.PathfindingException if start or end location is invalid
      */
     public abstract @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable BiConsumer<Double, Integer> progressListener)
-            throws PathfindingUtils.PathfindingException;
+            throws ArchivePathfindingUtils.PathfindingException;
 
 
     /**
@@ -158,10 +159,10 @@ public abstract class AbstractPathfinder
      * calculation.
      */
     @FunctionalInterface
-    public interface PathfinderFactory<T extends AbstractPathfinder>
+    public interface PathfinderFactory<T extends ArchiveAbstractPathfinder>
     {
-        PathfinderFactory<AStarPathfinder> ASTAR = AStarPathfinder::new;
-        PathfinderFactory<BoundingBoxPathfinder> BOUNDING_BOX = BoundingBoxPathfinder::new;
+        PathfinderFactory<ArchiveAStarPathfinder> ASTAR = ArchiveAStarPathfinder::new;
+        PathfinderFactory<ArchiveBoundingBoxPathfinder> BOUNDING_BOX = ArchiveBoundingBoxPathfinder::new;
 
         /**
          * Creates a factory for the BoundingBoxPathfinder with a custom grid step.
@@ -169,10 +170,10 @@ public abstract class AbstractPathfinder
          * @param gridStep the grid step to use for the pathfinder
          * @return a new PathfinderFactory instance
          */
-        static PathfinderFactory<BoundingBoxPathfinder> boundingBox(double gridStep)
+        static PathfinderFactory<ArchiveBoundingBoxPathfinder> boundingBox(double gridStep)
         {
             return (maxIterations, allowDiagonal, entityHeight, entityWidth) ->
-                    new BoundingBoxPathfinder(maxIterations, allowDiagonal, entityHeight, entityWidth, gridStep);
+                    new ArchiveBoundingBoxPathfinder(maxIterations, allowDiagonal, entityHeight, entityWidth, gridStep);
         }
 
         /**

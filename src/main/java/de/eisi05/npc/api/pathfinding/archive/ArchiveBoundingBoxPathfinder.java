@@ -1,4 +1,4 @@
-package de.eisi05.npc.api.pathfinding;
+package de.eisi05.npc.api.pathfinding.archive;
 
 import de.eisi05.npc.api.NpcApi;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -21,7 +21,8 @@ import java.util.function.BiConsumer;
  * exact collision shape measurement. When obstacles like open trapdoors, fence edges, or wall frames partially block a path, the pathfinder calculates the
  * exact width/depth offset needed to clear the obstacle boundary and tests if the NPC can smoothly navigate around it.
  */
-public class BoundingBoxPathfinder extends AbstractPathfinder
+@Deprecated
+public class ArchiveBoundingBoxPathfinder extends ArchiveAbstractPathfinder
 {
     private final double gridStep;
     private final double maxJumpHeight;
@@ -44,7 +45,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
      * @param entityHeight  the height of the entity
      * @param entityWidth   the width of the entity
      */
-    public BoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
+    public ArchiveBoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
         this(maxIterations, allowDiagonal, entityHeight, entityWidth, 0.25, 1.25, 3.0);
     }
@@ -58,7 +59,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
      * @param entityWidth   the width of the entity
      * @param gridStep      the sub-grid step size
      */
-    public BoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth, double gridStep)
+    public ArchiveBoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth, double gridStep)
     {
         this(maxIterations, allowDiagonal, entityHeight, entityWidth, gridStep, 1.25, 3.0);
     }
@@ -74,8 +75,8 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
      * @param maxJumpHeight   the maximum height the entity can jump
      * @param maxFallDistance the maximum safe fall distance for the entity
      */
-    public BoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth, double gridStep,
-                                 double maxJumpHeight, double maxFallDistance)
+    public ArchiveBoundingBoxPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth, double gridStep,
+                                        double maxJumpHeight, double maxFallDistance)
     {
         super(maxIterations, allowDiagonal, entityHeight, entityWidth);
         this.gridStep = Math.clamp(0.01, gridStep, 1);
@@ -546,11 +547,11 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
      * @param end              the target destination location
      * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a list of locations representing the smoothed path, or null if unreachable
-     * @throws PathfindingUtils.PathfindingException if start or end locations lack valid floor support
+     * @throws ArchivePathfindingUtils.PathfindingException if start or end locations lack valid floor support
      */
     @Override
     public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable BiConsumer<Double, Integer> progressListener)
-            throws PathfindingUtils.PathfindingException
+            throws ArchivePathfindingUtils.PathfindingException
     {
         if(start.getWorld() == null || end.getWorld() == null || !start.getWorld().equals(end.getWorld()))
             return null;
@@ -567,7 +568,7 @@ public class BoundingBoxPathfinder extends AbstractPathfinder
         if(NpcApi.config.checkValidPath())
         {
             if(!endSupport.valid())
-                throw new PathfindingUtils.PathfindingException("End location has no valid ground support: " + end);
+                throw new ArchivePathfindingUtils.PathfindingException("End location has no valid ground support: " + end);
         }
 
         double startFeetY = startSupport.valid() ? startSupport.feetY() : start.getY();

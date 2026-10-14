@@ -10,18 +10,20 @@ import java.io.Serializable;
  * Manages the combat-related state and death behavior of an NPC.
  *
  * <p>Handles health, knockback, death behavior, respawning, and respawn locations.</p>
+ * <p>The values are volatile because they are read and written by different threads (attackers, projectiles, the NPC's region thread on Folia); the damage
+ * listener serialises compound changes with a per-NPC lock.</p>
  */
 public class NpcCombatManager implements Serializable
 {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private boolean enabled = false;
-    private double maxHealth = 20.0; // -1 = invulnerable
-    private double currentHealth = 20.0;
-    private double knockbackMultiplier = 1.0;
+    private volatile boolean enabled = false;
+    private volatile double maxHealth = 20.0; // -1 = invulnerable
+    private volatile double currentHealth = 20.0;
+    private volatile double knockbackMultiplier = 1.0;
 
-    private NpcClickAction deathAction = null;
+    private volatile NpcClickAction deathAction = null;
 
     /**
      * Creates a copy of this combat manager with the same configuration and current state.

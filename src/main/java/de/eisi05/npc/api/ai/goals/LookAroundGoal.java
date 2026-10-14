@@ -3,7 +3,9 @@ package de.eisi05.npc.api.ai.goals;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.jetbrains.annotations.NotNull;
@@ -16,10 +18,11 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class LookAroundGoal extends Goal
 {
-    public static final int DEFAULT_MIN_DURATION = 20; // 1 second
-    public static final int DEFAULT_MAX_DURATION = 80; // 4 seconds
     @Serial
     private static final long serialVersionUID = 1L;
+
+    public static final int DEFAULT_MIN_DURATION = 20; // 1 second
+    public static final int DEFAULT_MAX_DURATION = 80; // 4 seconds
     private static final float YAW_CHANGE_MAX = 120f;
     private static final float PITCH_CHANGE_MAX = 40f;
     private static final double ENTITY_LOOK_RANGE = 8.0;
@@ -38,6 +41,12 @@ public class LookAroundGoal extends Goal
     private transient boolean isLooking;
     private transient float rotationSpeed;
     private transient LivingEntity staringEntity;
+    private transient float currentYaw;
+    private transient float currentPitch;
+    private transient int lastYawByte;
+    private transient int lastPitchByte;
+    private transient int sinceSend;
+    private transient boolean hasSent;
 
     /**
      * Creates a LookAroundGoal with default duration.
@@ -132,10 +141,14 @@ public class LookAroundGoal extends Goal
     @Override
     public void start(@NotNull NPC npc)
     {
-        ticksRemaining = minDuration + ThreadLocalRandom.current().nextInt(maxDuration - minDuration);
+        ticksRemaining = randomDuration();
+        Location startLoc = npc.getLocation();
+        currentYaw = startLoc.getYaw();
+        currentPitch = startLoc.getPitch();
+        hasSent = false;
         isLooking = true;
         rotationSpeed = 0.05f + ThreadLocalRandom.current().nextFloat() * 0.15f;
-        pickNewLookDirection(npc);
+        pickNewLookDirection();
     }
 
     /**
@@ -149,17 +162,19 @@ public class LookAroundGoal extends Goal
         if(ticksRemaining <= 0 && staringEntity == null)
         {
             decideNextAction(npc);
-            ticksRemaining = minDuration + ThreadLocalRandom.current().nextInt(maxDuration - minDuration);
+            ticksRemaining = randomDuration();
+        }
+
+        if(staringEntity != null && !Bukkit.isOwnedByCurrentRegion(staringEntity))
+        {
+            staringEntity = null;
+            ticksRemaining = 0;
         }
 
         if(staringEntity != null && ticksRemaining > 0)
             lookAtEntity(npc, staringEntity);
         else if(staringEntity != null)
             staringEntity = null;
-
-        Location currentLoc = npc.getLocation();
-        float currentYaw = currentLoc.getYaw();
-        float currentPitch = currentLoc.getPitch();
 
         float newYaw, newPitch;
         if(staringEntity != null && ticksRemaining > 0)
@@ -175,11 +190,26 @@ public class LookAroundGoal extends Goal
 
         newPitch = Math.clamp(newPitch, -PITCH_MIN_MAX, PITCH_MIN_MAX);
 
-        currentLoc.setYaw(newYaw);
-        currentLoc.setPitch(newPitch);
+        currentYaw = newYaw;
+        currentPitch = newPitch;
 
-        npc.rotateHead(newYaw, newPitch);
-        npc.setLocation(currentLoc);
+        int yawByte = (byte) (newYaw * 256 / 360);
+        int pitchByte = (byte) (newPitch * 256 / 360);
+        sinceSend++;
+        if(!hasSent || yawByte != lastYawByte || pitchByte != lastPitchByte || sinceSend >= 20)
+        {
+            hasSent = true;
+            lastYawByte = yawByte;
+            lastPitchByte = pitchByte;
+            sinceSend = 0;
+
+            Location currentLoc = npc.getLocation();
+            currentLoc.setYaw(newYaw);
+            currentLoc.setPitch(newPitch);
+
+            npc.rotateHead(newYaw, newPitch);
+            npc.setLocation(currentLoc);
+        }
 
         ticksRemaining--;
     }
@@ -195,6 +225,14 @@ public class LookAroundGoal extends Goal
         isLooking = false;
         ticksRemaining = 0;
         staringEntity = null;
+
+        if(hasSent)
+        {
+            Location currentLoc = npc.getLocation();
+            currentLoc.setYaw(currentYaw);
+            currentLoc.setPitch(currentPitch);
+            npc.setLocation(currentLoc);
+        }
     }
 
     /**
@@ -237,20 +275,30 @@ public class LookAroundGoal extends Goal
             rotationSpeed = 0.02f + ThreadLocalRandom.current().nextFloat() * 0.03f;
         else
         {
-            pickNewLookDirection(npc);
+            pickNewLookDirection();
             rotationSpeed = 0.05f + ThreadLocalRandom.current().nextFloat() * 0.15f;
         }
     }
 
     /**
-     * Finds a nearby living entity to look at.
+     * Finds a nearby living entity to look at. Region thread only.
      */
     private LivingEntity findNearbyEntity(@NotNull NPC npc)
     {
         Location npcLoc = npc.getLocation();
-        for(Entity entity : npcLoc.getWorld().getNearbyEntities(npcLoc, ENTITY_LOOK_RANGE, ENTITY_LOOK_RANGE, ENTITY_LOOK_RANGE))
+
+        int radius = (int) Math.ceil(ENTITY_LOOK_RANGE / 16.0) + 1;
+        while(radius > 0 && !Bukkit.isOwnedByCurrentRegion(npcLoc, radius))
+            radius--;
+
+        double range = Math.min(ENTITY_LOOK_RANGE, radius * 16.0);
+        if(range <= 0)
+            return null;
+
+        for(Entity entity : npcLoc.getWorld().getNearbyEntities(npcLoc, range, range, range))
         {
-            if(entity instanceof LivingEntity livingEntity && !entity.equals(((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity()))
+            if(entity instanceof LivingEntity livingEntity && !(entity instanceof ArmorStand) && entity.isValid() &&
+                    !entity.equals(((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity()))
                 return livingEntity;
         }
         return null;
@@ -261,14 +309,14 @@ public class LookAroundGoal extends Goal
      */
     private void lookAtEntity(@NotNull NPC npc, @NotNull LivingEntity entity)
     {
-        net.minecraft.world.entity.Entity npcEntity = (net.minecraft.world.entity.Entity) npc.getEntity();
         Location npcLoc = npc.getLocation();
         Location targetLoc = entity.getLocation();
 
         double dx = targetLoc.getX() - npcLoc.getX();
 
-        double eyeHeight = (npcEntity.getBukkitEntity() instanceof LivingEntity le ? le.getEyeHeight() :
-                npcEntity.getBukkitEntity().getHeight()) - (npc.getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SITTING ? 0.625 : 0);
+        Entity bukkitEntity = ((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity();
+        double eyeHeight = (bukkitEntity instanceof LivingEntity le ? le.getEyeHeight() :
+                bukkitEntity.getHeight()) - (npc.getOption(NpcOption.POSE) == org.bukkit.entity.Pose.SITTING ? 0.625 : 0);
 
         double dy = (targetLoc.getY() + entity.getEyeHeight()) - (npcLoc.getY() + (eyeHeight * npc.getOption(NpcOption.SCALE)));
         double dz = targetLoc.getZ() - npcLoc.getZ();
@@ -283,12 +331,8 @@ public class LookAroundGoal extends Goal
     /**
      * Picks a new random look direction.
      */
-    private void pickNewLookDirection(@NotNull NPC npc)
+    private void pickNewLookDirection()
     {
-        Location currentLoc = npc.getLocation();
-        float currentYaw = currentLoc.getYaw();
-        float currentPitch = currentLoc.getPitch();
-
         float yawMultiplier = ThreadLocalRandom.current().nextDouble() < 0.3 ? 1.5f : 1.0f;
         targetYaw = currentYaw + (ThreadLocalRandom.current().nextFloat() * 2 - 1) * YAW_CHANGE_MAX * yawMultiplier;
 
@@ -302,6 +346,11 @@ public class LookAroundGoal extends Goal
             targetPitch = currentPitch + ThreadLocalRandom.current().nextFloat() * PITCH_CHANGE_MAX;
         else
             targetPitch = currentPitch + (ThreadLocalRandom.current().nextFloat() * 2 - 1) * maxPitchChange;
+    }
+
+    private int randomDuration()
+    {
+        return minDuration + ThreadLocalRandom.current().nextInt(Math.max(1, maxDuration - minDuration));
     }
 
     /**

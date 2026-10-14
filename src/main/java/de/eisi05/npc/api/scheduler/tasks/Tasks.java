@@ -11,7 +11,9 @@ import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.utils.Reflections;
 import org.bukkit.Bukkit;
+import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -40,10 +42,10 @@ public class Tasks
     private static final int MAX_TOKENS = 180;
     private static final AtomicInteger tokens = new AtomicInteger(MAX_TOKENS);
 
-    private static PluginTask lookAtTask;
-    private static PluginTask placeholderTask;
-    private static PluginTask queueProcessorTask;
-    private static PluginTask projectileTask;
+    private static volatile PluginTask lookAtTask;
+    private static volatile PluginTask placeholderTask;
+    private static volatile PluginTask queueProcessorTask;
+    private static volatile PluginTask projectileTask;
 
     /**
      * Starts all defined NPC-related tasks, including the skin fetch queue processor. This method should be called when the plugin is enabled to ensure that
@@ -200,11 +202,22 @@ public class Tasks
                 if(loc == null || loc.getWorld() == null)
                     continue;
 
-                SchedulerProvider.get().runSyncAtLocation(loc, () ->
-                        loc.getNearbyEntities(range, range, range)
-                                .stream()
-                                .filter(entity -> entity instanceof Player)
-                                .forEach(entity -> npc.lookAtPlayer((Player) entity)));
+                World world = loc.getWorld();
+                if(!world.isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4))
+                    continue;
+
+                Location where = loc.clone();
+                SchedulerProvider.get().runSyncAtLocation(where, () ->
+                {
+                    double usable = WorldAccess.ownedRange(where, range);
+                    if(usable <= 0)
+                        return;
+
+                    where.getNearbyEntities(usable, usable, usable)
+                            .stream()
+                            .filter(entity -> entity instanceof Player)
+                            .forEach(entity -> npc.lookAtPlayer((Player) entity));
+                });
             }
         }, 0L, NpcApi.config.lookAtTimer());
     }
@@ -238,11 +251,19 @@ public class Tasks
                     if(player == null)
                         continue;
 
-                    NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, player);
-                    if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, player))
-                        continue;
+                    Runnable job = () ->
+                    {
+                        NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, player);
+                        if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, player))
+                            return;
 
-                    updateSkin(player, npc, npcSkin);
+                        updateSkin(player, npc, npcSkin);
+                    };
+
+                    if(SchedulerProvider.isFolia())
+                        SchedulerProvider.get().runSyncForEntity(player, job);
+                    else
+                        job.run();
                 }
             }
         }, 10, NpcApi.config.placeholderTimer());
@@ -250,7 +271,8 @@ public class Tasks
 
     /**
      * Updates the skin of an NPC for a specific player based on a placeholder value. This method handles both UUID and string-based skin lookups, and updates
-     * the NPC's skin asynchronously when the skin is fetched via the queue.
+     * the NPC's skin asynchronously when the skin is fetched via the queue. Placeholders are resolved against the player, so call it from the thread that owns
+     * the player (the main thread on Paper, the player's entity scheduler on Folia); the final skin update is scheduled for the player by this method.
      *
      * @param player  The player who will see the updated skin. Must not be null.
      * @param npc     The NPC whose skin will be updated. Must not be null.
@@ -276,12 +298,12 @@ public class Tasks
         {
             UUID skinUuid = UUID.fromString(newPlaceholder);
             fetchSkinAsync(skinUuid).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
-                    SchedulerProvider.get().runDelayed(() -> npc.updateSkin(player), 1L)));
+                    SchedulerProvider.get().runLaterForEntity(player, () -> npc.updateSkin(player), 1L)));
         }
         catch(IllegalArgumentException e)
         {
             fetchSkinAsync(newPlaceholder).thenAccept(skinOpt -> skinOpt.ifPresent(skin ->
-                    SchedulerProvider.get().runDelayed(() -> npc.updateSkin(player), 1L)));
+                    SchedulerProvider.get().runLaterForEntity(player, () -> npc.updateSkin(player), 1L)));
         }
     }
 

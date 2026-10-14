@@ -4,8 +4,8 @@ import de.eisi05.npc.api.listeners.*;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.*;
-import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.pathfinding.algorithm.AbstractPathfinder;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.Metrics;
@@ -40,7 +40,7 @@ public final class NpcApi
     /**
      * A static reference to the Bukkit plugin instance that is using this API. This is set during the API's initialization.
      */
-    public static Plugin plugin;
+    public static volatile Plugin plugin;
     public static Function<Player, Component> DISABLED_MESSAGE_PROVIDER = player ->
             Component.text("DISABLED").color(NamedTextColor.RED);
 
@@ -49,7 +49,7 @@ public final class NpcApi
     /**
      * The configuration object for the NPC API, containing various settings like the look-at timer.
      */
-    public static NpcConfig config;
+    public static volatile NpcConfig config;
     private static Listener sleepListener;
     private static NpcApi npcApi;
 
@@ -114,6 +114,9 @@ public final class NpcApi
     /**
      * Disables the NPC API, performing the necessary cleanup. This includes hiding all active NPCs from players, clearing the NPC manager, and uninjecting
      * packet readers. It also nullifies the static references.
+     * <p>
+     * <b>Folia:</b> call it from the global region (e.g. {@code onDisable}). Once the plugin is disabled the schedulers refuse new tasks, so the walks and
+     * goals of NPCs are stopped inline on the calling thread as the best effort, and doors that were opened in another region cannot be closed any more.
      */
     public static void disable()
     {

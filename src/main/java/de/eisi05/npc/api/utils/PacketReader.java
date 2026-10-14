@@ -4,6 +4,7 @@ import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.enums.ClickActionType;
 import de.eisi05.npc.api.events.NpcInteractEvent;
 import de.eisi05.npc.api.manager.NpcManager;
+import de.eisi05.npc.api.manager.TeamManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
@@ -14,9 +15,7 @@ import io.netty.channel.ChannelPromise;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.*;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionHand;
@@ -54,6 +53,9 @@ public class PacketReader
     /**
      * Injects a custom {@link ChannelDuplexHandler} into the specified player's Netty pipeline. This handler intercepts incoming packets to check for NPC
      * interactions. The handler is named after the plugin's name to avoid conflicts and ensure proper removal.
+     * <p>
+     * The handler runs on the player's Netty thread, on Paper and Folia alike: custom readers added with {@link #addReader} are called there too and must hand
+     * any world or entity access over to the right scheduler themselves.
      *
      * @param player The {@link Player} whose pipeline is to be injected. Must not be {@code null}.
      */
@@ -84,6 +86,21 @@ public class PacketReader
             @Override
             public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception
             {
+                if(msg instanceof ClientboundSetPlayerTeamPacket teamPacket && checkTeamPacket(player, teamPacket))
+                    return;
+
+                if(msg instanceof ClientboundBundlePacket bundlePacket)
+                {
+                    for(var subPacket : bundlePacket.subPackets())
+                    {
+                        if(subPacket instanceof ClientboundSetPlayerTeamPacket teamPacket)
+                        {
+                            if(checkTeamPacket(player, teamPacket))
+                                return;
+                        }
+                    }
+                }
+
                 if(msg instanceof ClientboundChangeDifficultyPacket difficultyPacket)
                 {
                     if(difficultyPacket.getDifficulty() == Difficulty.PEACEFUL)
@@ -94,7 +111,7 @@ public class PacketReader
                             Component message =
                                     Component.text("Unloaded " + amount + " NPCs because the difficulty changed to peaceful!").color(NamedTextColor.RED);
                             Bukkit.getOnlinePlayers().stream().filter(player1 -> player1.isOp() || player1.hasPermission("npc.admin"))
-                                            .forEach(player1 -> player1.sendMessage(message));
+                                    .forEach(player1 -> player1.sendMessage(message));
                         });
 
                         return;
@@ -115,6 +132,20 @@ public class PacketReader
             channel.pipeline().addLast(NpcApi.plugin.getName(), duplexHandler);
         else
             channel.pipeline().addBefore("packet_handler", NpcApi.plugin.getName(), duplexHandler);
+    }
+
+    private static boolean checkTeamPacket(@NotNull Player player, @NotNull ClientboundSetPlayerTeamPacket teamPacket)
+    {
+        TeamManager.TeamData teamData = TeamManager.getTeamData(player, teamPacket.getName());
+        if(teamData == null)
+            return false;
+
+        if(teamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD)
+        {
+            teamData.setShown(true);
+            return false;
+        }
+        return !teamData.isShown();
     }
 
     /**
@@ -197,7 +228,7 @@ public class PacketReader
      */
     public static void uninject(@NotNull Player player)
     {
-        Channel channel = channels.get(player.getUniqueId());
+        Channel channel = channels.remove(player.getUniqueId());
 
         if(channel == null || NpcApi.plugin == null)
             return;

@@ -9,9 +9,11 @@ import de.eisi05.npc.api.manager.NpcCombatManager;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
-import de.eisi05.npc.api.pathfinding.AbstractPathfinder;
-import de.eisi05.npc.api.pathfinding.BoundingBoxPathfinder;
+import de.eisi05.npc.api.pathfinding.algorithm.AbstractPathfinder;
+import de.eisi05.npc.api.pathfinding.algorithm.BoundingBoxPathfinder;
+import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import de.eisi05.npc.api.scheduler.PluginTask;
+import de.eisi05.npc.api.scheduler.GameTick;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import de.eisi05.npc.api.wrapper.packets.AnimatePacket;
 import net.minecraft.world.phys.AABB;
@@ -51,11 +53,45 @@ public class NpcDamageListener implements Listener
     private static final double HORIZONTAL_DRAG = 0.91;
     private static final double SETTLE_THRESHOLD = 0.015;
 
-    private static final Map<NPC, CombatState> states = new WeakHashMap<>();
-    private static final Map<UUID, Integer> lastAttackTicks = new HashMap<>();
+    private static final Map<NPC, CombatState> states = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<NPC, Object> locks = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<UUID, Integer> lastAttackTicks = new ConcurrentHashMap<>();
 
     private static final Map<Projectile, Location> activeProjectiles = new ConcurrentHashMap<>();
-    private static PluginTask projectileTask;
+    private static volatile PluginTask projectileTask;
+
+    /**
+     * @return the monitor that guards the combat state of the given NPC
+     */
+    private static @NotNull Object lockOf(@NotNull NPC npc)
+    {
+        return locks.computeIfAbsent(npc, n -> new Object());
+    }
+
+    /**
+     * Runs a job at a location on the thread that owns it: inline if the caller already does (always on Paper), otherwise through the region scheduler.
+     * Used for world effects (sounds, particles, area searches) that may be triggered from a thread in another region.
+     */
+    private static void atLocation(@NotNull Location location, @NotNull Runnable job)
+    {
+        if(location.getWorld() == null)
+            return;
+
+        if(Bukkit.isOwnedByCurrentRegion(location))
+        {
+            job.run();
+            return;
+        }
+
+        try
+        {
+            SchedulerProvider.get().runSyncAtLocation(location.clone(), job);
+        }
+        catch(Throwable ignored)
+        {
+            // plugin disabling
+        }
+    }
 
     public static void cleanUpAttack(@NotNull Player player)
     {
@@ -78,7 +114,7 @@ public class NpcDamageListener implements Listener
                 Map.Entry<Projectile, Location> entry = iterator.next();
                 Projectile projectile = entry.getKey();
 
-                if(!projectile.isValid() || projectile.isDead())
+                if(!SchedulerProvider.isFolia() && (!projectile.isValid() || projectile.isDead()))
                 {
                     iterator.remove();
                     continue;
@@ -176,95 +212,109 @@ public class NpcDamageListener implements Listener
 
         state.task = SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), () ->
         {
-            if(!state.physicsRunning)
-                return;
-
-            state.vy -= GRAVITY;
-
-            Location current = npc.getLocation();
-            World world = current.getWorld();
-
-            double cx = current.getX(), cy = current.getY(), cz = current.getZ();
-            double targetX = cx + state.vx, targetZ = cz + state.vz;
-
-            double resolvedX = cx, resolvedZ = cz;
-            if(isBoxClear(world, targetX, cy, targetZ, width, height))
+            synchronized(lockOf(npc))
             {
-                resolvedX = targetX;
-                resolvedZ = targetZ;
-            }
-            else if(isBoxClear(world, targetX, cy, cz, width, height))
-            {
-                resolvedX = targetX;
-                state.vz = 0;
-            }
-            else if(isBoxClear(world, cx, cy, targetZ, width, height))
-            {
-                resolvedZ = targetZ;
-                state.vx = 0;
-            }
-            else
-            {
-                state.vx = 0;
-                state.vz = 0;
-            }
+                if(!state.physicsRunning)
+                    return;
 
-            double resolvedY;
-            state.grounded = false;
-
-            if(state.vy > 0)
-            {
-                if(isBoxClear(world, resolvedX, cy + state.vy, resolvedZ, width, height))
-                    resolvedY = cy + state.vy;
-                else
+                if(!Bukkit.isOwnedByCurrentRegion(npc.getLocation()))
                 {
-                    resolvedY = cy;
-                    state.vy = 0;
+                    runPhysicsTick(npc, state, width, height, wasRunningGoals);
+                    return;
                 }
-            }
-            else
-            {
-                double fallTargetY = cy + state.vy;
-                BoundingBoxPathfinder.FootSupport support =
-                        BoundingBoxPathfinder.resolveGroundSupport(world, resolvedX, cy, resolvedZ, width, 0.1, 10.0);
 
-                if(support.valid() && fallTargetY <= support.feetY())
+                state.vy -= GRAVITY;
+
+                Location current = npc.getLocation();
+                World world = current.getWorld();
+
+                double cx = current.getX(), cy = current.getY(), cz = current.getZ();
+                double targetX = cx + state.vx, targetZ = cz + state.vz;
+
+                double resolvedX = cx, resolvedZ = cz;
+                if(isBoxClear(world, targetX, cy, targetZ, width, height))
                 {
-                    resolvedY = support.feetY();
-                    state.vy = 0;
-                    state.grounded = true;
+                    resolvedX = targetX;
+                    resolvedZ = targetZ;
+                }
+                else if(isBoxClear(world, targetX, cy, cz, width, height))
+                {
+                    resolvedX = targetX;
+                    state.vz = 0;
+                }
+                else if(isBoxClear(world, cx, cy, targetZ, width, height))
+                {
+                    resolvedZ = targetZ;
+                    state.vx = 0;
                 }
                 else
-                    resolvedY = fallTargetY;
+                {
+                    state.vx = 0;
+                    state.vz = 0;
+                }
+
+                double resolvedY;
+                state.grounded = false;
+
+                if(state.vy > 0)
+                {
+                    if(isBoxClear(world, resolvedX, cy + state.vy, resolvedZ, width, height))
+                        resolvedY = cy + state.vy;
+                    else
+                    {
+                        resolvedY = cy;
+                        state.vy = 0;
+                    }
+                }
+                else
+                {
+                    double fallTargetY = cy + state.vy;
+                    BoundingBoxPathfinder.FootSupport support =
+                            BoundingBoxPathfinder.resolveGroundSupport(world, resolvedX, cy, resolvedZ, width, 0.1, 10.0);
+
+                    if(support.valid() && fallTargetY <= support.feetY())
+                    {
+                        resolvedY = support.feetY();
+                        state.vy = 0;
+                        state.grounded = true;
+                    }
+                    else
+                        resolvedY = fallTargetY;
+                }
+
+                npc.changeRealLocation(new Location(world, resolvedX, resolvedY, resolvedZ, current.getYaw(), current.getPitch()));
+
+                double drag = HORIZONTAL_DRAG;
+                if(state.grounded)
+                {
+                    int belowX = (int) Math.floor(resolvedX);
+                    int belowZ = (int) Math.floor(resolvedZ);
+                    if(WorldAccess.canAccess(world, belowX, belowZ))
+                    {
+                        Block blockBelow = world.getBlockAt(belowX, (int) Math.floor(resolvedY - 0.1), belowZ);
+                        drag *= blockBelow.getType().isAir() ? 0.6F : blockBelow.getType().getSlipperiness();
+                    }
+                }
+
+                state.vx *= drag;
+                state.vz *= drag;
+
+                double speed = Math.sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
+
+                boolean settled = state.grounded && speed < SETTLE_THRESHOLD;
+                boolean outOfBounds = cy < world.getMinHeight();
+
+                if(settled || outOfBounds)
+                {
+                    state.physicsRunning = false;
+                    state.task = null;
+                    state.vx = state.vy = state.vz = 0;
+                    if(wasRunningGoals)
+                        npc.startGoals();
+                }
+                else
+                    runPhysicsTick(npc, state, width, height, wasRunningGoals);
             }
-
-            npc.changeRealLocation(new Location(world, resolvedX, resolvedY, resolvedZ, current.getYaw(), current.getPitch()));
-
-            double drag = HORIZONTAL_DRAG;
-            if(state.grounded)
-            {
-                Block blockBelow = world.getBlockAt((int) Math.floor(resolvedX), (int) Math.floor(resolvedY - 0.1), (int) Math.floor(resolvedZ));
-                drag *= blockBelow.getType().isAir() ? 0.6F : blockBelow.getType().getSlipperiness();
-            }
-
-            state.vx *= drag;
-            state.vz *= drag;
-
-            double speed = Math.sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
-
-            boolean settled = state.grounded && speed < SETTLE_THRESHOLD;
-            boolean outOfBounds = cy < world.getMinHeight();
-
-            if(settled || outOfBounds)
-            {
-                state.physicsRunning = false;
-                state.task = null;
-                state.vx = state.vy = state.vz = 0;
-                if(wasRunningGoals)
-                    npc.startGoals();
-            }
-            else
-                runPhysicsTick(npc, state, width, height, wasRunningGoals);
         }, 1L);
     }
 
@@ -285,7 +335,7 @@ public class NpcDamageListener implements Listener
             {
                 for(int bz = minBZ; bz <= maxBZ; bz++)
                 {
-                    if(!world.isChunkLoaded(bx >> 4, bz >> 4))
+                    if(!WorldAccess.canAccess(world, bx, bz))
                         return false;
 
                     Block block = world.getBlockAt(bx, by, bz);
@@ -377,18 +427,21 @@ public class NpcDamageListener implements Listener
         npc.setOption(NpcOption.EQUIPMENT, equipment);
 
         Location loc = npc.getLocation();
-        World world = loc.getWorld();
-        if(world != null)
+        atLocation(loc, () ->
         {
-            world.playSound(loc, Sound.ITEM_TOTEM_USE, 1.0F, 1.0F);
-            world.spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0, 1.0, 0), 150, 0.3, 0.5, 0.3, 0.15);
-        }
+            World world = loc.getWorld();
+            if(world != null)
+            {
+                world.playSound(loc, Sound.ITEM_TOTEM_USE, 1.0F, 1.0F);
+                world.spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0, 1.0, 0), 150, 0.3, 0.5, 0.3, 0.15);
+            }
 
-        if (npc.getEntity() != null && ((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity() != null)
-            ((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity().playEffect(EntityEffect.TOTEM_RESURRECT);
+            if (npc.getEntity() != null && ((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity() != null)
+                ((net.minecraft.world.entity.Entity) npc.getEntity()).getBukkitEntity().playEffect(EntityEffect.TOTEM_RESURRECT);
+        });
 
         CombatState state = states.computeIfAbsent(npc, n -> new CombatState());
-        int currentTick = Bukkit.getCurrentTick();
+        int currentTick = GameTick.current();
 
         state.absorption = 8.0;
         state.absorptionExpireTick = currentTick + 100;
@@ -408,29 +461,40 @@ public class NpcDamageListener implements Listener
 
         state.regenTask = SchedulerProvider.get().runLaterAtLocation(npc.getLocation(), () ->
         {
-            if(!state.regenRunning)
-                return;
-
-            state.regenTicksPassed += 25;
-            if(state.regenTicksPassed > 900)
+            synchronized(lockOf(npc))
             {
-                state.regenRunning = false;
-                state.regenTask = null;
-                return;
+                if(!state.regenRunning)
+                    return;
+
+                state.regenTicksPassed += 25;
+                if(state.regenTicksPassed > 900)
+                {
+                    state.regenRunning = false;
+                    state.regenTask = null;
+                    return;
+                }
+
+                NpcCombatManager combatManager = npc.getCombatManager();
+                double currentHp = combatManager.getCurrentHealth();
+                double maxHp = combatManager.getMaxHealth();
+
+                if(currentHp > 0 && currentHp < maxHp)
+                    combatManager.setCurrentHealth(Math.min(maxHp, currentHp + 1.0));
+
+                scheduleRegenTick(npc, state);
             }
-
-            NpcCombatManager combatManager = npc.getCombatManager();
-            double currentHp = combatManager.getCurrentHealth();
-            double maxHp = combatManager.getMaxHealth();
-
-            if(currentHp > 0 && currentHp < maxHp)
-                combatManager.setCurrentHealth(Math.min(maxHp, currentHp + 1.0));
-
-            scheduleRegenTick(npc, state);
         }, 25L);
     }
 
     private static void handleProjectileHit(NPC npc, Projectile projectile)
+    {
+        synchronized(lockOf(npc))
+        {
+            handleProjectileHitLocked(npc, projectile);
+        }
+    }
+
+    private static void handleProjectileHitLocked(NPC npc, Projectile projectile)
     {
         if(!(projectile.getShooter() instanceof Player attacker))
             return;
@@ -439,7 +503,7 @@ public class NpcDamageListener implements Listener
             return;
 
         CombatState state = states.computeIfAbsent(npc, n -> new CombatState());
-        int currentTick = Bukkit.getCurrentTick();
+        int currentTick = GameTick.current();
 
         if(currentTick < state.invulnerableUntilTick)
             return;
@@ -554,6 +618,14 @@ public class NpcDamageListener implements Listener
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onNpcHit(NpcInteractEvent event)
     {
+        synchronized(lockOf(event.getNpc()))
+        {
+            handleNpcHit(event);
+        }
+    }
+
+    private void handleNpcHit(NpcInteractEvent event)
+    {
         if(event.getAction() != ClickActionType.LEFT)
             return;
 
@@ -596,7 +668,7 @@ public class NpcDamageListener implements Listener
         double damage = damageEvent.getDamage();
 
         CombatState state = states.computeIfAbsent(npc, n -> new CombatState());
-        int currentTick = Bukkit.getCurrentTick();
+        int currentTick = GameTick.current();
 
         if(currentTick < state.invulnerableUntilTick)
         {
@@ -695,13 +767,16 @@ public class NpcDamageListener implements Listener
             {
                 double upwardVelocity = 0.7 + (windBurstLevel * 0.35);
                 attacker.setVelocity(attacker.getVelocity().setY(upwardVelocity));
-                impactLoc.getWorld().playSound(impactLoc, Sound.ENTITY_WIND_CHARGE_WIND_BURST, 1.0F, 1.0F);
-                impactLoc.getWorld().spawnParticle(Particle.GUST_EMITTER_SMALL, impactLoc.clone().add(0, 0.5, 0), 1);
+                atLocation(impactLoc, () ->
+                {
+                    impactLoc.getWorld().playSound(impactLoc, Sound.ENTITY_WIND_CHARGE_WIND_BURST, 1.0F, 1.0F);
+                    impactLoc.getWorld().spawnParticle(Particle.GUST_EMITTER_SMALL, impactLoc.clone().add(0, 0.5, 0), 1);
+                });
             }
             else
                 attacker.setVelocity(attacker.getVelocity().setY(0.01));
 
-            triggerMaceSmashAoE(impactLoc, attacker, npc, fallDistance);
+            atLocation(impactLoc, () -> triggerMaceSmashAoE(impactLoc, attacker, npc, fallDistance));
         }
 
         applyWeaponDurability(attacker, weapon);
@@ -767,7 +842,8 @@ public class NpcDamageListener implements Listener
             }
         }
 
-        Collection<Entity> nearby = world.getNearbyEntities(center, radius, radius, radius);
+        double searchRadius = WorldAccess.ownedRange(center, radius);
+        Collection<Entity> nearby = searchRadius > 0 ? world.getNearbyEntities(center, searchRadius, searchRadius, searchRadius) : java.util.List.of();
         for(Entity entity : nearby)
         {
             if(entity.equals(attacker) || (targetNpc.getEntity() != null &&
@@ -827,7 +903,7 @@ public class NpcDamageListener implements Listener
         AttributeInstance attackDamage = attacker.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE);
 
         float attackStrength = getPlayerAttackStrength(attacker);
-        lastAttackTicks.put(attacker.getUniqueId(), Bukkit.getCurrentTick());
+        lastAttackTicks.put(attacker.getUniqueId(), GameTick.current());
 
         float damage = (attackDamage != null ? (float) attackDamage.getValue() : FALLBACK_DAMAGE);
         damage *= (0.2F + attackStrength * attackStrength * 0.8F);
@@ -886,7 +962,7 @@ public class NpcDamageListener implements Listener
 
     private float getPlayerAttackStrength(Player player)
     {
-        int currentTick = Bukkit.getCurrentTick();
+        int currentTick = GameTick.current();
         int lastTick = lastAttackTicks.getOrDefault(player.getUniqueId(), currentTick - 100);
 
         AttributeInstance speedAttr = player.getAttribute(Attribute.GENERIC_ATTACK_SPEED);

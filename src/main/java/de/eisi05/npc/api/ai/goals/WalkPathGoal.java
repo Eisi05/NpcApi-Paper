@@ -1,31 +1,40 @@
 package de.eisi05.npc.api.ai.goals;
 
+import de.eisi05.npc.api.NpcApi;
 import de.eisi05.npc.api.ai.Goal;
 import de.eisi05.npc.api.enums.WalkingResult;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.pathfinding.algorithm.AbstractPathfinder;
+import de.eisi05.npc.api.scheduler.tasks.PathTask;
 import de.eisi05.npc.api.utils.SerializableConsumer;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.Serial;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * A goal that makes the NPC walk along a predefined path of waypoints.
  * The NPC will walk the entire path without recalculating, using the pre-calculated path.
  */
-public class WalkPathGoal extends Goal
+public class WalkPathGoal extends PathfindingGoal
 {
     @Serial
     private static final long serialVersionUID = 1L;
 
     private static final double DEFAULT_SPEED = 0.25;
+    /**
+     * The goal can only be used when the NPC is at most this far (squared) from the start of the path.
+     */
     private static final double START_LOCATION_THRESHOLD = 50.0 * 50.0;
+
+    /**
+     * If the NPC is farther than this (squared, i.e. 2 blocks) from the path's first point it first walks there. (Previously the squared constant above was
+     * compared with a non-squared distance, so this branch could never run.)
+     */
+    private static final double WALK_TO_START_THRESHOLD_SQ = 4.0;
 
     private Path.SerializablePath serializablePath;
     private double speed;
@@ -36,6 +45,7 @@ public class WalkPathGoal extends Goal
     private transient boolean isWalking;
     private transient WalkToLocationGoal walkToStartGoal;
     private transient boolean walkingToStart;
+    private transient PathTask activeTask;
 
     /**
      * Creates a WalkPathGoal with full configuration options.
@@ -50,6 +60,7 @@ public class WalkPathGoal extends Goal
         this.speed = Math.clamp(builder.speed, 0.1, 1.0);
         this.completionCallback = builder.completionCallback;
         this.withRotation = builder.withRotation;
+        this.pathfinder = builder.pathfinder;
     }
 
     /**
@@ -59,7 +70,7 @@ public class WalkPathGoal extends Goal
      */
     private WalkPathGoal(@NotNull WalkPathGoal goal)
     {
-        super(goal.getPriority());
+        super(goal);
         this.serializablePath = goal.serializablePath;
         this.speed = goal.speed;
         this.completionCallback = goal.completionCallback;
@@ -212,15 +223,16 @@ public class WalkPathGoal extends Goal
             return;
 
         Location startLocation = waypoints.getFirst();
-        double distance = npc.getLocation().distance(startLocation);
+        double distanceSq = npc.getLocation().distanceSquared(startLocation);
 
         isWalking = true;
 
-        if(distance > START_LOCATION_THRESHOLD)
+        if(distanceSq > WALK_TO_START_THRESHOLD_SQ)
         {
             walkingToStart = true;
             walkToStartGoal = new WalkToLocationGoal.Builder(startLocation)
                     .speed(speed)
+                    .pathfinder(pathfinder)
                     .withRotation(withRotation)
                     .completionCallback(result ->
                     {
@@ -260,21 +272,28 @@ public class WalkPathGoal extends Goal
         if(waypoints == null || waypoints.isEmpty())
             return;
 
-        List<Player> viewers = npc.getViewers().stream()
-                .map(Bukkit::getPlayer)
-                .filter(Objects::nonNull)
-                .toList();
-
         Location finalLocation = waypoints.getLast();
+        // the walk ends on whatever thread owns the NPC's region at that moment: hand the result over to the goal's own (locked) context
+        var walk = npc.walkTo(path, speed, true, result -> npc.getGoalExecutor().execute(() ->
+        {
+            isWalking = false;
+            activeTask = null;
+            if(completionCallback != null)
+                completionCallback.accept(result);
 
-        npc.walkTo(path, speed, true, result ->
+            if(result == WalkingResult.SUCCESS && npc.getLocation().distanceSquared(finalLocation) > 0.01)
+                npc.changeRealLocation(finalLocation);
+        }), withRotation);
+
+        if(walk == null)
         {
             isWalking = false;
             if(completionCallback != null)
-                completionCallback.accept(result);
-            if(result == WalkingResult.SUCCESS)
-                npc.changeRealLocation(finalLocation);
-        }, withRotation, viewers);
+                completionCallback.accept(WalkingResult.CANCELLED);
+            return;
+        }
+
+        activeTask = walk.pathTask();
     }
 
     /**
@@ -306,15 +325,11 @@ public class WalkPathGoal extends Goal
             walkToStartGoal = null;
         }
 
-        List<Player> viewers = npc.getViewers().stream()
-                .map(Bukkit::getPlayer)
-                .filter(Objects::nonNull)
-                .toList();
-
-        for(Player viewer : viewers)
+        if(activeTask != null)
         {
-            if(npc.isWalking(viewer))
-                npc.cancelWalking(viewer);
+            PathTask task = activeTask;
+            activeTask = null;
+            task.cancel();
         }
 
         isWalking = false;
@@ -341,10 +356,7 @@ public class WalkPathGoal extends Goal
 
         if(isWalking)
         {
-            Location npcLoc = npc.getLocation();
-            Location below = npcLoc.clone().subtract(0, 0.1, 0);
-
-            if(below.getBlock().getType().isAir())
+            if(isAirBelow(npc))
                 return false;
         }
         return true;
@@ -365,6 +377,7 @@ public class WalkPathGoal extends Goal
         private double speed = DEFAULT_SPEED;
         private SerializableConsumer<WalkingResult> completionCallback;
         private boolean withRotation = true;
+        private AbstractPathfinder.PathfinderFactory<? extends AbstractPathfinder> pathfinder = NpcApi.config.pathfinderFactory();
 
         /**
          * Creates a new Builder with the required path.
@@ -409,6 +422,18 @@ public class WalkPathGoal extends Goal
         public Builder withRotation(boolean withRotation)
         {
             this.withRotation = withRotation;
+            return this;
+        }
+
+        /**
+         * Sets the pathfinder factory.
+         *
+         * @param pathfinder The pathfinder factory
+         * @return this builder for chaining
+         */
+        public Builder pathfinder(@NotNull AbstractPathfinder.PathfinderFactory<? extends AbstractPathfinder> pathfinder)
+        {
+            this.pathfinder = pathfinder;
             return this;
         }
 

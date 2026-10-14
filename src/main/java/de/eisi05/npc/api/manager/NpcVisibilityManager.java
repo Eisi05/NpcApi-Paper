@@ -17,8 +17,8 @@ public class NpcVisibilityManager implements Serializable
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private final Set<UUID> specificPlayers = new HashSet<>();
-    private boolean showToAllPlayers = true;
+    private volatile Set<UUID> specificPlayers = Set.of();
+    private volatile boolean showToAllPlayers = true;
 
     /**
      * Sets whether this NPC should be shown to all players (including new ones joining).
@@ -46,9 +46,14 @@ public class NpcVisibilityManager implements Serializable
      * @param playerUuid the UUID of the player to add
      * @return true if the player was added, false if the player was already in the list
      */
-    public boolean addSpecificPlayer(@NotNull UUID playerUuid)
+    public synchronized boolean addSpecificPlayer(@NotNull UUID playerUuid)
     {
-        return specificPlayers.add(playerUuid);
+        Set<UUID> copy = new HashSet<>(specificPlayers);
+        if(!copy.add(playerUuid))
+            return false;
+
+        specificPlayers = Set.copyOf(copy);
+        return true;
     }
 
     /**
@@ -56,9 +61,14 @@ public class NpcVisibilityManager implements Serializable
      *
      * @return true if the player was removed, false if the player was not in the list
      */
-    public boolean removeSpecificPlayer(@NotNull UUID playerUuid)
+    public synchronized boolean removeSpecificPlayer(@NotNull UUID playerUuid)
     {
-        return specificPlayers.remove(playerUuid);
+        Set<UUID> copy = new HashSet<>(specificPlayers);
+        if(!copy.remove(playerUuid))
+            return false;
+
+        specificPlayers = Set.copyOf(copy);
+        return true;
     }
 
     /**
@@ -85,8 +95,8 @@ public class NpcVisibilityManager implements Serializable
     /**
      * Clears all specific players from the list.
      */
-    public void clearSpecificPlayers()
+    public synchronized void clearSpecificPlayers()
     {
-        specificPlayers.clear();
+        specificPlayers = Set.of();
     }
 }

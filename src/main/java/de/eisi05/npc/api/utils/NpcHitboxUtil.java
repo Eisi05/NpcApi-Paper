@@ -3,10 +3,12 @@ package de.eisi05.npc.api.utils;
 import de.eisi05.npc.api.manager.NpcManager;
 import de.eisi05.npc.api.objects.NPC;
 import de.eisi05.npc.api.objects.NpcOption;
+import de.eisi05.npc.api.pathfinding.environment.WorldAccess;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BoundingBox;
@@ -161,6 +163,9 @@ public class NpcHitboxUtil
                 return false;
         }
 
+        if(!canTrace(eyeLocation.getWorld(), eyeLocation, dir, tMin))
+            return true;
+
         RayTraceResult blockHit = eyeLocation.getWorld().rayTraceBlocks(eyeLocation, dir, tMin, FluidCollisionMode.NEVER, true);
         if(blockHit != null && blockHit.getHitBlock() != null)
             return false;
@@ -171,6 +176,19 @@ public class NpcHitboxUtil
             return false;
 
         return true;
+    }
+
+    /**
+     * @return true if every chunk the ray passes through is owned by the current thread and loaded (always true on Paper's main thread)
+     */
+    private static boolean canTrace(@NotNull World world, @NotNull Location from, @NotNull Vector direction, double length)
+    {
+        Vector end = from.toVector().add(direction.clone().normalize().multiply(length));
+        int minX = (int) Math.floor(Math.min(from.getX(), end.getX())) - 1;
+        int maxX = (int) Math.floor(Math.max(from.getX(), end.getX())) + 1;
+        int minZ = (int) Math.floor(Math.min(from.getZ(), end.getZ())) - 1;
+        int maxZ = (int) Math.floor(Math.max(from.getZ(), end.getZ())) + 1;
+        return WorldAccess.canAccessArea(world, minX, minZ, maxX, maxZ);
     }
 
     /**
@@ -192,7 +210,9 @@ public class NpcHitboxUtil
         double movementComponent = velocity.dot(look);
         double effectiveMaxRange = maxRange + Math.max(0.0, movementComponent);
 
-        RayTraceResult blockHit = attacker.getWorld().rayTraceBlocks(eyeLoc, look, effectiveMaxRange, FluidCollisionMode.NEVER, true);
+        // see rayIntersectsNpc: an obstruction check across a region border is skipped
+        RayTraceResult blockHit = canTrace(attacker.getWorld(), eyeLoc, look, effectiveMaxRange) ?
+                attacker.getWorld().rayTraceBlocks(eyeLoc, look, effectiveMaxRange, FluidCollisionMode.NEVER, true) : null;
 
         double maxAllowedDistance = effectiveMaxRange;
 

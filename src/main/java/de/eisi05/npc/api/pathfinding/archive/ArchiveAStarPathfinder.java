@@ -1,4 +1,4 @@
-package de.eisi05.npc.api.pathfinding;
+package de.eisi05.npc.api.pathfinding.archive;
 
 import de.eisi05.npc.api.NpcApi;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -16,7 +16,8 @@ import java.util.function.BiConsumer;
 /**
  * Standard block-grid based A* pathfinder.
  */
-public class AStarPathfinder extends AbstractPathfinder
+@Deprecated
+public class ArchiveAStarPathfinder extends ArchiveAbstractPathfinder
 {
     private static final double[][][] MOVE_COSTS = new double[3][3][3];
 
@@ -50,7 +51,7 @@ public class AStarPathfinder extends AbstractPathfinder
      * @param entityHeight  the height of the entity
      * @param entityWidth   the width of the entity
      */
-    public AStarPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
+    public ArchiveAStarPathfinder(int maxIterations, boolean allowDiagonal, double entityHeight, double entityWidth)
     {
         super(maxIterations, allowDiagonal, entityHeight, entityWidth);
     }
@@ -129,11 +130,11 @@ public class AStarPathfinder extends AbstractPathfinder
      * @param end              the target location
      * @param progressListener A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @return a list of locations forming the path, or null if no path could be found
-     * @throws PathfindingUtils.PathfindingException if the start or end location fails floor validity checks
+     * @throws ArchivePathfindingUtils.PathfindingException if the start or end location fails floor validity checks
      */
     @Override
     public @Nullable List<Location> getPath(@NotNull Location start, @NotNull Location end, @Nullable BiConsumer<Double, Integer> progressListener)
-            throws PathfindingUtils.PathfindingException
+            throws ArchivePathfindingUtils.PathfindingException
     {
         if(start.getWorld() == null || end.getWorld() == null)
             return null;
@@ -151,7 +152,7 @@ public class AStarPathfinder extends AbstractPathfinder
 
         Block endFloor = world.getBlockAt(end.getBlockX(), endFloorY, end.getBlockZ());
         if(NpcApi.config.checkValidPath() && !isSafeFloor(endFloor))
-            throw new PathfindingUtils.PathfindingException("End not on a valid floor: " + end);
+            throw new ArchivePathfindingUtils.PathfindingException("End not on a valid floor: " + end);
 
         Node startNode = new Node(start.getBlockX(), startFloorY, start.getBlockZ(), null);
         startNode.gCost = 0;
