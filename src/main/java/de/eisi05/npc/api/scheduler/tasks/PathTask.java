@@ -130,6 +130,8 @@ public class PathTask
     private int positionHistoryIndex = 0;
     private int stuckCounter = 0;
     private boolean bypassCollisionChecks = false;
+    private boolean onGround = true;
+
     /**
      * Private constructor used by the Builder pattern.
      *
@@ -542,6 +544,7 @@ public class PathTask
             Vector movement = calculateHorizontalMovement(toTarget, target);
             PhysicsResult physics = applyPhysics(movement);
             movement.setY(physics.yChange);
+            this.onGround = physics.isGrounded;
 
             if(!physics.isGrounded && !bypassCollisionChecks)
                 movement = BodyCollider.slide(world, currentPos.getX(), currentPos.getY(), currentPos.getZ(), movement, bodyHeight,
@@ -821,8 +824,12 @@ public class PathTask
         if(horizontalDistSq > 0.04)
             return false;
 
-        if(isDropAhead() && currentMoveType() != MoveType.FALL)
+        MoveType moveType = currentMoveType();
+        if(isDropAhead() && moveType != MoveType.FALL)
             return true;
+
+        if(!this.onGround && (moveType == MoveType.JUMP || moveType == MoveType.GAP_JUMP || moveType == MoveType.FALL))
+            return false;
 
         if(toTarget.getY() <= 0)
             return true;
@@ -858,6 +865,9 @@ public class PathTask
         double yDiff = targetPoint.getY() - currentPos.getY();
         if(yDiff > STEP_HEIGHT && currentPos.getY() < targetPoint.getY())
             currentSpeed *= 0.6;
+
+        if(!this.onGround)
+            currentSpeed = Math.max(currentSpeed, 0.15);
 
         double moveDistance = Math.min(currentSpeed, dist);
         double moveStepX = (hX / dist) * moveDistance;
@@ -1145,9 +1155,14 @@ public class PathTask
         if(event.changeRealLocation() && !pathPoints.isEmpty())
         {
             Location loc = pathPoints.getLast().clone();
-            Location stored = npc.getLocation();
-            loc.setYaw(stored.getYaw());
-            loc.setPitch(stored.getPitch());
+
+            if(!withRotation)
+            {
+                Location stored = npc.getLocation();
+                loc.setYaw(stored.getYaw());
+                loc.setPitch(stored.getPitch());
+            }
+
             npc.changeRealLocation(loc, getViewers());
             currentPos = loc.toVector();
             ensureOnSolidGroundNow();
@@ -1175,6 +1190,9 @@ public class PathTask
     {
         if(serverEntity == null)
             return;
+
+        this.previousYaw = loc.getYaw();
+        this.previousPitch = loc.getPitch();
 
         ClientboundRotateHeadPacket head = new ClientboundRotateHeadPacket(serverEntity, (byte) (loc.getYaw() * 256 / 360));
         ClientboundMoveEntityPacket.Rot body = new ClientboundMoveEntityPacket.Rot(serverEntity.getId(), (byte) (loc.getYaw() * 256 / 360),

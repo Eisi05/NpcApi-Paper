@@ -77,7 +77,15 @@ public class PacketReader
             @Override
             public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception
             {
-                checkForPacket(msg, player);
+                try
+                {
+                    checkForPacket(msg, player);
+                }
+                catch(Exception e)
+                {
+                    NpcApi.plugin.getLogger().severe("Error processing packet in checkForPacket: ");
+                    e.printStackTrace();
+                }
 
                 readers.forEach(consumer -> consumer.accept(player, msg));
 

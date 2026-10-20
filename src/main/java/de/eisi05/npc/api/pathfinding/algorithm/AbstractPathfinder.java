@@ -7,6 +7,7 @@ import de.eisi05.npc.api.pathfinding.environment.*;
 import de.eisi05.npc.api.pathfinding.movement.MoveType;
 import de.eisi05.npc.api.pathfinding.movement.NavCapabilities;
 import de.eisi05.npc.api.pathfinding.movement.NavOptions;
+import de.eisi05.npc.api.pathfinding.util.PathVisualizer;
 import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -38,7 +39,7 @@ public abstract class AbstractPathfinder
     private @Nullable BlockView blockView;
     private @Nullable NavCapabilities capabilities;
     private @Nullable BooleanSupplier cancellation;
-    private @Nullable Consumer<Location> visualizer;
+    private @Nullable PathVisualizer visualizer;
     private PathingResult lastResult = PathingResult.NO_PATH;
     private int lastIterations;
 
@@ -79,7 +80,7 @@ public abstract class AbstractPathfinder
 
     /**
      * Retrieves the collision boxes for a block. Backed by the global {@link BlockProfile} cache (one entry per block state, no per-call allocation of Bukkit
-     * voxel shapes). Reads the live block: region thread only (see {@link WorldAccess}).
+     * voxel shapes).
      *
      * @param block the block to check
      * @return bounding box collection (block-local coordinates) for the block's current state
@@ -138,14 +139,27 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * Sets a visualizer callback that receives the location of every node visited during pathfinding. This can be used to display particles or other visual
-     * feedback to show which blocks are being explored. The callback is called on the main thread for synchronous searches and on the pathfinding thread for
-     * async searches.
+     * Sets a visualizer callback that receives the location of every <b>block</b> the search visited (deduplicated, so a fine grid does not report the same
+     * block several times). The callback is called on the calling thread for synchronous searches and on the pathfinding thread for async searches, so it must
+     * be thread-safe and must not touch the world or entities directly. For more detail (final path, jumps, search front) use
+     * {@link #usePathVisualizer(PathVisualizer)}.
      *
-     * @param visualizer a consumer that receives visited node locations, or null to disable visualization
+     * @param visualizer a consumer that receives visited block locations, or null to disable visualization
      * @return this pathfinder
      */
     public @NotNull AbstractPathfinder useVisualizer(@Nullable Consumer<Location> visualizer)
+    {
+        this.visualizer = visualizer == null ? null : PathVisualizer.ofVisited(visualizer);
+        return this;
+    }
+
+    /**
+     * Sets a {@link PathVisualizer} that receives only the relevant events of the search: visited blocks, the search front, special moves and the final path.
+     *
+     * @param visualizer the visualizer, or null to disable visualization
+     * @return this pathfinder
+     */
+    public @NotNull AbstractPathfinder usePathVisualizer(@Nullable PathVisualizer visualizer)
     {
         this.visualizer = visualizer;
         return this;
@@ -165,9 +179,9 @@ public abstract class AbstractPathfinder
     }
 
     /**
-     * @return the visualizer set with {@link #useVisualizer(Consumer)}, or null
+     * @return the visualizer set with {@link #useVisualizer(Consumer)} or {@link #usePathVisualizer(PathVisualizer)}, or null
      */
-    protected @Nullable Consumer<Location> visualizer()
+    protected @Nullable PathVisualizer visualizer()
     {
         return visualizer;
     }
@@ -292,8 +306,8 @@ public abstract class AbstractPathfinder
 
     /**
      * Interface representing a factory that creates Pathfinder instances. This avoids thread-safety issues by providing fresh instances per calculation: a
-     * pathfinder instance (and the {@link BlockView} it uses) belongs to one search on one thread, while the factories themselves are immutable and may be
-     * shared freely.
+     * pathfinder instance (and the {@link BlockView} and visualizer it uses) belongs to one search on one thread, while the factories themselves are immutable
+     * and may be shared freely.
      */
     public interface PathfinderFactory<T extends AbstractPathfinder>
     {

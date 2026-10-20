@@ -9,6 +9,7 @@ import de.eisi05.npc.api.pathfinding.movement.JumpArc;
 import de.eisi05.npc.api.pathfinding.movement.MoveType;
 import de.eisi05.npc.api.pathfinding.movement.MovementMode;
 import de.eisi05.npc.api.pathfinding.movement.NavOptions;
+import de.eisi05.npc.api.pathfinding.util.PathVisualizer;
 import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -22,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 
 /**
  * Shared search engine behind {@link AStarPathfinder} (cell-sized steps) and {@link BoundingBoxPathfinder} (sub-cell steps + Theta* shortcuts).
@@ -59,7 +59,8 @@ public final class GridSearch
     private final JumpArc arc;
     private final @Nullable NavSpace crouchSpace;
     private @Nullable BooleanSupplier cancelled;
-    private @Nullable Consumer<Location> visualizer;
+    private @Nullable PathVisualizer visualizer;
+    private final LongOpenHashSet shownBlocks = new LongOpenHashSet();
 
     private final Long2ObjectOpenHashMap<Node> nodes = new Long2ObjectOpenHashMap<>();
     private final NodeHeap heap = new NodeHeap();
@@ -97,25 +98,48 @@ public final class GridSearch
     }
 
     /**
-     * Sets the visualizer callback that receives the location of every node visited during pathfinding.
-     *
-     * @param visualizer a consumer that receives visited node locations, or null to disable visualization
+     * Reports an expanded node: once per block as {@code visited}, and as {@code frontier} whenever the search got closer to the goal than ever before.
      */
-    void setVisualizer(@Nullable Consumer<Location> visualizer)
+    private void visualize(@NotNull Node n, boolean front)
     {
-        this.visualizer = visualizer;
+        PathVisualizer v = visualizer;
+        if(v == null)
+            return;
+
+        var world = space.getView().getWorld();
+        if(front)
+            v.frontier(new Location(world, n.x, n.y, n.z));
+
+        int bx = (int) Math.floor(n.x);
+        int by = (int) Math.floor(n.y);
+        int bz = (int) Math.floor(n.z);
+        if(shownBlocks.add(AbstractPathfinder.packBlockCoord(bx, by, bz)))
+            v.visited(new Location(world, bx + 0.5, n.y, bz + 0.5));
     }
 
-    private void visit(@NotNull Node n)
+    /**
+     * Reports a special move (everything but walking) that has just become the cheapest way to {@code to}.
+     */
+    private void visualizeMove(@NotNull Node from, @NotNull Node to, @NotNull MoveType type, double takeX, double takeZ)
     {
-        if(visualizer == null)
+        PathVisualizer v = visualizer;
+        if(v == null || type == MoveType.WALK || type == MoveType.CROUCH)
             return;
 
-        int bx = (int) Math.floor(n.x), by = (int) Math.floor(n.y), bz = (int) Math.floor(n.z);
-        if(!shown.add(AbstractPathfinder.packBlockCoord(bx, by, bz)))
-            return;
+        var world = space.getView().getWorld();
+        double fx = Double.isNaN(takeX) ? from.x : takeX;
+        double fz = Double.isNaN(takeZ) ? from.z : takeZ;
+        v.move(new Location(world, fx, from.y, fz), new Location(world, to.x, to.y, to.z), type);
+    }
 
-        visualizer.accept(new Location(space.getView().getWorld(), bx + 0.5, n.y, bz + 0.5));
+    /**
+     * Sets the visualizer that receives the relevant events of the search (visited blocks, search front, special moves, final path).
+     *
+     * @param visualizer the visualizer, or null to disable visualization
+     */
+    void setVisualizer(@Nullable PathVisualizer visualizer)
+    {
+        this.visualizer = visualizer;
     }
 
     private boolean pollCancelled(int iterations)
@@ -192,12 +216,13 @@ public final class GridSearch
             if(pollCancelled(iterations))
                 return null;
 
-            if(current.h < minH)
+            boolean front = current.h < minH;
+            if(front)
                 minH = current.h;
             if(listener != null)
                 listener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
 
-            visit(current);
+            visualize(current, front);
 
             if(isGoal(current))
             {
@@ -601,6 +626,7 @@ public final class GridSearch
             nb.dirX = dirX;
             nb.dirZ = dirZ;
             heap.pushOrUpdate(nb);
+            visualizeMove(from, nb, type, takeX, takeZ);
         }
     }
 
@@ -693,12 +719,13 @@ public final class GridSearch
             if(pollCancelled(iterations))
                 return null;
 
-            if(current.h < minH)
+            boolean front = current.h < minH;
+            if(front)
                 minH = current.h;
             if(listener != null)
                 listener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
 
-            visit(current);
+            visualize(current, front);
 
             if(Math.sqrt(sq(current.x - goalX) + sq(current.y - goalY) + sq(current.z - goalZ)) <= step * 0.9 + EPS)
             {
@@ -784,6 +811,7 @@ public final class GridSearch
             nb.dirY = dirY;
             nb.dirZ = dirZ;
             heap.pushOrUpdate(nb);
+            visualizeMove(from, nb, type, Double.NaN, Double.NaN);
         }
     }
 
@@ -896,6 +924,8 @@ public final class GridSearch
             points.add(new Location(space.getView().getWorld(), p.x, p.y, p.z));
             moves.add(p.type);
         }
+        if(visualizer != null)
+            visualizer.path(points, moves);
         return new PathResult(points, moves);
     }
 
@@ -946,6 +976,8 @@ public final class GridSearch
             points.add(new Location(space.getView().getWorld(), p.x, p.y, p.z));
             moves.add(p.type);
         }
+        if(visualizer != null)
+            visualizer.path(points, moves);
         return new PathResult(points, moves);
     }
 
