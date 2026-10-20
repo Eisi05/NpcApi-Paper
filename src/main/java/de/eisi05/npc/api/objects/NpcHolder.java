@@ -9,6 +9,7 @@ import net.minecraft.network.protocol.Packet;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -149,7 +150,8 @@ public abstract class NpcHolder implements InventoryHolder
                 return;
             }
 
-            if(option.equals(NpcOption.ENTITY))
+            if(option.equals(NpcOption.ENTITY) ||
+                (option.equals(NpcOption.SCALE) && npc.entity != null && npc.entity.getBukkitEntity() instanceof Display))
             {
                 npc.reload();
                 return;

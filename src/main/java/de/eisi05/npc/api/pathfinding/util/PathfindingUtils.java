@@ -22,7 +22,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 
 /**
  * Utility class for calculating paths between locations using the configured pathfinder (grid A* or Theta*). Provides synchronous and asynchronous methods.
@@ -94,14 +93,14 @@ public class PathfindingUtils
      * @param entityWidth           the width of the entity traversing the path
      * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
      * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
-     * @param visualizer            a consumer that receives the location of every visited node for visualization (e.g., particles), or null
+     * @param visualizer            receives the relevant events of the search (visited blocks, search front, special moves, final path), or null
      * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
      */
     public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints,
                                                                  int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
                                                                  @Nullable NavCapabilities capabilities,
                                                                  @Nullable BiConsumer<Double, Integer> progressListener,
-                                                                 @Nullable Consumer<Location> visualizer)
+                                                                 @Nullable PathVisualizer visualizer)
     {
         CompletableFuture<Path> future = new CompletableFuture<>();
 
@@ -248,14 +247,14 @@ public class PathfindingUtils
      * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
      * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
      * @param cancelled             returns true when the result is no longer needed, or null
-     * @param visualizer            a consumer that receives the location of every visited node for visualization (e.g., particles), or null
+     * @param visualizer            receives the relevant events of the search (visited blocks, search front, special moves, final path), or null
      * @return the calculated {@link Path} containing all intermediate locations
      * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
     public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints, int maxIterations,
                                          boolean allowDiagonalMovement, double entityHeight, double entityWidth, @Nullable NavCapabilities capabilities,
                                          @Nullable BiConsumer<Double, Integer> progressListener, @Nullable BooleanSupplier cancelled,
-                                         @Nullable Consumer<Location> visualizer)
+                                         @Nullable PathVisualizer visualizer)
             throws PathfindingException
     {
         if(waypoints.size() < 2)
@@ -269,7 +268,7 @@ public class PathfindingUtils
                 .create(maxIterations, allowDiagonalMovement, entityHeight, entityWidth)
                 .useCapabilities(capabilities)
                 .useCancellation(cancelled)
-                .useVisualizer(visualizer);
+                .usePathVisualizer(visualizer);
 
         World world = waypoints.getFirst().getWorld();
         if(world != null)
@@ -326,6 +325,15 @@ public class PathfindingUtils
 
             if(progressListener != null)
                 progressListener.accept((currentSegmentIndex + 1.0) / totalSegments, 0);
+        }
+
+        if(!fullPathPoints.isEmpty() && !waypoints.isEmpty())
+        {
+            Location finalWaypoint = waypoints.getLast();
+            Location finalPathPoint = fullPathPoints.getLast();
+
+            finalPathPoint.setYaw(finalWaypoint.getYaw());
+            finalPathPoint.setPitch(finalWaypoint.getPitch());
         }
 
         return new Path(fullPathPoints, waypoints, fullMoves);

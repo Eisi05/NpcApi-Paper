@@ -54,12 +54,12 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.craftbukkit.scoreboard.CraftScoreboard;
 import org.bukkit.entity.BlockDisplay;
-import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.Transformation;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -558,9 +558,11 @@ public class NpcOption<T, S extends Serializable>
                     npc.entity = entity;
                 }
 
+                double npcScale = npc.getOption(NpcOption.SCALE, player);
+
                 Location location = npc.getLocation();
                 if(npc.getOption(NpcOption.POSE) == Pose.SITTING)
-                    location = location.clone().subtract(0, npc.getOption(NpcOption.SCALE) * (((AABB) npc.getDefaultBoundingBox()).getYsize() / 3D), 0);
+                    location = location.clone().subtract(0, npcScale * (((AABB) npc.getDefaultBoundingBox()).getYsize() / 3D), 0);
                 Var.moveEntity(entity, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
 
                 Var.moveEntity((Entity) npc.getNameTag().getDisplay(), location.getX(),
@@ -602,33 +604,35 @@ public class NpcOption<T, S extends Serializable>
                 data.set(EntityDataSerializers.OPTIONAL_COMPONENT.createAccessor(2), Optional.of(Component.literal("NPC")));
                 data.set(EntityDataSerializers.BOOLEAN.createAccessor(3), false);
 
-                if(entity.getBukkitEntity() instanceof BlockDisplay display)
-                {
-                    Vector3f translation = display.getTransformation().getTranslation();
-                    if(!display.getPersistentDataContainer().has(NpcApi.displayKey, PersistentDataType.BOOLEAN))
-                    {
-                        display.getPersistentDataContainer().set(NpcApi.displayKey, PersistentDataType.BOOLEAN, true);
-                        data.set(EntityDataSerializers.VECTOR3.createAccessor(11),
-                                new Vector3f(translation.x - 0.5f, translation.y, translation.z - 0.5f));
-                    }
-                }
-
-                if(entity.getBukkitEntity() instanceof ItemDisplay display)
-                {
-                    Vector3f translation = display.getTransformation().getTranslation();
-                    if(!display.getPersistentDataContainer().has(NpcApi.displayKey, PersistentDataType.BOOLEAN))
-                    {
-                        display.getPersistentDataContainer().set(NpcApi.displayKey, PersistentDataType.BOOLEAN, true);
-                        data.set(EntityDataSerializers.VECTOR3.createAccessor(11), new Vector3f(translation.x, translation.y + 0.5f, translation.z));
-                    }
-                }
-
-                packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(entity.getId(), data));
-
                 List<Entity> passengers = new ArrayList<>();
                 if(entity.getBukkitEntity() instanceof org.bukkit.entity.Display display)
                 {
-                    Vector3f scale = display.getTransformation().getScale();
+                    Transformation transformation = display.getTransformation();
+                    Vector3f translation = transformation.getTranslation();
+                    Vector3f scale = transformation.getScale();
+
+                    if(!display.getPersistentDataContainer().has(NpcApi.displayKey, PersistentDataType.LIST.floats()))
+                        display.getPersistentDataContainer().set(NpcApi.displayKey, PersistentDataType.LIST.floats(),
+                                Arrays.asList(scale.x, scale.y, scale.z, translation.x, translation.y, translation.z));
+                    else
+                    {
+                        var displayData = display.getPersistentDataContainer().get(NpcApi.displayKey, PersistentDataType.LIST.floats());
+                        scale.set(displayData.get(0), displayData.get(1), displayData.get(2));
+                        translation.set(displayData.get(3), displayData.get(4), displayData.get(5));
+                    }
+
+                    scale.mul((float) npcScale);
+
+                    if(display instanceof BlockDisplay)
+                        data.set(EntityDataSerializers.VECTOR3.createAccessor(11),
+                                new Vector3f(translation.x - (0.5f * scale.y), translation.y, translation.z - (0.5f * scale.y)));
+                    else
+                        data.set(EntityDataSerializers.VECTOR3.createAccessor(11),
+                                new Vector3f(translation.x, translation.y + (0.5f * scale.y), translation.z));
+
+                    data.set(EntityDataSerializers.VECTOR3.createAccessor(12), scale);
+
+                    packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(entity.getId(), data));
 
                     Interaction interaction = new Interaction(EntityType.INTERACTION, Var.getServerLevel(npc.serverPlayer));
                     Var.moveEntity(interaction, npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ(), npc.getLocation().getYaw(), npc.getLocation().getPitch());
@@ -649,7 +653,10 @@ public class NpcOption<T, S extends Serializable>
                     packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(interaction.getId(), interactionData));
                 }
                 else
+                {
+                    packets.add((Packet<? super ClientGamePacketListener>) SetEntityDataPacket.create(entity.getId(), data));
                     npc.name.getDisplayOptions().setHeight(0);
+                }
 
                 if(!npc.getOption(NpcOption.HIDE_NAMETAG, player))
                 {

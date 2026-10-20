@@ -152,7 +152,7 @@ public final class PathMotion
         if(arcActive)
         {
             if(arcIndex == i)
-                return advanceArc(x, y, z);
+                return advanceArc(x, y, z, speed);
             reset();
         }
 
@@ -161,7 +161,7 @@ public final class PathMotion
         Vector target = points.get(i);
 
         if(type == MoveType.GAP_JUMP && i > 0 && capabilities.canGapJump() && startArc(i, points, x, y, z))
-            return advanceArc(x, y, z);
+            return advanceArc(x, y, z, speed);
 
         if(type == MoveType.FLY && capabilities.canFly())
             return flyStep(target, x, y, z, speed);
@@ -292,15 +292,31 @@ public final class PathMotion
         return true;
     }
 
-    private @NotNull Step advanceArc(double x, double y, double z)
+    private @NotNull Step advanceArc(double x, double y, double z, double speed)
     {
-        arcTick++;
-        boolean landed = arcTick >= arcTicks;
-        double f = Math.min(1.0, (double) arcTick / arcTicks);
+        double totalDist = Math.hypot(landX - startX, landZ - startZ);
+        double f;
+        boolean landed;
+
+        if(totalDist < 1.0E-6)
+        {
+            arcTick++;
+            landed = arcTick >= arcTicks;
+            f = Math.min(1.0, (double) arcTick / arcTicks);
+        }
+        else
+        {
+            double currentDist = Math.hypot(x - startX, z - startZ);
+            double nextDist = Math.min(totalDist, currentDist + speed);
+            f = nextDist / totalDist;
+            landed = f >= 1.0 - 1.0E-6;
+        }
 
         double nx = startX + (landX - startX) * f;
         double nz = startZ + (landZ - startZ) * f;
-        double ny = landed ? landY : startY + arc.heightOf(arcTick);
+
+        int mappedTick = (int) Math.round(f * arcTicks);
+        double ny = landed ? landY : startY + arc.heightOf(mappedTick);
 
         if(landed)
             arcActive = false;
