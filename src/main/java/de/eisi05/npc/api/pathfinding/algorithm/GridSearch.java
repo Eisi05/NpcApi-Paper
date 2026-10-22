@@ -528,8 +528,18 @@ public final class GridSearch
                 if(ticks < 0)
                     continue;
 
-                if(ly < cur.y - options.getStepHeight() - EPS && cur.y - ly <= options.getMaxFallDistance() && Math.hypot(lx - cur.x, lz - cur.z) <= step * 1.5 + EPS
-                        && space.fallClear(cur.x, cur.y, cur.z, lx, ly, lz))
+                if(ly < cur.y - options.getStepHeight() - EPS && cur.y - ly <= options.getMaxFallDistance() && space.fallClear(cur.x, cur.y, cur.z, lx, ly, lz))
+                {
+                    Node fall = nodeAt(nix, niz, ly);
+                    if(fall != null)
+                        relax(cur, fall, cur, MoveType.FALL, Double.NaN, Double.NaN);
+                    continue;
+                }
+
+                boolean walkable = Math.abs(ly - cur.y) <= options.getStepHeight() + EPS
+                        ? space.canTravel(cur.x, cur.y, cur.z, landingX, ly, landingZ) && space.floorAlong(cur.x, cur.y, cur.z, landingX, ly, landingZ)
+                        : space.rampWalkable(cur.x, cur.y, cur.z, landingX, ly, landingZ) && space.canTravel(cur.x, cur.y, cur.z, landingX, ly, landingZ);
+                if(walkable)
                     continue;
 
                 double dist = Math.hypot(landingX - tx, landingZ - tz);

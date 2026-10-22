@@ -9,6 +9,7 @@ import de.eisi05.npc.api.pathfinding.Path;
 import de.eisi05.npc.api.pathfinding.algorithm.AbstractPathfinder;
 import de.eisi05.npc.api.pathfinding.util.PathProjection;
 import de.eisi05.npc.api.pathfinding.util.PathValidator;
+import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
 import de.eisi05.npc.api.scheduler.tasks.PathTask;
 import de.eisi05.npc.api.scheduler.tasks.Tasks;
 import de.eisi05.npc.api.utils.SerializableConsumer;
@@ -754,8 +755,11 @@ public class WalkToLocationGoal extends PathfindingGoal
 
         cancelRequest();
 
-        CompletableFuture<Path> future = npc.findPathAsync(null, List.of(from.clone(), to.clone()), maxIterations, allowDiagonal, npc.getNavCapabilities(),
-                null);
+        CompletableFuture<Path> future = npc.findPathAsync(PathfindingUtils.builder(List.of(from, to))
+                .factory(pathfinder)
+                .maxIterations(maxIterations)
+                .allowDiagonalMovement(allowDiagonal));
+
         Tasks.trackFuture(future);
         request = new PathRequest(future, to.clone(), from.clone(), now);
         return future;

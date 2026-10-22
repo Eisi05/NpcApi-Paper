@@ -1,8 +1,10 @@
 package de.eisi05.npc.api.pathfinding.util;
 
 import de.eisi05.npc.api.pathfinding.Path;
+import de.eisi05.npc.api.pathfinding.algorithm.BoundingBoxPathfinder;
 import de.eisi05.npc.api.pathfinding.movement.JumpArc;
 import de.eisi05.npc.api.pathfinding.movement.MoveType;
+import de.eisi05.npc.api.pathfinding.movement.PathMotion;
 import de.eisi05.npc.api.scheduler.PluginTask;
 import de.eisi05.npc.api.scheduler.SchedulerProvider;
 import org.bukkit.*;
@@ -30,6 +32,7 @@ public final class PathRenderer
 {
     private static final int REDRAW_TICKS = 3;
     private static final float PATH_DUST_SIZE = 1.0f;
+    private static final double ENTITY_WIDTH = 0.6;
     private static final float PATH_MARKER_SIZE = 1.6f;
     private static final double VIEW_DISTANCE = 48.0;
     private static final double VIEW_DISTANCE_SQ = VIEW_DISTANCE * VIEW_DISTANCE;
@@ -322,9 +325,84 @@ public final class PathRenderer
                 MoveType type = typed ? moves.get(i + 1) : MoveType.WALK;
                 float from = (float) i / (n - 1);
                 float to = (float) (i + 1) / (n - 1);
+
+                if(typed && i + 2 < n && isFall(points, moves, i))
+                {
+                    addFall(dots, current, points.get(i + 1), points.get(i + 2), from, to);
+                    i++;
+                    continue;
+                }
+
                 addSegment(dots, current, points.get(i + 1), type, from, to, arc);
             }
             return new Shape(points.getFirst().getWorld(), dots);
+        }
+
+        /**
+         * Draws walking up to the edge, the free fall with the walking speed as horizontal momentum (same physics as the planner and {@code PathTask}), and the
+         * walk on the lower level to the landing column.
+         */
+        private static void addFall(@NotNull Dots dots, @NotNull Location a, @NotNull Location drop, @NotNull Location landing, float from, float to)
+        {
+            World world = a.getWorld();
+            double ax = a.getX();
+            double az = a.getZ();
+            double dx = drop.getX() - ax;
+            double dz = drop.getZ() - az;
+            double len = Math.hypot(dx, dz);
+            double ux = len > 1.0E-6 ? dx / len : 0;
+            double uz = len > 1.0E-6 ? dz / len : 0;
+
+            double leave = len;
+            for(double s = 0; s <= len && len > 1.0E-6; s += 0.1)
+            {
+                BoundingBoxPathfinder.FootSupport support = BoundingBoxPathfinder.resolveGroundSupport(world, ax + ux * s, a.getY(), az + uz * s,
+                        (ENTITY_WIDTH + 0.02) / 0.85, 0.1, 0.55);
+                if(!support.valid() || support.feetY() < a.getY() - 0.1)
+                {
+                    leave = s;
+                    break;
+                }
+            }
+
+            for(double d = 0.25; d < leave; d += 0.5)
+            {
+                float progress = from + (to - from) * (float) (d / Math.max(len, 1.0E-6));
+                dots.add(ax + ux * d, a.getY() + 0.2, az + uz * d, new Particle.DustOptions(gradient(progress), PATH_DUST_SIZE));
+            }
+
+            Particle.DustOptions marker = new Particle.DustOptions(colorOf(MoveType.FALL), PATH_MARKER_SIZE);
+            Particle.DustOptions option = new Particle.DustOptions(colorOf(MoveType.FALL), PATH_DUST_SIZE);
+            dots.add(ax + ux * leave, a.getY() + 0.2, az + uz * leave, marker);
+
+            double speed = PathMotion.BASE_SPEED;
+            double s = leave;
+            for(int k = 1; k <= JumpArc.MAX_TICKS; k++)
+            {
+                double y = a.getY() + JumpArc.fallOffset(k);
+                boolean landed = y <= landing.getY();
+                if(landed)
+                    y = landing.getY();
+
+                s = Math.min(len, leave + speed * k);
+                dots.add(ax + ux * s, y + 0.2, az + uz * s, option);
+                if(landed)
+                    break;
+            }
+
+            for(double d = s + 0.5; d <= len; d += 0.5)
+                dots.add(ax + ux * d, landing.getY() + 0.2, az + uz * d, new Particle.DustOptions(gradient(to), PATH_DUST_SIZE));
+        }
+
+        private static boolean isFall(@NotNull List<Location> points, @NotNull List<MoveType> moves, int i)
+        {
+            Location ledge = points.get(i);
+            Location drop = points.get(i + 1);
+            Location landing = points.get(i + 2);
+            return moves.get(i + 1) == MoveType.WALK && moves.get(i + 2) == MoveType.FALL
+                    && Math.abs(drop.getY() - ledge.getY()) < 0.05
+                    && landing.getY() < ledge.getY() - 0.5
+                    && Math.hypot(drop.getX() - landing.getX(), drop.getZ() - landing.getZ()) < 0.05;
         }
 
         private static void addSegment(@NotNull Dots dots, @NotNull Location a, @NotNull Location b, @NotNull MoveType type, float from, float to,

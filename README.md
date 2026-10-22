@@ -210,7 +210,7 @@ import de.eisi05.npc.api.pathfinding.util.PathfindingUtils;
 
 List<Location> waypoints = List.of(start, mid, end);
 
-// Synchronous pathfinding
+// Synchronous pathfinding (simple)
 Path path = PathfindingUtils.findPath(
     waypoints,
     50_000,     // maxIterations
@@ -218,7 +218,7 @@ Path path = PathfindingUtils.findPath(
     null        // progressListener
 );
 
-// Asynchronous pathfinding
+// Asynchronous pathfinding (simple)
 PathfindingUtils.findPathAsync(waypoints, 50_000, true, (progress) -> {
     // progress updates (0.0 to 1.0)
 }).thenAccept(path -> {
