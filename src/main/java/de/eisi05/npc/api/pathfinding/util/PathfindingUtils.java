@@ -40,73 +40,27 @@ public class PathfindingUtils
     public static @NotNull CompletableFuture<Path> findPathAsync(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
                                                                  @Nullable BiConsumer<Double, Integer> progressListener)
     {
-        return findPathAsync(null, waypoints, maxIterations, allowDiagonalMovement, 1.8, 0.6, progressListener);
+        return findPathAsync(builder(waypoints)
+                .maxIterations(maxIterations)
+                .allowDiagonalMovement(allowDiagonalMovement)
+                .progressListener(progressListener));
     }
 
     /**
-     * Asynchronously calculates a path through a list of waypoints using a specified pathfinder factory.
+     * Asynchronously calculates a path through a list of waypoints using a configured builder.
      *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
+     * @param builder the configured pathfinding builder
      * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
      */
-    public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints,
-                                                                 int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
-                                                                 @Nullable BiConsumer<Double, Integer> progressListener)
-    {
-        return findPathAsync(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, null, progressListener, null);
-    }
-
-    /**
-     * Asynchronously calculates a path through a list of waypoints using a specified pathfinder factory.
-     *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
-     * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
-     */
-    public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints,
-                                                                 int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
-                                                                 @Nullable NavCapabilities capabilities, @Nullable BiConsumer<Double, Integer> progressListener)
-    {
-        return findPathAsync(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, capabilities, progressListener, null);
-    }
-
-    /**
-     * Asynchronously calculates a path through a list of waypoints with visualization support.
-     *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
-     * @param visualizer            receives the relevant events of the search (visited blocks, search front, special moves, final path), or null
-     * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
-     */
-    public static @NotNull CompletableFuture<Path> findPathAsync(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints,
-                                                                 int maxIterations, boolean allowDiagonalMovement, double entityHeight, double entityWidth,
-                                                                 @Nullable NavCapabilities capabilities,
-                                                                 @Nullable BiConsumer<Double, Integer> progressListener,
-                                                                 @Nullable PathVisualizer visualizer)
+    public static @NotNull CompletableFuture<Path> findPathAsync(@NotNull PathfindingBuilder builder)
     {
         CompletableFuture<Path> future = new CompletableFuture<>();
 
-        List<Location> snapshot = new ArrayList<>(waypoints.size());
-        for(Location waypoint : waypoints)
+        List<Location> snapshot = new ArrayList<>(builder.waypoints.size());
+        for(Location waypoint : builder.waypoints)
             snapshot.add(waypoint.clone());
+
+        builder.waypoints = snapshot;
 
         PluginTask task = SchedulerProvider.get().runAsync(() ->
         {
@@ -115,8 +69,9 @@ public class PathfindingUtils
 
             try
             {
-                future.complete(findPath(factory, snapshot, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, capabilities, progressListener,
-                        future::isCancelled, visualizer));
+                future.complete(findPathInternal(builder.factory, builder.waypoints, builder.maxIterations, builder.allowDiagonalMovement,
+                        builder.entityHeight, builder.entityWidth, builder.capabilities, builder.progressListener,
+                        future::isCancelled, builder.visualizer));
             }
             catch(PathfindingException e)
             {
@@ -152,109 +107,36 @@ public class PathfindingUtils
     public static @NotNull Path findPath(@NotNull List<Location> waypoints, int maxIterations, boolean allowDiagonalMovement,
                                          @Nullable BiConsumer<Double, Integer> progressListener) throws PathfindingException
     {
-        return findPath(null, waypoints, maxIterations, allowDiagonalMovement, 1.8, 0.6, progressListener);
+        return findPath(builder(waypoints)
+                .maxIterations(maxIterations)
+                .allowDiagonalMovement(allowDiagonalMovement)
+                .progressListener(progressListener));
     }
 
     /**
-     * Synchronously calculates a path through a list of waypoints using a specified pathfinder factory.
+     * Synchronously calculates a path through a list of waypoints using a configured builder.
      * <p>
      * Segments are calculated sequentially. This method blocks the calling thread and should be used with caution.
+     * <p>
      *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
+     * @param builder the configured pathfinding builder
      * @return the calculated {@link Path} containing all intermediate locations
      * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
      */
-    public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints, int maxIterations,
-                                         boolean allowDiagonalMovement, double entityHeight, double entityWidth,
-                                         @Nullable BiConsumer<Double, Integer> progressListener)
-            throws PathfindingException
+    public static @NotNull Path findPath(@NotNull PathfindingBuilder builder) throws PathfindingException
     {
-        return findPath(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, null, progressListener);
+        return findPathInternal(builder.factory, builder.waypoints, builder.maxIterations, builder.allowDiagonalMovement,
+                builder.entityHeight, builder.entityWidth, builder.capabilities, builder.progressListener,
+                builder.cancelled, builder.visualizer);
     }
 
     /**
-     * Synchronously calculates a path through a list of waypoints using a specified pathfinder factory.
-     * <p>
-     * Segments are calculated sequentially. This method blocks the calling thread and should be used with caution.
-     *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
-     * @return the calculated {@link Path} containing all intermediate locations
-     * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
+     * Internal implementation of pathfinding logic.
      */
-    public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints, int maxIterations,
-                                         boolean allowDiagonalMovement, double entityHeight, double entityWidth, @Nullable NavCapabilities capabilities,
-                                         @Nullable BiConsumer<Double, Integer> progressListener)
-            throws PathfindingException
-    {
-        return findPath(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, capabilities, progressListener, null);
-    }
-
-    /**
-     * Synchronously calculates a path through a list of waypoints, restricted to what the given entity capabilities allow (see {@link NavCapabilities}).
-     * <p>
-     * Segments are calculated sequentially. This method blocks the calling thread and should be used with caution.
-     * <p>
-     * <b>Folia:</b> on a region thread this blocks that region while chunks owned by other regions are snapshotted (bounded by a timeout). Prefer
-     * {@code findPathAsync} there.
-     *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
-     * @param cancelled             returns true when the result is no longer needed, or null
-     * @return the calculated {@link Path} containing all intermediate locations
-     * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
-     */
-    public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints, int maxIterations,
-                                         boolean allowDiagonalMovement, double entityHeight, double entityWidth, @Nullable NavCapabilities capabilities,
-                                         @Nullable BiConsumer<Double, Integer> progressListener, @Nullable BooleanSupplier cancelled)
-            throws PathfindingException
-    {
-        return findPath(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, capabilities, progressListener, cancelled, null);
-    }
-
-    /**
-     * Synchronously calculates a path through a list of waypoints, restricted to what the given entity capabilities allow (see {@link NavCapabilities}).
-     * <p>
-     * Segments are calculated sequentially. This method blocks the calling thread and should be used with caution.
-     * <p>
-     * <b>Folia:</b> on a region thread this blocks that region while chunks owned by other regions are snapshotted (bounded by a timeout). Prefer
-     * {@code findPathAsync} there.
-     *
-     * @param factory               the factory to create the pathfinder, if null the default factory {@link NpcConfig#pathfinderFactory()} will be used
-     * @param waypoints             the ordered list of locations to traverse
-     * @param maxIterations         the maximum number of iterations the algorithm will attempt per segment
-     * @param allowDiagonalMovement whether diagonal movement is allowed
-     * @param entityHeight          the height of the entity traversing the path
-     * @param entityWidth           the width of the entity traversing the path
-     * @param capabilities          what the entity can do (ladders, swimming, gap jumps, doors, ...), or null for no restriction
-     * @param progressListener      A listener that receives a completion percentage between 0.0 and 1.0 and the current iteration count
-     * @param cancelled             returns true when the result is no longer needed, or null
-     * @param visualizer            receives the relevant events of the search (visited blocks, search front, special moves, final path), or null
-     * @return the calculated {@link Path} containing all intermediate locations
-     * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
-     */
-    public static @NotNull Path findPath(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints, int maxIterations,
-                                         boolean allowDiagonalMovement, double entityHeight, double entityWidth, @Nullable NavCapabilities capabilities,
-                                         @Nullable BiConsumer<Double, Integer> progressListener, @Nullable BooleanSupplier cancelled,
-                                         @Nullable PathVisualizer visualizer)
+    private static @NotNull Path findPathInternal(@Nullable AbstractPathfinder.PathfinderFactory<?> factory, @NotNull List<Location> waypoints, int maxIterations,
+                                                  boolean allowDiagonalMovement, double entityHeight, double entityWidth, @Nullable NavCapabilities capabilities,
+                                                  @Nullable BiConsumer<Double, Integer> progressListener, @Nullable BooleanSupplier cancelled,
+                                                  @Nullable PathVisualizer visualizer)
             throws PathfindingException
     {
         if(waypoints.size() < 2)
@@ -384,6 +266,176 @@ public class PathfindingUtils
         public String toString()
         {
             return getMessage();
+        }
+    }
+
+    /**
+     * Creates a new {@link PathfindingBuilder} for configuring and executing pathfinding requests.
+     *
+     * @param waypoints the waypoints to calculate a path for
+     * @return a new builder instance
+     */
+    public static @NotNull PathfindingBuilder builder(@NotNull List<Location> waypoints)
+    {
+        return new PathfindingBuilder(waypoints);
+    }
+
+    /**
+     * Builder class for configuring pathfinding requests with a fluent API.
+     */
+    public static class PathfindingBuilder
+    {
+        private AbstractPathfinder.PathfinderFactory<?> factory = NpcApi.config.pathfinderFactory();
+        private List<Location> waypoints;
+        private int maxIterations = 5000;
+        private boolean allowDiagonalMovement = true;
+        private double entityHeight = 1.8;
+        private double entityWidth = 0.6;
+        private @Nullable NavCapabilities capabilities;
+        private @Nullable BiConsumer<Double, Integer> progressListener;
+        private @Nullable BooleanSupplier cancelled;
+        private @Nullable PathVisualizer visualizer;
+
+        private PathfindingBuilder(@NotNull List<Location> waypoints)
+        {
+            this.waypoints = waypoints;
+        }
+
+        /**
+         * Sets the pathfinder factory to use. If null, the default factory from {@link NpcConfig#pathfinderFactory()} will be used.
+         *
+         * @param factory the pathfinder factory
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder factory(@Nullable AbstractPathfinder.PathfinderFactory<?> factory)
+        {
+            this.factory = factory;
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of iterations the algorithm will attempt per segment.
+         *
+         * @param maxIterations the maximum iterations
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder maxIterations(int maxIterations)
+        {
+            this.maxIterations = maxIterations;
+            return this;
+        }
+
+        /**
+         * Sets whether diagonal movement is allowed.
+         *
+         * @param allowDiagonalMovement true to allow diagonal movement
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder allowDiagonalMovement(boolean allowDiagonalMovement)
+        {
+            this.allowDiagonalMovement = allowDiagonalMovement;
+            return this;
+        }
+
+        /**
+         * Sets the height of the entity traversing the path.
+         *
+         * @param entityHeight the entity height
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder entityHeight(double entityHeight)
+        {
+            this.entityHeight = entityHeight;
+            return this;
+        }
+
+        /**
+         * Sets the width of the entity traversing the path.
+         *
+         * @param entityWidth the entity width
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder entityWidth(double entityWidth)
+        {
+            this.entityWidth = entityWidth;
+            return this;
+        }
+
+        /**
+         * Sets the navigation capabilities of the entity (ladders, swimming, gap jumps, doors, etc.).
+         * If null, no restrictions are applied.
+         *
+         * @param capabilities the navigation capabilities
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder capabilities(@Nullable NavCapabilities capabilities)
+        {
+            this.capabilities = capabilities;
+            return this;
+        }
+
+        /**
+         * Sets a listener that receives progress updates (completion percentage between 0.0 and 1.0, and current iteration count).
+         *
+         * @param progressListener the progress listener
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder progressListener(@Nullable BiConsumer<Double, Integer> progressListener)
+        {
+            this.progressListener = progressListener;
+            return this;
+        }
+
+        /**
+         * Sets a supplier that returns true when the result is no longer needed, allowing cancellation.
+         *
+         * @param cancelled the cancellation supplier
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder cancelled(@Nullable BooleanSupplier cancelled)
+        {
+            this.cancelled = cancelled;
+            return this;
+        }
+
+        /**
+         * Sets a visualizer that receives search events (visited blocks, search front, special moves, final path).
+         *
+         * @param visualizer the path visualizer
+         * @return this builder
+         */
+        public @NotNull PathfindingBuilder visualizer(@Nullable PathVisualizer visualizer)
+        {
+            this.visualizer = visualizer;
+            return this;
+        }
+
+        /**
+         * Builds and executes the pathfinding request synchronously.
+         *
+         * @return the calculated {@link Path}
+         * @throws PathfindingException if any segment's start or end location is invalid/unwalkable
+         * @throws IllegalArgumentException if waypoints is null or contains fewer than 2 locations
+         */
+        public @NotNull Path build() throws PathfindingException
+        {
+            if(waypoints == null)
+                throw new IllegalArgumentException("Waypoints must be set before building.");
+            return findPathInternal(factory, waypoints, maxIterations, allowDiagonalMovement, entityHeight, entityWidth, capabilities,
+                    progressListener, cancelled, visualizer);
+        }
+
+        /**
+         * Builds and executes the pathfinding request asynchronously.
+         *
+         * @return a {@link CompletableFuture} that completes with the calculated {@link Path}
+         * @throws IllegalArgumentException if waypoints is null or contains fewer than 2 locations
+         */
+        public @NotNull CompletableFuture<Path> buildAsync()
+        {
+            if(waypoints == null)
+                throw new IllegalArgumentException("Waypoints must be set before building.");
+            return findPathAsync(this);
         }
     }
 }

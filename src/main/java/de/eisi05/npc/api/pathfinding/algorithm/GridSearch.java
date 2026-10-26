@@ -43,12 +43,17 @@ import java.util.function.BooleanSupplier;
 public final class GridSearch
 {
     private static final double SQRT2 = Math.sqrt(2.0);
+    private static final double OCTILE_FACTOR = SQRT2 - 1.0;
     private static final double EPS = 1.0E-3;
     private static final double TAKEOFF_OFFSET = 0.3;
     private static final double MIN_JUMP_TRAVEL = 0.9;
     private static final double LANDING_MARGIN = 0.4;
     private static final int[] DX = {1, -1, 0, 0, 1, 1, -1, -1};
     private static final int[] DZ = {0, 0, 1, -1, 1, -1, 1, -1};
+
+    private static final double PROGRESS_WEIGHT_NEAR = 0.5;
+    private static final double PROGRESS_WEIGHT_FAR = 3.0;
+    private static final double PROGRESS_FAR_INVERSE = 1.0 / 25.0;
 
     private final NavSpace space;
     private final NavOptions options;
@@ -197,8 +202,9 @@ public final class GridSearch
         startNode.f = startNode.h * options.getHeuristicWeight();
         heap.push(startNode);
 
-        double startH = Math.max(1.0E-6, startNode.h);
         double minH = startNode.h;
+        double startProgress = Math.max(1.0E-6, progressDistance(startNode));
+        double minProgress = startProgress;
         int iterations = 0;
 
         Node current;
@@ -219,8 +225,15 @@ public final class GridSearch
             boolean front = current.h < minH;
             if(front)
                 minH = current.h;
+
             if(listener != null)
-                listener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
+            {
+                double distance = progressDistance(current);
+                if(distance < minProgress)
+                    minProgress = distance;
+
+                listener.accept(Math.clamp(1.0 - (minProgress / startProgress), 0.0, 1.0), iterations);
+            }
 
             visualize(current, front);
 
@@ -528,8 +541,18 @@ public final class GridSearch
                 if(ticks < 0)
                     continue;
 
-                if(ly < cur.y - options.getStepHeight() - EPS && cur.y - ly <= options.getMaxFallDistance() && Math.hypot(lx - cur.x, lz - cur.z) <= step * 1.5 + EPS
-                        && space.fallClear(cur.x, cur.y, cur.z, lx, ly, lz))
+                if(ly < cur.y - options.getStepHeight() - EPS && cur.y - ly <= options.getMaxFallDistance() && space.fallClear(cur.x, cur.y, cur.z, lx, ly, lz))
+                {
+                    Node fall = nodeAt(nix, niz, ly);
+                    if(fall != null)
+                        relax(cur, fall, cur, MoveType.FALL, Double.NaN, Double.NaN);
+                    continue;
+                }
+
+                boolean walkable = Math.abs(ly - cur.y) <= options.getStepHeight() + EPS
+                        ? space.canTravel(cur.x, cur.y, cur.z, landingX, ly, landingZ) && space.floorAlong(cur.x, cur.y, cur.z, landingX, ly, landingZ)
+                        : space.rampWalkable(cur.x, cur.y, cur.z, landingX, ly, landingZ) && space.canTravel(cur.x, cur.y, cur.z, landingX, ly, landingZ);
+                if(walkable)
                     continue;
 
                 double dist = Math.hypot(landingX - tx, landingZ - tz);
@@ -630,6 +653,33 @@ public final class GridSearch
         }
     }
 
+    /**
+     * Distance to the goal as used for the reported progress (2D and 3D search): the horizontal distance plus the vertical one multiplied with a weight that
+     * grows with the distance to the goal (see {@link #PROGRESS_WEIGHT_FAR}), and that is higher for climbing (the node is below the goal) than for
+     * dropping. The horizontal part is the octile approximation (the same as in the search heuristic), so there is no square root and no division: a few
+     * comparisons, additions and multiplications. Only evaluated when a listener is set.
+     */
+    private double progressDistance(@NotNull Node n)
+    {
+        double dx = n.x - goalX;
+        double dz = n.z - goalZ;
+        if(dx < 0)
+            dx = -dx;
+        if(dz < 0)
+            dz = -dz;
+
+        double horizontal = dx > dz ? dx + OCTILE_FACTOR * dz : dz + OCTILE_FACTOR * dx;
+
+        double dy = goalY - n.y;
+        double vertical = dy > 0 ? dy : -dy;
+
+        double far = (horizontal + vertical) * PROGRESS_FAR_INVERSE;
+        if(far > 1.0)
+            far = 1.0;
+
+        return horizontal + vertical * (PROGRESS_WEIGHT_NEAR + (PROGRESS_WEIGHT_FAR - PROGRESS_WEIGHT_NEAR) * far);
+    }
+
     private @NotNull Node newNode(int ix, int iz, double y)
     {
         Node n = new Node(ix, iz, originX + ix * step, y, originZ + iz * step);
@@ -700,8 +750,9 @@ public final class GridSearch
         startNode.f = startNode.h * options.getHeuristicWeight();
         heap.push(startNode);
 
-        double startH = Math.max(1.0E-6, startNode.h);
         double minH = startNode.h;
+        double startProgress = Math.max(1.0E-6, progressDistance(startNode));
+        double minProgress = startProgress;
         int iterations = 0;
 
         Node current;
@@ -722,8 +773,15 @@ public final class GridSearch
             boolean front = current.h < minH;
             if(front)
                 minH = current.h;
+
             if(listener != null)
-                listener.accept(Math.clamp(1.0 - (minH / startH), 0.0, 1.0), iterations);
+            {
+                double distance = progressDistance(current);
+                if(distance < minProgress)
+                    minProgress = distance;
+
+                listener.accept(Math.clamp(1.0 - (minProgress / startProgress), 0.0, 1.0), iterations);
+            }
 
             visualize(current, front);
 

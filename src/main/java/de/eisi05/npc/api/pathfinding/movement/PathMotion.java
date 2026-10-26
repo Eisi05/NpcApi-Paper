@@ -30,6 +30,12 @@ public final class PathMotion
     public static final double CLIMB_UP_SPEED = 0.12;
 
     /**
+     * The walking speed (blocks per tick) the climbing and swimming speeds are defined for. A faster or slower NPC climbs and swims proportionally faster or
+     * slower.
+     */
+    public static final double BASE_SPEED = 0.25;
+
+    /**
      * Climbing speed downwards (blocks per tick).
      */
     public static final double CLIMB_DOWN_SPEED = 0.15;
@@ -48,6 +54,7 @@ public final class PathMotion
     private final NavCapabilities capabilities;
     private final JumpArc arc;
     private int swimTicksLeft;
+    private boolean climbingNow;
 
     private boolean arcActive;
     private int arcIndex = -1;
@@ -108,6 +115,16 @@ public final class PathMotion
     }
 
     /**
+     * Whether the step returned by the last {@link #tick} was a climbing step (ladder, vine, scaffolding, ...).
+     *
+     * @return true while climbing
+     */
+    public boolean isClimbing()
+    {
+        return climbingNow;
+    }
+
+    /**
      * Aborts any running special movement (call when the path or the position changes abruptly).
      */
     public void reset()
@@ -141,6 +158,8 @@ public final class PathMotion
     public @Nullable Step tick(@NotNull World world, double x, double y, double z, int index, @NotNull List<MoveType> moves, @NotNull List<Vector> points,
                                double speed)
     {
+        climbingNow = false;
+
         if(points.isEmpty() || moves.size() != points.size())
             return null;
 
@@ -176,7 +195,10 @@ public final class PathMotion
         int bz = (int) Math.floor(z);
 
         if(climbing && isClimbCell(world, bx, by, bz))
+        {
+            climbingNow = true;
             return climbStep(type, target, x, y, z, speed);
+        }
 
         int waterY = capabilities.movement() == MovementMode.AQUATIC ? (int) Math.floor(y + entityHeight * 0.5) : by;
         if(swimming && profileAt(world, bx, waterY, bz).isWater())
@@ -333,11 +355,12 @@ public final class PathMotion
 
         boolean verticalMove = type == MoveType.CLIMB && horizontal < 0.35;
 
+        double scale = speedScale(speed);
         double vy;
         if(Math.abs(dy) <= 0.03)
             vy = dy;
         else
-            vy = dy > 0 ? Math.min(dy, CLIMB_UP_SPEED) : Math.max(dy, -CLIMB_DOWN_SPEED);
+            vy = dy > 0 ? Math.min(dy, CLIMB_UP_SPEED * scale) : Math.max(dy, -CLIMB_DOWN_SPEED * scale);
 
         double hx = 0;
         double hz = 0;
@@ -345,7 +368,7 @@ public final class PathMotion
         {
             double hs;
             if(verticalMove)
-                hs = Math.min(horizontal, 0.08);
+                hs = Math.min(horizontal, 0.08 * scale);
             else if(dy <= STEP_UP)
                 hs = Math.min(horizontal, speed * 0.8);
             else
@@ -380,9 +403,18 @@ public final class PathMotion
             return new Step(0, 0, 0, false);
 
         double scale = Math.min(speed * capabilities.swimSpeedFactor(), dist) / dist;
-        double verticalLimit = capabilities.movement() == MovementMode.AQUATIC ? speed * capabilities.swimSpeedFactor() : SWIM_VERTICAL_SPEED;
+        double verticalLimit = capabilities.movement() == MovementMode.AQUATIC ? speed * capabilities.swimSpeedFactor() : SWIM_VERTICAL_SPEED * speedScale(speed);
         double vy = Math.clamp(dy * scale, -verticalLimit, verticalLimit);
         return new Step(dx * scale, vy, dz * scale, false);
+    }
+
+    /**
+     * @param speed the NPC's walking speed in blocks per tick
+     * @return the factor the climbing and swimming speeds are multiplied with ({@code speed / BASE_SPEED}, never below 0.1)
+     */
+    private static double speedScale(double speed)
+    {
+        return Math.max(0.1, speed / BASE_SPEED);
     }
 
     private static @NotNull BlockProfile profileAt(@NotNull World world, int x, int y, int z)
