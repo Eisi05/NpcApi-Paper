@@ -212,6 +212,11 @@ public class NpcOption<T, S extends Serializable>
                     {
                         if(npc.getUUID() != null)
                             ((CraftPlayer) player).getHandle().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(npc.getUUID())));
+                    }, 1);
+                    SchedulerProvider.get().runLaterForEntity(player, () ->
+                    {
+                        if(npc.getUUID() != null)
+                            ((CraftPlayer) player).getHandle().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(npc.getUUID())));
                     }, 50);
                 }
                 return new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, (ServerPlayer) npc.getServerPlayer());
