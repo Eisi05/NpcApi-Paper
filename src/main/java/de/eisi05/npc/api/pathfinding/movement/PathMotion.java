@@ -329,7 +329,7 @@ public final class PathMotion
         else
         {
             double currentDist = Math.hypot(x - startX, z - startZ);
-            double nextDist = Math.min(totalDist, currentDist + speed);
+            double nextDist = Math.min(totalDist, currentDist + (speed * 1.2));
             f = nextDist / totalDist;
             landed = f >= 1.0 - 1.0E-6;
         }
