@@ -21,7 +21,12 @@ public class ConnectionListener implements Listener
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event)
     {
-        Player player = event.getPlayer();
+        if(!BedrockConnectionListener.isBedrockPlayer(event.getPlayer()))
+            join(event.getPlayer(), 10L);
+    }
+
+    static void join(Player player, long delay)
+    {
         SchedulerProvider.get().runSyncForEntity(player, () ->
         {
             PacketReader.inject(player);
@@ -38,18 +43,18 @@ public class ConnectionListener implements Listener
 
             for(NPC npc : NpcManager.getList())
             {
-                if(!npc.getVisibilityManager().shouldShowToPlayer(event.getPlayer().getUniqueId()))
+                if(!npc.getVisibilityManager().shouldShowToPlayer(player.getUniqueId()))
                     continue;
 
-                npc.showNPCToPlayer(event.getPlayer());
-                npc.addWalkingViewer(event.getPlayer());
-                NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, event.getPlayer());
-                if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, event.getPlayer()))
+                npc.showNPCToPlayer(player);
+                npc.addWalkingViewer(player);
+                NpcSkin npcSkin = npc.getOption(NpcOption.SKIN, player);
+                if(npcSkin == null || npcSkin.isStatic() || npcSkin.getPlaceholder() == null || npc.getOption(NpcOption.USE_PLAYER_SKIN, player))
                     continue;
 
-                Tasks.updateSkin(event.getPlayer(), npc, npcSkin);
+                Tasks.updateSkin(player, npc, npcSkin);
             }
-        }, 10L);
+        }, delay);
     }
 
     @EventHandler

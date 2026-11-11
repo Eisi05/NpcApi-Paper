@@ -70,6 +70,7 @@ public final class NpcApi
             listeners.add(sleepListener = new NpcSleepListener());
 
         listeners.forEach(listener -> Bukkit.getPluginManager().registerEvents(listener, plugin));
+        BedrockConnectionListener.register();
 
         ConfigurationSerialization.registerClass(Path.class);
 
